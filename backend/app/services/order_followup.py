@@ -217,9 +217,16 @@ def assert_can_distribute(db: Session, order: ProductionOrder, payload: dict) ->
             raise ValueError(sewing["reason"] or "A confeção está cadeada até os serviços anteriores regressarem")
 
 
-def followup_alerts(order: ProductionOrder, jobs: list[SubcontractJob], materials: list[dict], events: list, steps: list[dict], delivery: date | None) -> list[dict]:
+def followup_alerts(order: ProductionOrder, jobs: list[SubcontractJob], materials: list[dict], events: list, steps: list[dict], delivery: date | None, inspections: list | None = None) -> list[dict]:
     today = date.today()
     alerts = []
+    for inspection in inspections or []:
+        if inspection.result == "failed":
+            alerts.append({
+                "level": "danger",
+                "title": f"Qualidade reprovada · {inspection.defect_code or inspection.inspection_type}",
+                "detail": f"{inspection.defect_quantity or 0} defeito(s) em {inspection.inspected_quantity or 0} inspecionadas. Bloqueia a expedição.",
+            })
     prazo = delivery or order.planned_end
     if prazo and prazo < today and order.status not in {"completed", "cancelled"}:
         alerts.append({"level": "danger", "title": "Prazo de entrega ultrapassado", "detail": f"A entrega era {prazo.isoformat()}."})

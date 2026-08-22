@@ -24,6 +24,22 @@ class QualityInspection(Base, TimestampMixin):
     photos = Column(JSON, default=list, nullable=False)
 
 
+class CorrectiveAction(Base, TimestampMixin):
+    """Acao corretiva (CAPA) estruturada, ligada a uma inspecao de qualidade."""
+
+    __tablename__ = "corrective_actions"
+    id = Column(Integer, primary_key=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    quality_inspection_id = Column(Integer, ForeignKey("quality_inspections.id"), nullable=False, index=True)
+    responsible_employee_id = Column(Integer, ForeignKey("employees.id"))
+    root_cause = Column(Text)
+    action = Column(Text)
+    due_date = Column(DateTime(timezone=True))
+    status = Column(String(20), default="open", nullable=False)
+    effectiveness_notes = Column(Text)
+    verified_at = Column(DateTime(timezone=True))
+
+
 class Shipment(Base, TimestampMixin):
     __tablename__ = "shipments"
     id = Column(Integer, primary_key=True)

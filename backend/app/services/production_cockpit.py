@@ -200,7 +200,8 @@ def order_cockpit(db: Session, order: ProductionOrder) -> dict:
     sheet = cost_sheet_for_order(db, order)
     steps = service_plan(db, order, jobs, stock["internal"])
     events = db.query(ProductionEvent).filter_by(production_order_id=order.id).order_by(ProductionEvent.event_time.desc()).limit(12).all()
-    alerts = followup_alerts(order, jobs, materials, events, steps, delivery_date)
+    inspections = db.query(QualityInspection).filter_by(production_order_id=order.id).all()
+    alerts = followup_alerts(order, jobs, materials, events, steps, delivery_date, inspections)
     days_left = (delivery_date - date.today()).days if delivery_date else None
     fabric_pos = db.query(PurchaseOrder).filter_by(company_id=order.company_id, production_order_id=order.id).all()
 
@@ -226,7 +227,7 @@ def order_cockpit(db: Session, order: ProductionOrder) -> dict:
         "jobs": _job_rows(db, jobs),
         "batches": [model_to_dict(row) for row in db.query(ProductionBatch).filter_by(production_order_id=order.id).all()],
         "events": [model_to_dict(row) for row in events],
-        "quality": [model_to_dict(row) for row in db.query(QualityInspection).filter_by(production_order_id=order.id).all()],
+        "quality": [model_to_dict(row) for row in inspections],
         "subcontract_chain": build_route_status(db, order),
         "cutting": [model_to_dict(row) for row in db.query(CuttingJob).filter_by(production_order_id=order.id).all()],
         "fabric_purchases": [{"id": row.id, "order_no": row.order_no, "status": row.status, "total": row.total, "expected_date": row.expected_date.isoformat() if row.expected_date else None} for row in fabric_pos],

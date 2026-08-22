@@ -10,6 +10,7 @@ RESOURCE_MODELS = {
     "certifications": models.Certification,
     "capacity-days": models.CapacityDay,
     "capacity-events": models.CapacityEvent,
+    "corrective-actions": models.CorrectiveAction,
     "cost-lines": models.CostLine,
     "cost-sheets": models.CostSheet,
     "customers": models.Customer,

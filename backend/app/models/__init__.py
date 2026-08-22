@@ -14,7 +14,7 @@ from .manufacturing import (
 from .partners import Bank, Certification, Customer, PaymentTerm, Supplier
 from .process import ProcessJob
 from .product import ArticleType, BOMItem, Material, Operation, ProductOperation, Sample, Style, StyleRevision, StyleVariant
-from .quality import QualityInspection, Shipment
+from .quality import CorrectiveAction, QualityInspection, Shipment
 from .subcontracting import ProductionRouteStep, SubcontractJob, SubcontractService
 
 __all__ = [name for name in globals() if not name.startswith("_")]
