@@ -1,5 +1,6 @@
 import { get, post } from '../api.js';
 import { badge, date, datetime, esc, number } from '../format.js?v=20260819-9';
+import { recordModal } from '../quick_create.js';
 import { openModal, toast } from '../ui.js?v=20260820-5';
 
 const MAT_STATE = {
@@ -87,6 +88,7 @@ export function dossierHtml(data) {
     <td>${esc(row.event_type || row.notes || `Operação ${row.operation_id || '—'}`)}</td>
     <td>${number(row.quantity_good)} boas</td>
     <td>${number(row.quantity_rejected)} rejeitadas</td>
+    <td>${row.event_type === 'correction' ? '<small class="muted">Estorno</small>' : `<button class="btn small" data-compensate-event="${row.id}">Estornar</button>`}</td>
   </tr>`).join('');
   const shipRows = shipments.map(row => `<tr>
     <td><b>${esc(row.shipment_no)}</b></td>
@@ -161,8 +163,8 @@ export function dossierHtml(data) {
       </section>
       <section class="dossier-block">
         <h3>Últimos eventos</h3>
-        <div class="table-wrap"><table class="data-table"><thead><tr><th>Quando</th><th>O quê</th><th>Boas</th><th>Rejeitadas</th></tr></thead>
-        <tbody>${rowsOrEmpty(eventRows, 4, 'Ainda sem registos de chão de fábrica.')}</tbody></table></div>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Quando</th><th>O quê</th><th>Boas</th><th>Rejeitadas</th><th></th></tr></thead>
+        <tbody>${rowsOrEmpty(eventRows, 5, 'Ainda sem registos de chão de fábrica.')}</tbody></table></div>
       </section>
     </div>
   </div>`;
@@ -188,6 +190,16 @@ export function openOrderDossier(data) {
       document.querySelectorAll('.dossier-alert').forEach(el => { el.classList.add('seen'); });
     } catch (error) { toast(error.message, 'error'); }
   });
+  document.querySelectorAll('[data-compensate-event]').forEach(button => button.addEventListener('click', () => {
+    const eventId = Number(button.dataset.compensateEvent);
+    recordModal({
+      title: 'Estornar evento de produção',
+      values: {},
+      fields: [{key:'reason',label:'Motivo do estorno',type:'textarea',required:true,full:true}],
+      save: payload => post(`/production/events/${eventId}/compensate`, {reason: payload.reason}),
+      onSaved: () => loadOrderDossier(order.id),
+    });
+  }));
 }
 
 export async function loadOrderDossier(orderId) {

@@ -13,7 +13,11 @@ from .proposal_release import ACCEPTED_STATUSES, annotated_cost_lines, productio
 from .serialization import model_to_dict
 
 
-CATEGORIES = ("material", "labor", "machine", "subcontract", "overhead", "other")
+CATEGORIES = ("material", "labor", "machine", "subcontract", "overhead", "energy", "packaging", "transport", "other")
+# Nota: a CostSheet só tem colunas fixas para as 6 categorias originais; as 3
+# novas (energy/packaging/transport) ganham linha própria aqui no custo real
+# (actual_order_cost/order_control) mas continuam a cair em "other_cost" no
+# resumo da ficha (costing.py::recalculate_sheet), sem migração de esquema.
 OUTGOING_COST = {"issue", "consume", "adjustment_out"}
 RETURN_COST = {"return", "adjustment_in"}
 

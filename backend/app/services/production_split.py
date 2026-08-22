@@ -169,6 +169,10 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
         raise ValueError("Destino inválido")
     if source not in {"unassigned", "internal"}:
         raise ValueError("Origem inválida")
+    # Bloqueia a OF durante toda a operacao de leitura+validacao+escrita, para
+    # dois pedidos de distribuicao concorrentes nao passarem ambos a mesma
+    # validacao de saldo antes de qualquer um escrever (no-op no SQLite).
+    db.query(ProductionOrder).filter_by(id=order.id).with_for_update().first()
     from .order_followup import assert_can_distribute
     assert_can_distribute(db, order, payload)
 

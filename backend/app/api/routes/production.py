@@ -14,6 +14,7 @@ from ...schemas import ProductionEventRequest, StockMovementRequest
 from ...services.analytics import line_performance
 from ...services.inventory import register_movement
 from ...services.primavera import queue_delivery
+from ...services.corrections import compensate_event
 from ...services.production import register_output
 from ...services.production_cockpit import order_cockpit
 from ...services.production_split import distribute as distribute_order
@@ -136,6 +137,18 @@ def output_event(payload: ProductionEventRequest, db: Session = Depends(get_db),
     db.commit()
     db.refresh(event)
     return model_to_dict(event)
+
+
+@router.post("/events/{event_id}/compensate", status_code=201)
+def compensate_output_event(event_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    event = db.get(ProductionEvent, event_id)
+    if not event:
+        raise HTTPException(404, "Evento não encontrado")
+    require_module_access(db, user, event.company_id, {"production", "confection"})
+    compensating = compensate_event(db, event_id, str(payload.get("reason") or ""))
+    db.commit()
+    db.refresh(compensating)
+    return model_to_dict(compensating)
 
 
 @router.post("/{company_id}/stock-movements", status_code=201)

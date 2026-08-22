@@ -7,7 +7,7 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Session
 
 from ...db import get_db
-from ...models import BOMItem, CapacityDay, CapacityEvent, Company, CostLine, CostSheet, Customer, CuttingJob, Employee, EmployeeSkill, ExternalCapacity, Machine, Material, ProductOperation, ProductionMaterialRequirement, ProductionOrder, ProductionRouteStep, PurchaseOrder, PurchaseOrderLine, Sample, SewingPlan, Style, StyleRevision, SubcontractJob, SubcontractService, User
+from ...models import ActualCostEntry, BOMItem, CapacityDay, CapacityEvent, Company, CostLine, CostSheet, Customer, CuttingJob, Employee, EmployeeSkill, ExternalCapacity, Machine, Material, ProductOperation, ProductionMaterialRequirement, ProductionOrder, ProductionRouteStep, PurchaseOrder, PurchaseOrderLine, Sample, SewingPlan, Style, StyleRevision, SubcontractJob, SubcontractService, User
 from ...schemas import ProductionRouteStepIn
 from ...services.primavera_sync import queue_master_record
 from ...services.audit import record_audit
@@ -64,6 +64,7 @@ def calculated_fields(db, instance):
             instance.machine_cost = round(((machine.hourly_cost if machine else 0) / 60) * instance.duration_minutes, 4)
         if instance.actual_fabric:
             instance.waste_pct = round(max(0, (instance.actual_fabric - (instance.planned_fabric or 0)) / instance.actual_fabric * 100), 2)
+            _track_cutting_waste_cost(db, instance)
         if instance.status in {"completed", "done"} or float(instance.good_pieces or 0) >= float(instance.planned_pieces or 0) * 0.99:
             create_batches_from_cutting(db, instance)
             order = db.get(ProductionOrder, instance.production_order_id) if instance.production_order_id else None
@@ -132,6 +133,43 @@ def calculated_fields(db, instance):
         instance.required_minutes = round(
             (instance.quantity or 0) * (instance.sam_minutes or 0) / (instance.efficiency_pct / 100), 2
         )
+
+
+FABRIC_CATEGORIES = {"fabric", "knit", "woven", "malha", "tecido"}
+
+
+def _track_cutting_waste_cost(db, job: CuttingJob) -> None:
+    """Regista a quebra de tecido do corte como uma linha de custo real, em vez
+    de ficar so informativa em waste_pct."""
+    excess = (job.actual_fabric or 0) - (job.planned_fabric or 0)
+    reference = f"corte-{job.id}"
+    existing = db.query(ActualCostEntry).filter_by(company_id=job.company_id, reference=reference).first()
+    if excess <= 0.001 or not job.production_order_id:
+        if existing:
+            db.delete(existing)
+        return
+    order = db.get(ProductionOrder, job.production_order_id)
+    if not order:
+        return
+    fabric_item = (
+        db.query(BOMItem, Material)
+        .join(Material, Material.id == BOMItem.material_id)
+        .filter(BOMItem.style_id == order.style_id, Material.category.in_(FABRIC_CATEGORIES))
+        .first()
+    )
+    unit_cost = fabric_item[1].unit_cost if fabric_item else 0
+    amount = round(excess * (unit_cost or 0), 4)
+    if existing:
+        existing.quantity = round(excess, 4)
+        existing.unit_cost = unit_cost or 0
+        existing.amount = amount
+    else:
+        db.add(ActualCostEntry(
+            company_id=job.company_id, production_order_id=job.production_order_id,
+            category="material", description="Perdas de corte (quebra acima do planeado)",
+            quantity=round(excess, 4), unit=fabric_item[1].unit if fabric_item else "kg",
+            unit_cost=unit_cost or 0, amount=amount, occurred_on=date.today(), reference=reference,
+        ))
 
 
 def _prepare_subcontract_job(db, instance):

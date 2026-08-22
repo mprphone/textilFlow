@@ -62,8 +62,12 @@ def _add_column(connection, table: str, column: str, ddl: str) -> None:
         return
     dialect = connection.dialect.name
     statement = ddl
-    if dialect == "postgresql" and " JSON " in ddl:
-        statement = ddl.replace(" JSON ", " JSONB ")
+    if dialect == "postgresql":
+        if " JSON " in statement:
+            statement = statement.replace(" JSON ", " JSONB ")
+        # Postgres rejeita DEFAULT 0 em colunas BOOLEAN (SQLite aceita).
+        statement = statement.replace(" BOOLEAN DEFAULT 0", " BOOLEAN DEFAULT false")
+        statement = statement.replace(" BOOLEAN DEFAULT 1", " BOOLEAN DEFAULT true")
     connection.execute(text(statement))
 
 

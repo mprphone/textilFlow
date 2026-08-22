@@ -15,7 +15,7 @@ async function styleFields(row = null) {
     {key:'customer_id',label:'Cliente',type:'select',options:await options('customers','name'),section:'Identificação'},
     {key:'collection',label:'Coleção',section:'Identificação'},{key:'base_unit',label:'Unidade',default:'un',section:'Identificação'},
     {key:'lifecycle_status',label:'Estado',type:'select',options:['development','approved','production','inactive'],default:'development',section:'Ciclo de vida'},
-    {key:'workflow_stage',label:'Etapa',type:'select',options:['conceito','proto','fitting','size_set','pps','aprovado','produção','arquivado'],default:'conceito',section:'Ciclo de vida'},
+    {key:'workflow_stage',label:'Etapa',type:'select',options:['novo','proposta_cliente','ficha_tecnica','desenvolvimento_malha','modelagem','corte','confecao','finalizacao','envio_cliente','resposta_cliente','retificacoes','conceito','proto','fitting','size_set','pps','aprovado','produção','arquivado'],default:'novo',section:'Ciclo de vida'},
     {key:'fabric',label:'Malha base',section:'Materiais'},{key:'composition',label:'Composição',section:'Materiais'},
     {key:'gsm',label:'Gramagem',type:'number',section:'Materiais'},{key:'color',label:'Cor base',section:'Materiais'},
     {key:'size_range',label:'Gama de tamanhos',section:'Materiais'},{key:'image_url',label:'Imagem / URL',type:'url',section:'Materiais',full:true},

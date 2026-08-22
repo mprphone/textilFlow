@@ -6,6 +6,9 @@ export const categories = [
   ['machine', 'Máquinas'],
   ['subcontract', 'Serviços externos'],
   ['overhead', 'Custos gerais'],
+  ['energy', 'Energia'],
+  ['packaging', 'Embalagem'],
+  ['transport', 'Transporte'],
   ['other', 'Outros'],
 ];
 

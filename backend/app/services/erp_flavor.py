@@ -1,4 +1,10 @@
-"""Catálogo de documentos à imagem do ERP da empresa (Primavera, Moloni, genérico)."""
+﻿"""Catálogo de documentos à imagem do ERP da empresa (Primavera ou genérico).
+
+Nota: existiu aqui um terceiro "sistema" (Moloni) que só mudava rótulos e
+códigos de documento - nunca teve nenhum adaptador real (nenhum cliente HTTP,
+nenhuma fila própria; tudo continuava a ir para o outbox do Primavera). Foi
+removido da lista para não sugerir uma integração que não existe; volta a
+fazer sentido reintroduzi-lo quando (e se) houver um adaptador real."""
 
 from __future__ import annotations
 
@@ -20,68 +26,67 @@ def is_official(doc_type: str) -> bool:
     return doc_type not in INTERNAL_TYPES
 
 
-# families: where the type appears. codes: primavera / moloni / generic
+# families: where the type appears. codes: primavera / generic
 TYPE_CATALOG = {
     "sales_invoice": {
         "families": ("sales", "accounts"),
-        "codes": {"primavera": "FA", "moloni": "FT", "generic": "FV"},
-        "titles": {"primavera": "Fatura", "moloni": "Fatura", "generic": "Fatura de venda"},
+        "codes": {"primavera": "FA", "generic": "FV"},
+        "titles": {"primavera": "Fatura", "generic": "Fatura de venda"},
     },
     "sales_credit": {
         "families": ("sales", "accounts"),
-        "codes": {"primavera": "NC", "moloni": "NC", "generic": "NCV"},
-        "titles": {"primavera": "Nota de crédito", "moloni": "Nota de crédito", "generic": "Nota de crédito a cliente"},
+        "codes": {"primavera": "NC", "generic": "NCV"},
+        "titles": {"primavera": "Nota de crédito", "generic": "Nota de crédito a cliente"},
     },
     "sales_debit": {
         "families": ("sales", "accounts"),
-        "codes": {"primavera": "ND", "moloni": "ND", "generic": "NDV"},
-        "titles": {"primavera": "Nota de débito", "moloni": "Nota de débito", "generic": "Nota de débito a cliente"},
+        "codes": {"primavera": "ND", "generic": "NDV"},
+        "titles": {"primavera": "Nota de débito", "generic": "Nota de débito a cliente"},
     },
     "sales_delivery": {
         "families": ("sales", "stock"),
-        "codes": {"primavera": "GT", "moloni": "GT", "generic": "GT"},
-        "titles": {"primavera": "Guia de transporte", "moloni": "Guia de transporte", "generic": "Guia a cliente"},
+        "codes": {"primavera": "GT", "generic": "GT"},
+        "titles": {"primavera": "Guia de transporte", "generic": "Guia a cliente"},
     },
     "purchase_invoice": {
         "families": ("purchase", "accounts"),
-        "codes": {"primavera": "VFA", "moloni": "FC", "generic": "FC"},
-        "titles": {"primavera": "Fatura de compra", "moloni": "Fatura de fornecedor", "generic": "Fatura de compra"},
+        "codes": {"primavera": "VFA", "generic": "FC"},
+        "titles": {"primavera": "Fatura de compra", "generic": "Fatura de compra"},
     },
     "purchase_credit": {
         "families": ("purchase", "accounts"),
-        "codes": {"primavera": "VNC", "moloni": "NCF", "generic": "NCC"},
-        "titles": {"primavera": "NC de compra", "moloni": "NC de fornecedor", "generic": "Nota de crédito de compra"},
+        "codes": {"primavera": "VNC", "generic": "NCC"},
+        "titles": {"primavera": "NC de compra", "generic": "Nota de crédito de compra"},
     },
     "purchase_debit": {
         "families": ("purchase", "accounts"),
-        "codes": {"primavera": "VND", "moloni": "NDF", "generic": "NDC"},
-        "titles": {"primavera": "ND de compra", "moloni": "ND de fornecedor", "generic": "Nota de débito de compra"},
+        "codes": {"primavera": "VND", "generic": "NDC"},
+        "titles": {"primavera": "ND de compra", "generic": "Nota de débito de compra"},
     },
     "supplier_transport": {
         "families": ("purchase", "stock"),
-        "codes": {"primavera": "VGT", "moloni": "GTF", "generic": "GTS"},
-        "titles": {"primavera": "Guia de fornecedor", "moloni": "Guia de fornecedor", "generic": "Guia ao fornecedor"},
+        "codes": {"primavera": "VGT", "generic": "GTS"},
+        "titles": {"primavera": "Guia de fornecedor", "generic": "Guia ao fornecedor"},
     },
     "requisition": {
         "families": ("internal", "purchase"),
-        "codes": {"primavera": "ECF", "moloni": "ENC", "generic": "REQ"},
-        "titles": {"primavera": "Encomenda a fornecedor", "moloni": "Encomenda a fornecedor", "generic": "Requisição"},
+        "codes": {"primavera": "ECF", "generic": "REQ"},
+        "titles": {"primavera": "Encomenda a fornecedor", "generic": "Requisição"},
     },
     "stock_receipt": {
         "families": ("stock", "internal", "purchase"),
-        "codes": {"primavera": "COM", "moloni": "ENT", "generic": "ENT"},
-        "titles": {"primavera": "Entrada de existências", "moloni": "Entrada de stock", "generic": "Entrada de stock"},
+        "codes": {"primavera": "COM", "generic": "ENT"},
+        "titles": {"primavera": "Entrada de existências", "generic": "Entrada de stock"},
     },
     "fabric_issue": {
         "families": ("internal", "stock"),
-        "codes": {"primavera": "SAI", "moloni": "SAI", "generic": "SAI"},
-        "titles": {"primavera": "Saída de malha", "moloni": "Saída de malha", "generic": "Saída de malha"},
+        "codes": {"primavera": "SAI", "generic": "SAI"},
+        "titles": {"primavera": "Saída de malha", "generic": "Saída de malha"},
     },
 }
 
 SYSTEMS = {
     "primavera": {"id": "primavera", "label": "Primavera", "editor": "Editor de documentos", "queue": "Fila Primavera"},
-    "moloni": {"id": "moloni", "label": "Moloni", "editor": "Documentos Moloni", "queue": "Fila Moloni"},
     "generic": {"id": "generic", "label": "TextileFlow", "editor": "Documentos", "queue": "Fila fiscal"},
 }
 
@@ -112,9 +117,6 @@ def set_system(company, system: str) -> str:
 
 def _series_options(company, system: str) -> list[str]:
     cfg = dict((company.settings or {}).get("primavera") or {})
-    if system == "moloni":
-        year = str(date.today().year)
-        return list(dict.fromkeys([cfg.get("sales_series") or year, year, "A", "1"]))
     return list(dict.fromkeys([
         cfg.get("sales_series") or "A",
         cfg.get("delivery_series") or "A",
@@ -127,7 +129,7 @@ def default_series(company, doc_type: str, system: str | None = None) -> str:
     system = system or detect_system(company)
     cfg = dict((company.settings or {}).get("primavera") or {})
     if doc_type in {"sales_invoice", "sales_credit", "sales_debit"}:
-        return str(cfg.get("sales_series") or ("A" if system != "moloni" else str(date.today().year)))
+        return str(cfg.get("sales_series") or "A")
     if doc_type in {"sales_delivery", "supplier_transport"}:
         return str(cfg.get("delivery_series") or "A")
     if doc_type.startswith("purchase") or doc_type in {"requisition", "stock_receipt", "fabric_issue"}:

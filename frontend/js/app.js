@@ -1,11 +1,11 @@
-import { get, post } from './api.js?v=20260821-8';
+import { post } from './api.js?v=20260822-16';
 import { clearSession, setCompany, setSession, state } from './state.js';
 import { closeModal, loading, toast } from './ui.js?v=20260821-19';
 import { recordModal } from './quick_create.js?v=20260821-19';
-import { initExperience } from './experience.js?v=20260822-10';
+import { initExperience } from './experience.js?v=20260822-15';
 import * as dashboard from './pages/dashboard.js?v=20260822-10';
 import * as live from './pages/live.js?v=20260819-7';
-import * as styles from './pages/styles.js?v=20260819-8';
+import * as styles from './pages/styles.js?v=20260822-15';
 import * as samples from './pages/samples.js?v=20260819-10';
 import * as costing from './pages/costing.js?v=20260822-12';
 import * as orders from './pages/orders.js?v=20260822-13';
@@ -27,9 +27,19 @@ import * as tables from './pages/tables.js?v=20260821-22';
 import * as shipping from './pages/shipping.js?v=20260820-6';
 import * as commercialDocs from './pages/commercial_docs.js?v=20260822-14';
 import * as settings from './pages/settings.js?v=20260821-23';
-import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260822-11';
+import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260822-15';
+
+async function renderDesign(container, view) {
+  const { render } = await import('./pages/design.js?v=20260822-16');
+  return render(container, view);
+}
 
 const routes={dashboard,planning:tracking,live,styles,samples,costing,orders,confection,floor,cutting,quality,inventory,people,machines,operations,overheads,subcontracts,reports,partners,settings,shipping,tracking,
+  'design-today':{render:container=>renderDesign(container,'today')},
+  'design-requests':{render:container=>renderDesign(container,'requests')},
+  'design-samples':{render:container=>renderDesign(container,'samples')},
+  'design-organization':{render:container=>renderDesign(container,'organization')},
+  'design-report':{render:container=>renderDesign(container,'report')},
   'erp-docs':commercialDocs,
   'erp-doc':{render:container=>commercialDocs.renderDocument(container)},
   'erp-capture':{render:container=>commercialDocs.renderCapture(container)},
@@ -131,19 +141,6 @@ function renderNavigation(route){
   document.getElementById('sidebar-shortcuts').innerHTML=active&&quick.length?`<span>TRANSIÇÃO RÁPIDA</span>${quick.map(([key,label])=>`<button data-shortcut-route="${key}">${label}<i>→</i></button>`).join('')}`:'';
 }
 
-async function login(event){
-  event.preventDefault();
-  const message=document.getElementById('login-message');message.textContent='A validar…';
-  try{
-    const username = document.getElementById('login-username').value.trim();
-    const password = document.getElementById('login-password').value;
-    const data = await post('/auth/login', {username, password}, {skipAuth:true, timeoutMs:45000});
-    localStorage.setItem('tf_token',data.token);setSession(data);showApp();message.textContent='';
-  }catch(error){message.textContent=error.message;}
-  if(!loginScreen.classList.contains('hidden'))return;
-  try{await navigate();}catch(error){content.innerHTML=`<div class="card"><h2>Não foi possível iniciar a área de trabalho</h2><p class="muted">${error.message}</p><button class="btn" onclick="location.reload()">Tentar novamente</button></div>`;toast(error.message,'error');}
-}
-
 function showApp(){
   loginScreen.classList.add('hidden');shell.classList.remove('hidden');
   const select=document.getElementById('company-select');select.innerHTML=state.companies.map(company=>`<option value="${company.id}" ${company.id===state.companyId?'selected':''}>${company.name}</option>`).join('');
@@ -196,20 +193,24 @@ function forcePasswordChange(){
   });
 }
 
-async function bootstrap(){
-  closeModal();
-  document.getElementById('login-form').addEventListener('submit',login);
-  initExperience({canNavigate:canNavigateTo});
-  document.getElementById('logout-button').addEventListener('click',logout);
-  document.getElementById('menu-toggle').addEventListener('click',()=>document.querySelector('.sidebar').classList.toggle('open'));
-  document.getElementById('company-select').addEventListener('change',event=>{setCompany(event.target.value);navigate();});
-  document.getElementById('sidebar-shortcuts').addEventListener('click',event=>{const button=event.target.closest('[data-shortcut-route]');if(button)location.hash=`#/${button.dataset.shortcutRoute}`;});
-  document.getElementById('user-button').addEventListener('click',()=>recordModal({title:'Alterar palavra-passe',fields:[{key:'current_password',label:'Palavra-passe atual',type:'password',required:true},{key:'new_password',label:'Nova palavra-passe',type:'password',required:true,help:'Mínimo de 8 caracteres.'}],save:async payload=>{const result=await post('/auth/change-password',payload);if(result?.token){localStorage.setItem('tf_token',result.token);setSession(result);}return result;},onSaved:()=>toast('Palavra-passe alterada.')}));
-  window.addEventListener('hashchange',navigate);
-  try{await get('/health');document.getElementById('api-status').classList.remove('offline');}catch{document.getElementById('api-status').innerHTML='<i></i> API indisponível';}
-  const token=localStorage.getItem('tf_token');
-  if(!token)return;
-  try{const me=await get('/auth/me');setSession(me);showApp();await navigate();}catch{logout();}
+let appStarted=false;
+
+export async function bootApp(){
+  if(!appStarted){
+    appStarted=true;
+    closeModal();
+    initExperience({canNavigate:canNavigateTo});
+    document.getElementById('logout-button').addEventListener('click',logout);
+    document.getElementById('menu-toggle').addEventListener('click',()=>document.querySelector('.sidebar').classList.toggle('open'));
+    document.getElementById('company-select').addEventListener('change',event=>{setCompany(event.target.value);navigate();});
+    document.getElementById('sidebar-shortcuts').addEventListener('click',event=>{const button=event.target.closest('[data-shortcut-route]');if(button)location.hash=`#/${button.dataset.shortcutRoute}`;});
+    document.getElementById('user-button').addEventListener('click',()=>recordModal({title:'Alterar palavra-passe',fields:[{key:'current_password',label:'Palavra-passe atual',type:'password',required:true},{key:'new_password',label:'Nova palavra-passe',type:'password',required:true,help:'Mínimo de 8 caracteres.'}],save:async payload=>{const result=await post('/auth/change-password',payload);if(result?.token){localStorage.setItem('tf_token',result.token);setSession(result);}return result;},onSaved:()=>toast('Palavra-passe alterada.')}));
+    window.addEventListener('hashchange',navigate);
+  }
+  showApp();
+  try{await navigate();}catch(error){content.innerHTML=`<div class="card"><h2>Não foi possível iniciar a área de trabalho</h2><p class="muted">${error.message}</p><button class="btn" onclick="location.reload()">Tentar novamente</button></div>`;toast(error.message,'error');}
 }
 
-bootstrap().catch(error=>{document.getElementById('login-message').textContent=`Não foi possível iniciar: ${error.message}`;});
+if(!document.querySelector('script[src*="login.js"]')){
+  import('./login.js?v=20260822-16');
+}

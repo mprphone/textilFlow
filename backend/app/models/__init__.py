@@ -3,6 +3,7 @@ from .commercial import CommercialDocument
 from .configuration import AuditLog, FieldDefinition, FormTemplate, WorkflowDefinition
 from .confection import CapacityDay, CapacityEvent, EmployeeSkill, ExternalCapacity, SewingPlan, WorkShift
 from .costs import ActualCostEntry, CostLine, CostSheet, OverheadCost
+from .development import Development, DevelopmentAssignee, DevelopmentComment, DevelopmentStageEvent, DevelopmentTask
 from .factory import Department, Employee, Facility, Machine, MachineType, ProductionLine, SkillType
 from .identity import Company, User, UserCompany
 from .inventory import InventoryMovement, PurchaseOrder, PurchaseOrderLine, StockLot, Warehouse

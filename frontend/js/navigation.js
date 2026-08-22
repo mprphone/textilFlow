@@ -26,10 +26,24 @@ export const MODULES = [
     quick:[['costing','Criar proposta'],['orders','Abrir encomendas']],
   },
   {
-    id:'design', label:'Desenvolvimento', shortLabel:'Designer', icon:'◇', home:'styles',
+    id:'design', label:'Desenvolvimento', shortLabel:'Designer', icon:'◇', home:'design-today',
     defaultRoles:['admin','manager','designer','planner'],
-    routes:[['styles','Artigos e fichas técnicas','◇'],['samples','Amostras e aprovações','◉']],
-    quick:[['styles','Novo artigo'],['samples','Aprovar amostra']],
+    navGroups:[
+      {id:'pipeline', title:'Pipeline', hint:'Pedidos do cliente e percurso da amostra até à aprovação.'},
+      {id:'controlo', title:'Controlo', hint:'O que está atrasado, à espera ou bloqueado.'},
+      {id:'organizacao', title:'Organização', hint:'Distribuição do trabalho por designer e cliente.'},
+      {id:'desenvolvimento', title:'Desenvolvimento', hint:'Fichas técnicas, amostras e passagem à produção.'},
+    ],
+    routes:[
+      ['design-requests','Pedidos e referências','▤','pipeline'],
+      ['design-samples','Desenvolvimento de amostras','◉','pipeline'],
+      ['design-today','Prioridades de hoje','▣','controlo'],
+      ['design-report','Relatório','▥','controlo'],
+      ['design-organization','Por designer e cliente','♙','organizacao'],
+      ['styles','Artigos e fichas técnicas','◇','desenvolvimento'],
+      ['samples','Amostras e aprovações','◉','desenvolvimento'],
+    ],
+    quick:[['design-requests','Novo pedido de cliente'],['styles','Novo artigo'],['samples','Aprovar amostra']],
   },
   {
     id:'production', label:'Produção', shortLabel:'Produção', icon:'▶', home:'tracking',

@@ -190,6 +190,10 @@ def record_daily_output(db, company_id: int, payload: dict) -> dict:
     rejected = float(payload.get("quantity_rejected") or 0)
     if good <= 0 and rejected <= 0:
         raise HTTPException(422, "Indique as peças produzidas")
+    # Bloqueia a linha da OF durante o "procurar ou criar" atribuicao, para
+    # dois registos concorrentes do mesmo par funcionario/operacao nao
+    # criarem duas atribuicoes duplicadas (no-op no SQLite dos testes).
+    db.query(ProductionOrder).filter_by(id=order.id).with_for_update().first()
     operation_id, product_operation_id = _first_operation(db, order)
     assignment = db.query(WorkAssignment).filter_by(
         company_id=company_id,

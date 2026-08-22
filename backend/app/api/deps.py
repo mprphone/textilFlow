@@ -93,7 +93,7 @@ ROLE_MODULES = {
 RESOURCE_MODULES = {
     "styles": {"design", "commercial"}, "style-revisions": {"design"}, "style-variants": {"design", "commercial"},
     "article-types": {"design"}, "bom-items": {"design", "commercial"}, "product-operations": {"design", "production", "commercial"},
-    "samples": {"design"}, "certifications": {"design"}, "materials": {"design", "commercial", "shipping", "erp", "tables"},
+    "samples": {"design"}, "developments": {"design"}, "certifications": {"design"}, "materials": {"design", "commercial", "shipping", "erp", "tables"},
     "cost-sheets": {"commercial"}, "cost-lines": {"commercial"}, "customers": {"commercial", "erp", "tables"}, "suppliers": {"commercial", "subcontracting", "shipping", "erp", "tables", "confection"},
     "banks": {"tables", "erp", "commercial", "management"}, "skill-types": {"confection", "production"}, "machine-types": {"confection", "production"},
     "sales-orders": {"commercial", "shipping"}, "sales-order-lines": {"commercial", "shipping"},

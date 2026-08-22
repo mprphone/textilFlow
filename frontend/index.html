@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/assets/confection.css?v=20260822-3">
   <link rel="stylesheet" href="/assets/confection-map.css?v=20260822-15">
   <link rel="stylesheet" href="/assets/chrome.css?v=20260821-23">
+  <link rel="stylesheet" href="/assets/design.css?v=20260822-15">
 </head>
 <body>
   <section id="login-screen" class="login-screen">
@@ -21,7 +22,7 @@
       <p>Do primeiro desenho à expedição. Produto, custos, capacidade, pessoas, máquinas e produção real numa única plataforma.</p>
       <div class="feature-row"><span>Fichas adaptativas</span><span>Chão de fábrica</span><span>Custos reais</span></div>
     </div>
-    <form id="login-form" class="login-card">
+    <form id="login-form" class="login-card" method="post" action="#" onsubmit="event.preventDefault()">
       <div><span class="status-dot"></span><small>Sistema local disponível</small></div>
       <h2>Bem-vindo</h2>
   <p class="muted">Entre com <b>admin</b> / <b>admin123</b>. A senha muda-se depois, no círculo do utilizador no canto superior direito.</p>
@@ -75,6 +76,6 @@
     </div>
   </div>
   <div id="toast-stack" class="toast-stack"></div>
-  <script type="module" src="/js/app.js?v=20260822-14"></script>
+  <script type="module" src="/js/login.js?v=20260822-16"></script>
 </body>
 </html>

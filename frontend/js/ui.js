@@ -46,7 +46,7 @@ export function loading(message = 'A carregar dados…') { return `<div class="l
 export function empty(title = 'Sem registos', detail = 'Crie o primeiro registo para começar.') { return `<div class="empty"><strong>${esc(title)}</strong>${esc(detail)}</div>`; }
 export function confirmDelete(label = 'este registo') { return window.confirm(`Eliminar ${label}? Esta ação não pode ser anulada.`); }
 
-document.getElementById('modal-close').addEventListener('click', closeModal);
+document.getElementById('modal-close')?.addEventListener('click', closeModal);
 document.querySelector('.modal-card')?.addEventListener('click', event => event.stopPropagation());
 const emergencyClose = document.getElementById('modal-emergency-close');
 if (emergencyClose) {

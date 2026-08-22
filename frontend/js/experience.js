@@ -7,6 +7,10 @@ const commands = [
   {group:'Ir para', icon:'✂', label:'Mapa de corte', detail:'Gantt das mesas, backlog e entrega', route:'corte', keywords:'corte mesa marcador gantt plano estendimento'},
   {group:'Ir para', icon:'▦', label:'Mapa de produção de confeção', detail:'Backlog, Gantt, carga e cenários', route:'confection-map', keywords:'gantt mapa confeção backlog sam horas extra'},
   {group:'Ir para', icon:'⌁', label:'Confeção e capacidade', detail:'Capacidade real, plano, pessoas e execução', route:'confection', keywords:'costura linha sam turno capacidade confeção'},
+  {group:'Ir para', icon:'▣', label:'Prioridades de desenvolvimento', detail:'Atrasos, esperas e bloqueios do atelier', route:'design-today', keywords:'hoje designer amostra atraso bloqueio'},
+  {group:'Ir para', icon:'▤', label:'Pedidos e referências', detail:'Pedido do cliente e distribuição pelas designers', route:'design-requests', keywords:'pedido referencia briefing cliente designer'},
+  {group:'Ir para', icon:'◉', label:'Pipeline de amostras', detail:'Da ficha técnica à aprovação do cliente', route:'design-samples', keywords:'amostra pipeline ficha modelagem confeção'},
+  {group:'Ir para', icon:'♙', label:'Organização do desenvolvimento', detail:'Carga por designer e por cliente', route:'design-organization', keywords:'designer cliente distribuicao carga'},
   {group:'Ir para', icon:'◇', label:'Artigos e fichas técnicas', detail:'Produto, materiais e operações', route:'styles', keywords:'modelo ficha produto'},
   {group:'Ir para', icon:'◉', label:'Amostras e aprovações', detail:'Desenvolvimento e passagem à produção', route:'samples', keywords:'amostra aprovar designer produção'},
   {group:'Ir para', icon:'€', label:'Propostas e custos reais', detail:'Margem e orçamentado vs. realizado', route:'costing', keywords:'preço margem costing orçamento'},
@@ -24,6 +28,7 @@ const commands = [
   {group:'Ir para', icon:'↔', label:'ERP', detail:'Primavera, faturas, foto e artigos aprendidos', route:'erp-docs', keywords:'primavera fatura requisição nc nd guia compra venda gemini pdf'},
   {group:'Ação rápida', icon:'▶', label:'Registar produção', detail:'Abrir terminal da linha de confeção', route:'floor', keywords:'produzir peça operador', action:true},
   {group:'Ação rápida', icon:'€', label:'Criar proposta ao cliente', detail:'Calcular custo e margem', route:'costing', keywords:'novo orçamento cliente', action:true},
+  {group:'Ação rápida', icon:'▤', label:'Novo pedido de cliente', detail:'Registar briefing e referências para as designers', route:'design-requests', keywords:'pedido amostra referencia briefing', action:true},
   {group:'Ação rápida', icon:'◇', label:'Criar artigo', detail:'Nova ficha técnica adaptativa', route:'styles', keywords:'novo produto modelo', action:true},
   {group:'Ação rápida', icon:'✂', label:'Enviar a subcontrato', detail:'Tinturaria, estamparia ou corte externos', route:'subcontracts', keywords:'cortador tecido tingimento estamparia', action:true},
   {group:'Ação rápida', icon:'!', label:'Registar problema de qualidade', detail:'Inspeção e defeito', route:'quality', keywords:'rejeitar defeito', action:true},
@@ -85,7 +90,7 @@ export function openCommandPalette(actionsOnly = false) {
 export function initExperience(options = {}) {
   if (typeof options.canNavigate === 'function') canNavigate = options.canNavigate;
   document.getElementById('global-command')?.addEventListener('click', () => openCommandPalette(false));
-  document.getElementById('quick-action').addEventListener('click', () => openCommandPalette(true));
+  document.getElementById('quick-action')?.addEventListener('click', () => openCommandPalette(true));
   document.querySelectorAll('[data-shortcut-route]').forEach(button => button.addEventListener('click', () => { location.hash = `#/${button.dataset.shortcutRoute}`; }));
   document.addEventListener('keydown', event => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); openCommandPalette(false); }
