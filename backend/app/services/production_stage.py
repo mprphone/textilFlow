@@ -146,12 +146,23 @@ def create_batches_from_cutting(db: Session, job: CuttingJob) -> list[Production
 
 
 def assert_subcontract_ready(db: Session, order: ProductionOrder, service, *, override: bool = False) -> dict:
+    """Regras de bom-senso independentes de sequência (sempre aplicadas) + fallback legado.
+
+    A restrição fixa "corte tem de começar antes de qualquer subcontrato" só se
+    aplica quando o artigo NÃO tem uma sequência de produção configurada
+    (`ProductionRouteStep`) — nesse caso a ordem entre corte, confeção e
+    subcontratos (ex.: tingir a malha antes de cortar, ou confecionar a peça
+    antes de a mandar tingir) vem inteiramente da configuração, não daqui.
+    """
     if not order or not service:
         return {"ready": True, "reason": ""}
     category = (service.category or "").lower()
     fabric = fabric_status(db, order)
     if category in {"cutting"} and not fabric["ready"]:
         return {"ready": override, "reason": f"Malha ainda não está em stock para mandar cortar fora: {fabric['label']}"}
+    from .production_route import route_for_style
+    if route_for_style(db, order.style_id):
+        return {"ready": True, "reason": ""}
     cutting = _cutting_state(db, order)
     if category in {"dyeing", "printing", "embroidery", "laundry", "finishing", "sewing"} and cutting[0] in {"not_started", "planned"}:
         return {"ready": override, "reason": "Corte ainda não iniciado. Só envia para subcontrato depois de cortar."}

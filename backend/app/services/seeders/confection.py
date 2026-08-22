@@ -92,14 +92,22 @@ def ensure_confection_data(db) -> int:
 
 
 def _ensure_catalogs(db, company_id: int) -> int:
+    # Usa conjuntos em memoria (nao so queries) para o "ja existe?" - varios
+    # loops nesta funcao podem propor o mesmo codigo antes de qualquer flush
+    # intermedio, e duas queries identicas dentro da mesma transacao nao veem
+    # as insercoes uma da outra ainda por gravar.
     created = 0
+    known_skill_codes = {row.code for row in db.query(SkillType).filter_by(company_id=company_id).all()}
+    known_skill_names = {row.name for row in db.query(SkillType).filter_by(company_id=company_id).all()}
     skills = [
         ("EST", "Estender"), ("CORTE", "Corte"), ("PP", "Ponto preso"), ("CC", "Corta-e-cose"),
         ("REC", "Recobrimento"), ("GOLA", "Gola"), ("BAINHA", "Bainha"),
     ]
     for code, name in skills:
-        if not db.query(SkillType).filter_by(company_id=company_id, code=code).first():
+        if code not in known_skill_codes:
             db.add(SkillType(company_id=company_id, code=code, name=name, active=True))
+            known_skill_codes.add(code)
+            known_skill_names.add(name)
             created += 1
     for employee in db.query(Employee).filter_by(company_id=company_id).all():
         for skill in employee.skills or []:
@@ -107,24 +115,30 @@ def _ensure_catalogs(db, company_id: int) -> int:
             if not name:
                 continue
             code = _code(name, 1)[:40]
-            if not db.query(SkillType).filter_by(company_id=company_id, code=code).first() and not db.query(SkillType).filter_by(company_id=company_id, name=name).first():
+            if code not in known_skill_codes and name not in known_skill_names:
                 db.add(SkillType(company_id=company_id, code=code, name=name, active=True))
+                known_skill_codes.add(code)
+                known_skill_names.add(name)
                 created += 1
+    known_machine_codes = {row.code for row in db.query(MachineType).filter_by(company_id=company_id).all()}
     machines = [
         ("spreader", "Mesa de estender"), ("cutter", "Corte"), ("lockstitch", "Ponto preso"),
         ("overlock", "Corta-e-cose"), ("coverstitch", "Recobrimento"),
     ]
     for code, name in machines:
-        if not db.query(MachineType).filter_by(company_id=company_id, code=code).first():
+        if code not in known_machine_codes:
             db.add(MachineType(company_id=company_id, code=code, name=name, active=True))
+            known_machine_codes.add(code)
             created += 1
     for machine in db.query(Machine).filter_by(company_id=company_id).all():
         code = (machine.machine_type or "").strip()
         if not code:
             continue
-        if not db.query(MachineType).filter_by(company_id=company_id, code=code).first():
+        if code not in known_machine_codes:
             db.add(MachineType(company_id=company_id, code=code, name=code, active=True))
+            known_machine_codes.add(code)
             created += 1
+    db.flush()
     db.flush()
     return created
 

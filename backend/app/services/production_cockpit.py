@@ -13,9 +13,9 @@ from ..models import (
 from .order_followup import (
     bom_material_needs, commercial_name, cost_sheet_for_order, followup_alerts, service_plan,
 )
+from .production_route import build_route_status
 from .production_split import holdings, job_out
 from .serialization import model_to_dict
-from .subcontract_chain import build_chain_status
 
 SERVICE = {
     "sewing": "Confeção", "dyeing": "Tinturaria", "printing": "Estamparia", "embroidery": "Bordado",
@@ -227,7 +227,7 @@ def order_cockpit(db: Session, order: ProductionOrder) -> dict:
         "batches": [model_to_dict(row) for row in db.query(ProductionBatch).filter_by(production_order_id=order.id).all()],
         "events": [model_to_dict(row) for row in events],
         "quality": [model_to_dict(row) for row in db.query(QualityInspection).filter_by(production_order_id=order.id).all()],
-        "subcontract_chain": build_chain_status(db, order),
+        "subcontract_chain": build_route_status(db, order),
         "cutting": [model_to_dict(row) for row in db.query(CuttingJob).filter_by(production_order_id=order.id).all()],
         "fabric_purchases": [{"id": row.id, "order_no": row.order_no, "status": row.status, "total": row.total, "expected_date": row.expected_date.isoformat() if row.expected_date else None} for row in fabric_pos],
         "shipments": shipped_docs,

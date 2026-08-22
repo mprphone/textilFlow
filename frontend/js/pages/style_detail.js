@@ -9,15 +9,22 @@ function rowsTable(headers, rows) {
   return `<div class="table-wrap"><table class="data-table"><thead><tr>${headers.map(item=>`<th>${item}</th>`).join('')}<th></th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
 
+const STEP_TYPE_LABEL = { cutting: 'Corte', sewing: 'Confeção interna', subcontract: 'Subcontrato' };
+
 export async function renderStyleDetail(container, styleId, back, activeTab = 'summary') {
-  const [data, configuration, chain] = await Promise.all([
+  const [data, configuration, route, chainServices] = await Promise.all([
     get(`/products/styles/${styleId}/full`),
     get(`/configuration/${state.companyId}/style`),
-    get(`/crud/styles/${styleId}/subcontract-chain`).catch(() => []),
+    get(`/crud/styles/${styleId}/production-route`).catch(() => []),
+    get(`/crud/subcontract-services?company_id=${state.companyId}`).catch(() => []),
   ]);
-  data.subcontract_chain = chain || [];
+  data.production_route = (route && route.length) ? route : [
+    { sequence: 10, step_type: 'cutting', is_required: true, notes: '' },
+    { sequence: 20, step_type: 'sewing', is_required: true, notes: '' },
+  ];
+  data.chain_services = chainServices || [];
   const style = data.style;
-  const tabs = [['summary','Resumo'],['bom','Materiais / BOM'],['routing','Gama operatória'],['chain','Cadeia ext.'],['variants','Variantes'],['samples','Amostras'],['costs','Custos'],['history','Histórico']];
+  const tabs = [['summary','Resumo'],['bom','Materiais / BOM'],['routing','Gama operatória'],['chain','Sequência de produção'],['variants','Variantes'],['samples','Amostras'],['costs','Custos'],['history','Histórico']];
   container.innerHTML = pageHeader(`REF. ${style.reference}`, style.description, '<button class="btn" data-back>← Voltar aos artigos</button>') + `
     <div class="detail-hero"><div class="product-image">◈</div><div class="card detail-title"><div class="card-header"><div><h2>${esc(style.description)}</h2><p>${esc(style.collection || '')} · Ficha V${style.technical_version} · Modelo V${style.template_version}</p></div>${badge(style.lifecycle_status)}</div><div class="tag-list"><span class="tag">${esc(style.fabric || 'Sem malha')}</span><span class="tag">${number(style.gsm)} g/m²</span><span class="tag">${esc(style.composition || 'Sem composição')}</span><span class="tag">${esc(style.size_range || 'Sem tamanhos')}</span><span class="tag">${esc(style.workflow_stage)}</span></div></div></div>
     <div class="tabs" style="margin-top:14px">${tabs.map(([key,label])=>`<button class="tab ${key===activeTab?'active':''}" data-detail-tab="${key}">${label}</button>`).join('')}</div>
@@ -32,7 +39,7 @@ function renderTab(tab, data, configuration) {
   if (tab === 'summary') return `<div class="grid-2"><div class="card"><div class="card-header"><h2>Ficha técnica</h2><span>Campos estruturais</span></div><div class="custom-fields">${[['Referência',style.reference],['Coleção',style.collection],['Malha',style.fabric],['Composição',style.composition],['Gramagem',`${number(style.gsm)} g/m²`],['Cor',style.color],['Tamanhos',style.size_range],['Etapa',style.workflow_stage]].map(([label,value])=>`<div class="custom-field"><small>${label}</small><strong>${esc(value||'—')}</strong></div>`).join('')}</div></div><div class="card"><div class="card-header"><h2>Campos adaptativos</h2><span>${configuration.fields.length} definidos</span></div><div class="custom-fields">${configuration.fields.map(field=>`<div class="custom-field"><small>${esc(field.label)}</small><strong>${esc(typeof style.custom_data?.[field.field_key]==='object'?JSON.stringify(style.custom_data[field.field_key]):style.custom_data?.[field.field_key]||'—')}</strong></div>`).join('')}</div></div></div>`;
   if (tab === 'bom') return `<div class="card"><div class="card-header"><h2>Bill of Materials</h2><button class="btn primary" data-add-bom>+ Material</button></div>${rowsTable(['Material','Quantidade','Unidade','Desperdício','Custo unit.','Custo'],data.bom.map(row=>`<tr><td><b>${esc(row.material_code)}</b><br><small>${esc(row.material_name)}</small></td><td>${number(row.quantity)}</td><td>${esc(row.unit)}</td><td>${number(row.waste_pct)}%</td><td>${money(row.unit_cost)}</td><td>${money(row.quantity*(1+row.waste_pct/100)*row.unit_cost)}</td><td><button class="btn small danger" data-delete-resource="bom-items" data-delete-id="${row.id}">Eliminar</button></td></tr>`))}</div>`;
   if (tab === 'routing') return `<div class="card"><div class="card-header"><h2>Gama operatória</h2><button class="btn primary" data-add-operation>+ Operação</button></div>${rowsTable(['Seq.','Operação','Máquina','SMV','Objetivo/h','Qualidade'],data.routing.map(row=>`<tr><td>${row.sequence}</td><td><b>${esc(row.operation_code)}</b> · ${esc(row.operation_name)}</td><td>${esc(row.machine_type||'Manual')}</td><td>${number(row.smv)} min</td><td>${number(row.target_units_hour)}</td><td>${row.quality_checkpoint?badge('checkpoint'):'—'}</td><td><button class="btn small danger" data-delete-resource="product-operations" data-delete-id="${row.id}">Eliminar</button></td></tr>`))}<p class="muted">SMV total: <b>${number(data.routing.reduce((sum,row)=>sum+row.smv,0))} minutos</b></p></div>`;
-  if (tab === 'chain') return `<div class="card"><div class="card-header"><h2>Cadeia de subcontratos</h2><button class="btn primary" data-add-chain-step>+ Passo</button><button class="btn" data-save-chain>Guardar cadeia</button></div><div data-chain-list>${renderChainList(data.subcontract_chain || [])}</div><p class="muted">A ordem define a sequência obrigatória. Cada passo só pode ser enviado quando o anterior tiver regressado.</p></div>`;
+  if (tab === 'chain') return `<div class="card"><div class="card-header"><h2>Sequência de produção</h2><button class="btn primary" data-add-chain-step>+ Passo</button><button class="btn" data-save-chain>Guardar sequência</button></div><div data-chain-list>${renderChainList(data.production_route || [], data.chain_services)}</div><p class="muted">A ordem define a sequência obrigatória deste artigo — pode misturar corte, confeção interna e subcontratos (ex.: tingir a malha antes de cortar, ou confecionar e só depois tingir a peça). Cada passo só fica disponível quando o anterior tiver terminado. Sem nenhum passo aqui, aplica-se a regra geral: corte sempre antes de qualquer subcontrato.</p></div>`;
   if (tab === 'variants') return `<div class="card"><div class="card-header"><h2>Cores, tamanhos e SKU</h2><button class="btn primary" data-add-variant>+ Variante</button></div>${rowsTable(['SKU','Cor','Tamanho','Código de barras','Estado'],data.variants.map(row=>`<tr><td><b>${esc(row.sku)}</b></td><td>${esc(row.color)}</td><td>${esc(row.size)}</td><td>${esc(row.barcode||'—')}</td><td>${badge(row.active?'ativa':'inativa')}</td><td><button class="btn small danger" data-delete-resource="style-variants" data-delete-id="${row.id}">Eliminar</button></td></tr>`))}</div>`;
   if (tab === 'samples') return `<div class="card"><div class="card-header"><h2>Amostras e aprovações</h2><button class="btn primary" data-add-sample>+ Amostra</button></div>${rowsTable(['Tipo / Versão','Estado','Planeada','Concluída','Tempo','Materiais','Mão de obra','Total'],data.samples.map(row=>`<tr><td><b>${esc(row.sample_type)} ${esc(row.version)}</b></td><td>${badge(row.status)}</td><td>${date(row.planned_date)}</td><td>${date(row.completed_date)}</td><td>${number(row.labor_minutes)} min</td><td>${money(row.material_cost)}</td><td>${money(row.labor_cost)}</td><td><b>${money(row.total_cost)}</b></td><td><button class="btn small danger" data-delete-resource="samples" data-delete-id="${row.id}">Eliminar</button></td></tr>`))}</div>`;
   if (tab === 'costs') return `<div class="card"><div class="card-header"><h2>Folhas de custo</h2><button class="btn primary" data-add-sheet>+ Nova versão</button></div>${rowsTable(['Versão','Estado','Materiais','Mão de obra','Máquina','Subcontrato','Indiretos','Custo total','Venda','Margem'],data.cost_sheets.map(row=>`<tr><td>V${row.version}</td><td>${badge(row.status)}</td><td>${money(row.material_cost)}</td><td>${money(row.labor_cost)}</td><td>${money(row.machine_cost)}</td><td>${money(row.subcontract_cost)}</td><td>${money(row.overhead_cost)}</td><td><b>${money(row.total_cost)}</b></td><td>${money(row.selling_price)}</td><td>${number(row.margin_pct)}%</td><td><button class="btn small" data-rebuild-sheet="${row.id}">Recalcular</button></td></tr>`))}</div>`;
@@ -41,20 +48,19 @@ function renderTab(tab, data, configuration) {
 
 function renderChainList(chain, services) {
   if (!chain.length) return '<p class="muted">Nenhum passo configurado.</p>';
-  return rowsTable(['Seq.','Serviço','Categoria','Obrigatório','Notas',''], chain.map((step, idx) => `<tr data-chain-idx="${idx}">
-    <td><input type="number" data-chain-seq value="${step.sequence || idx + 1}" style="width:60px"></td>
-    <td><select data-chain-service>${(services || []).map(s => `<option value="${s.id}" ${s.id === step.subcontract_service_id ? 'selected' : ''}>${esc(s.code)} · ${esc(s.name)}</option>`).join('')}</select></td>
-    <td>${esc((services || []).find(s => s.id === step.subcontract_service_id)?.category || '—')}</td>
+  return rowsTable(['Seq.','Tipo','Serviço (só subcontrato)','Categoria','Obrigatório','Notas',''], chain.map((step, idx) => {
+    const type = step.step_type || 'subcontract';
+    const isSub = type === 'subcontract';
+    return `<tr data-chain-idx="${idx}">
+    <td><input type="number" data-chain-seq value="${step.sequence || (idx + 1) * 10}" style="width:60px"></td>
+    <td><select data-chain-type>${Object.entries(STEP_TYPE_LABEL).map(([value,label]) => `<option value="${value}" ${value === type ? 'selected' : ''}>${label}</option>`).join('')}</select></td>
+    <td><select data-chain-service ${isSub ? '' : 'disabled'}>${(services || []).map(s => `<option value="${s.id}" ${s.id === step.subcontract_service_id ? 'selected' : ''}>${esc(s.code)} · ${esc(s.name)}</option>`).join('')}</select></td>
+    <td>${isSub ? esc((services || []).find(s => s.id === step.subcontract_service_id)?.category || '—') : '—'}</td>
     <td><input type="checkbox" data-chain-required ${step.is_required ? 'checked' : ''}></td>
     <td><input type="text" data-chain-notes value="${esc(step.notes || '')}" style="width:100%"></td>
     <td><button class="btn small danger" data-chain-remove="${idx}">×</button></td>
-  </tr>`));
-}
-
-async function loadChainServices() {
-  try {
-    return await get(`/crud/subcontract-services?company_id=${state.companyId}`);
-  } catch (error) { return []; }
+  </tr>`;
+  }));
 }
 
 async function bindActions(container, data, styleId, back, activeTab) {
@@ -67,29 +73,30 @@ async function bindActions(container, data, styleId, back, activeTab) {
   container.querySelectorAll('[data-rebuild-sheet]').forEach(button=>button.addEventListener('click',async()=>{try{await post(`/products/cost-sheets/${button.dataset.rebuildSheet}/rebuild`,{});toast('Custo recalculado a partir da BOM e gama.');refresh();}catch(error){toast(error.message,'error')}}));
   container.querySelectorAll('[data-delete-resource]').forEach(button=>button.addEventListener('click',async()=>{if(!confirmDelete('este elemento'))return;try{await crudDelete(button.dataset.deleteResource,Number(button.dataset.deleteId),state.companyId);toast('Elemento eliminado.');refresh();}catch(error){toast(error.message,'error')}}));
 
-  let chainServices = [];
   if (activeTab === 'chain') {
-    chainServices = await loadChainServices();
+    const chainServices = data.chain_services || [];
     container.querySelector('[data-add-chain-step]')?.addEventListener('click', () => {
-      data.subcontract_chain = data.subcontract_chain || [];
-      data.subcontract_chain.push({ sequence: (data.subcontract_chain.length + 1) * 10, subcontract_service_id: chainServices[0]?.id, is_required: true, notes: '' });
-      container.querySelector('[data-chain-list]').innerHTML = renderChainList(data.subcontract_chain, chainServices);
+      data.production_route = data.production_route || [];
+      data.production_route.push({ sequence: (data.production_route.length + 1) * 10, step_type: 'subcontract', subcontract_service_id: chainServices[0]?.id, is_required: true, notes: '' });
+      container.querySelector('[data-chain-list]').innerHTML = renderChainList(data.production_route, chainServices);
       bindChainActions(container, data, styleId, chainServices);
     });
     container.querySelector('[data-save-chain]')?.addEventListener('click', async () => {
       const rows = container.querySelectorAll('[data-chain-idx]');
       const payload = [];
       rows.forEach((row, idx) => {
+        const stepType = row.querySelector('[data-chain-type]').value;
         payload.push({
           sequence: Number(row.querySelector('[data-chain-seq]').value) || (idx + 1) * 10,
-          subcontract_service_id: Number(row.querySelector('[data-chain-service]').value),
+          step_type: stepType,
+          subcontract_service_id: stepType === 'subcontract' ? Number(row.querySelector('[data-chain-service]').value) : null,
           is_required: row.querySelector('[data-chain-required]').checked,
           notes: row.querySelector('[data-chain-notes]').value,
         });
       });
       try {
-        await post(`/crud/styles/${styleId}/subcontract-chain`, payload);
-        toast('Cadeia guardada');
+        await post(`/crud/styles/${styleId}/production-route`, payload);
+        toast('Sequência de produção guardada');
         refresh();
       } catch (error) { toast(error.message, 'error'); }
     });
@@ -100,8 +107,16 @@ async function bindActions(container, data, styleId, back, activeTab) {
 function bindChainActions(container, data, styleId, chainServices) {
   container.querySelectorAll('[data-chain-remove]').forEach(button => button.addEventListener('click', () => {
     const idx = Number(button.dataset.chainRemove);
-    data.subcontract_chain.splice(idx, 1);
-    container.querySelector('[data-chain-list]').innerHTML = renderChainList(data.subcontract_chain, chainServices);
+    data.production_route.splice(idx, 1);
+    container.querySelector('[data-chain-list]').innerHTML = renderChainList(data.production_route, chainServices);
+    bindChainActions(container, data, styleId, chainServices);
+  }));
+  container.querySelectorAll('[data-chain-type]').forEach(select => select.addEventListener('change', () => {
+    const row = select.closest('[data-chain-idx]');
+    const idx = Number(row.dataset.chainIdx);
+    data.production_route[idx].step_type = select.value;
+    data.production_route[idx].subcontract_service_id = select.value === 'subcontract' ? (chainServices[0]?.id) : null;
+    container.querySelector('[data-chain-list]').innerHTML = renderChainList(data.production_route, chainServices);
     bindChainActions(container, data, styleId, chainServices);
   }));
 }

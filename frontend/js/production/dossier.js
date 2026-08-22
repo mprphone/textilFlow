@@ -95,18 +95,19 @@ export function dossierHtml(data) {
     <td>${datetime(row.shipped_at)}</td>
   </tr>`).join('');
   const serviceRail = services.length
-    ? `<ol class="service-rail">${services.map(step => `<li class="${esc(step.status)}">
+    ? `<ol class="service-rail">${services.map(step => {
+        const detail = [
+          step.reason || STEP_STATUS[step.status] || step.status,
+          step.out_quantity ? `${number(step.out_quantity)} un. fora` : '',
+          step.required === false ? 'Opcional' : '',
+          step.notes || '',
+        ].filter(Boolean).join(' · ');
+        return `<li class="${esc(step.status)}">
         <span class="service-lock">${step.locked ? '🔒' : step.status === 'done' ? '✓' : step.sequence}</span>
-        <div><b>${esc(step.label)}</b><small>${esc(step.reason || STEP_STATUS[step.status] || step.status)}${step.out_quantity ? ` · ${number(step.out_quantity)} un. fora` : ''}</small></div>
-      </li>`).join('')}</ol>`
-    : '<p class="muted">Sem serviços externos nesta ficha.</p>';
-  const chain = data.subcontract_chain || [];
-  const chainRail = chain.length
-    ? `<ol class="service-rail chain-rail">${chain.map(step => `<li class="${esc(step.status)} ${step.locked ? 'locked' : ''}">
-        <span class="service-lock">${step.locked ? '🔒' : step.status === 'done' ? '✓' : step.sequence}</span>
-        <div><b>${esc(step.service_name)}</b><small>${step.required ? 'Obrigatório' : 'Opcional'} · ${number(step.quantity_sent)} enviado · ${number(step.quantity_received)} recebido${step.notes ? ' · ' + esc(step.notes) : ''}</small></div>
-      </li>`).join('')}</ol>`
-    : '<p class="muted">Sem cadeia de subcontratos definida para este modelo.</p>';
+        <div><b>${esc(step.label)}</b><small>${esc(detail)}</small></div>
+      </li>`;
+      }).join('')}</ol>`
+    : '<p class="muted">Sem sequência de produção definida — aplica-se a regra geral.</p>';
   const unseenAlerts = alerts.filter(row => !row.seen);
   const alertBox = alerts.length
     ? `<div class="dossier-alerts">${alerts.map(row => `<div class="dossier-alert ${esc(row.level)} ${row.seen ? 'seen' : ''}"><b>${esc(row.title)}</b><span>${esc(row.detail || '')}</span>${row.seen ? '<small>Visto</small>' : ''}</div>`).join('')}<button class="btn small" data-mark-alerts-seen data-order-id="${order.id}">${unseenAlerts.length ? `Marcar ${unseenAlerts.length} alerta${unseenAlerts.length > 1 ? 's' : ''} como visto` : 'Marcar todos como vistos'}</button></div>`
@@ -133,12 +134,8 @@ export function dossierHtml(data) {
       <div class="track-splits dossier-places">${locationCards}</div>
     </section>
     <section class="dossier-block">
-      <h3>Serviços a distribuir <small>um de cada vez · os seguintes ficam cadeados</small></h3>
+      <h3>Sequência de produção <small>um passo de cada vez · os seguintes ficam cadeados</small></h3>
       ${serviceRail}
-    </section>
-    <section class="dossier-block">
-      <h3>Cadeia de subcontratos <small>passos obrigatórios definidos para o modelo</small></h3>
-      ${chainRail}
     </section>
     <section class="dossier-block">
       <h3>Mercadorias</h3>

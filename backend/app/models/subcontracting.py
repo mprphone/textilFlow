@@ -24,18 +24,25 @@ class SubcontractService(Base, TimestampMixin):
     __table_args__ = (UniqueConstraint("company_id", "supplier_id", "code"),)
 
 
-class SubcontractChainStep(Base, TimestampMixin):
-    """Passo de uma cadeia de serviços externos para um modelo (style)."""
+class ProductionRouteStep(Base, TimestampMixin):
+    """Passo configuravel da sequencia de producao de um artigo.
 
-    __tablename__ = "subcontract_chain_steps"
+    Generaliza o antigo SubcontractChainStep para incluir tambem etapas
+    internas (corte, confecao), nao so subcontratos. A ordem entre elas
+    e livre por artigo: um artigo pode tingir a malha antes de cortar,
+    outro pode confecionar a peca e so depois mandar tingir.
+    """
+
+    __tablename__ = "production_route_steps"
     id = Column(Integer, primary_key=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
     style_id = Column(Integer, ForeignKey("styles.id"), nullable=False, index=True)
     sequence = Column(Integer, nullable=False, default=1)
-    subcontract_service_id = Column(Integer, ForeignKey("subcontract_services.id"), nullable=False, index=True)
+    step_type = Column(String(20), default="subcontract", nullable=False)
+    subcontract_service_id = Column(Integer, ForeignKey("subcontract_services.id"), nullable=True, index=True)
     is_required = Column(Boolean, default=True, nullable=False)
     notes = Column(Text)
-    __table_args__ = (UniqueConstraint("style_id", "sequence"), UniqueConstraint("style_id", "subcontract_service_id"),)
+    __table_args__ = (UniqueConstraint("style_id", "sequence"),)
 
 
 class SubcontractJob(Base, TimestampMixin):

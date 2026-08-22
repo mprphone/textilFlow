@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from ..models import ProductOperation, ProductionLine, ProductionOrder, SewingPlan, SubcontractJob, SubcontractService
 from .production_stage import assert_subcontract_ready, update_order_stage
-from .subcontract_chain import assign_chain_step, assert_chain_ready
 
 
 ACTIVE_PLAN = {"planned", "released", "in_progress", "confirmed"}
@@ -72,6 +71,11 @@ def _reduce_internal(plans: list[SewingPlan], quantity: float) -> None:
 
 
 def _add_internal(db: Session, order: ProductionOrder, line_id: int, quantity: float) -> SewingPlan:
+    from .production_route import assert_route_ready, route_for_style
+    if route_for_style(db, order.style_id):
+        ready = assert_route_ready(db, order, step_type="sewing")
+        if not ready["ready"]:
+            raise ValueError(ready["reason"])
     line = db.get(ProductionLine, line_id)
     if not line or line.company_id != order.company_id:
         raise ValueError("Linha de confeção inválida")
@@ -117,17 +121,17 @@ def _add_subcontract(db: Session, order: ProductionOrder, service_id: int, quant
     ready = assert_subcontract_ready(db, order, service, override=override)
     if not ready["ready"]:
         raise ValueError(ready["reason"])
-    prefix = date.today().strftime("EXT-%Y%m%d-")
+    from .production_route import assert_route_ready, route_for_style
+    route = route_for_style(db, order.style_id)
     step_sequence = None
-    from .subcontract_chain import chain_steps_for_style
-    chain_steps = chain_steps_for_style(db, order.style_id) if order.style_id else []
-    if chain_steps:
-        step_sequence = next((step.sequence for step in chain_steps if step.subcontract_service_id == service_id), None)
+    if route:
+        route_ready = assert_route_ready(db, order, step_type="subcontract", subcontract_service_id=service_id, override=override)
+        if not route_ready["ready"]:
+            raise ValueError(route_ready["reason"])
+        step_sequence = next((s.sequence for s in route if s.step_type == "subcontract" and s.subcontract_service_id == service_id), None)
         if step_sequence is None:
-            raise ValueError(f"O serviço {service.code} não faz parte da cadeia definida para este modelo.")
-        chain_check = assert_chain_ready(db, order, step_sequence, override=override)
-        if not chain_check["ready"]:
-            raise ValueError(chain_check["reason"])
+            raise ValueError(f"O serviço {service.code} não faz parte da sequência de produção definida para este artigo.")
+    prefix = date.today().strftime("EXT-%Y%m%d-")
     n = db.query(SubcontractJob).filter(SubcontractJob.company_id == order.company_id, SubcontractJob.reference.like(f"{prefix}%")).count() + 1
     sent = date.today()
     expected = sent + timedelta(days=int(service.lead_time_days or 0)) if service.lead_time_days else None
@@ -149,8 +153,6 @@ def _add_subcontract(db: Session, order: ProductionOrder, service_id: int, quant
     )
     db.add(job)
     db.flush()
-    if chain_steps:
-        assign_chain_step(db, job, order)
     update_order_stage(db, order)
     return job
 
@@ -189,13 +191,18 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
             raise ValueError("Escolha o serviço e o fornecedor")
         _add_subcontract(db, order, service_id, quantity)
     else:
+        # `completed_quantity` representa produção real (peças confecionadas) e só
+        # é escrito por register_output/register de eventos — aqui só se regista o
+        # que já saiu para o cliente, para não haver dois escritores a anular-se.
         data = dict(order.custom_data or {})
-        data["shipped_quantity"] = round(shipped_qty(order) + quantity, 2)
+        new_shipped = round(shipped_qty(order) + quantity, 2)
+        data["shipped_quantity"] = new_shipped
         order.custom_data = data
-        order.completed_quantity = min(order.quantity or 0, round((order.completed_quantity or 0) + quantity, 2))
-        if order.completed_quantity >= (order.quantity or 0) and stock["external"] <= 0 and source != "unassigned":
+        produced = order.completed_quantity or 0
+        target = order.quantity or 0
+        if produced >= target * 0.99 > 0 and stock["external"] <= 0:
             order.current_stage = "shipping"
-            order.status = "completed" if data["shipped_quantity"] >= (order.quantity or 0) else order.status
+            order.status = "completed" if new_shipped >= target - 0.001 else order.status
 
     db.commit()
     db.refresh(order)

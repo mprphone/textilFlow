@@ -7,7 +7,6 @@ from ..models import (
     SalesOrder, StockLot, SubcontractJob, SubcontractService, User,
 )
 from .proposal_release import classify_cost_line, production_preview
-from .production_split import job_out
 
 FABRIC = {"fabric", "knit", "woven", "malha", "tecido"}
 STEP_ORDER = ("dyeing", "laundry", "printing", "embroidery", "cutting", "sewing", "finishing", "transport", "other")
@@ -120,6 +119,9 @@ def _job_category(db: Session, job: SubcontractJob) -> str:
 
 
 def service_plan(db: Session, order: ProductionOrder, jobs: list[SubcontractJob], internal_qty: float = 0) -> list[dict]:
+    from .production_route import build_route_status, route_for_style
+    if route_for_style(db, order.style_id):
+        return build_route_status(db, order)
     sheet = cost_sheet_for_order(db, order)
     keys: list[str] = []
     labels: dict[str, str] = {}
@@ -144,6 +146,7 @@ def service_plan(db: Session, order: ProductionOrder, jobs: list[SubcontractJob]
         kind = "internal" if key == "sewing" else "external"
         related = jobs_by_cat.get(key, [])
         open_jobs = [job for job in related if job.status in OPEN_JOB]
+        from .production_split import job_out
         out_qty = round(sum(job_out(job) for job in related), 2)
         complete = bool(related) and not open_jobs and all(job.status in {"received", "cancelled"} for job in related)
         locked = not previous_done

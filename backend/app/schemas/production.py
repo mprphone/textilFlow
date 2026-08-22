@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ProductionEventRequest(BaseModel):
@@ -9,6 +9,22 @@ class ProductionEventRequest(BaseModel):
     event_type: str = "output"
     notes: str | None = None
     source: str = "manual"
+    allow_overage: bool = False
+
+
+class ProductionRouteStepIn(BaseModel):
+    sequence: int = 10
+    step_type: str = "subcontract"
+    subcontract_service_id: int | None = None
+    is_required: bool = True
+    notes: str | None = None
+
+    @field_validator("step_type")
+    @classmethod
+    def _valid_type(cls, value: str) -> str:
+        if value not in {"cutting", "sewing", "subcontract"}:
+            raise ValueError("Tipo de passo inválido")
+        return value
 
 
 class StockMovementRequest(BaseModel):

@@ -82,6 +82,65 @@ def _rename_column(connection, table: str, old_name: str, new_name: str) -> None
     connection.execute(text(statement))
 
 
+def _migrate_subcontract_chain_to_route(connection) -> None:
+    """Copia SubcontractChainStep (so externos) para ProductionRouteStep (interno+externo).
+
+    Aditivo e idempotente: so copia passos cujo (style_id, sequence) ainda nao
+    existe no destino. A tabela antiga fica intacta, nao e apagada. Para
+    preservar o comportamento antigo tal e qual (corte sempre obrigatorio
+    antes de qualquer subcontrato, confecao sempre no fim), acrescenta um
+    passo sintetico de corte no inicio e de confecao no fim de cada artigo
+    migrado - o utilizador pode depois reordena-los livremente na UI.
+    """
+    inspector = inspect(connection)
+    tables = inspector.get_table_names()
+    if "subcontract_chain_steps" not in tables or "production_route_steps" not in tables:
+        return
+    existing_seq = {
+        (row[0], row[1])
+        for row in connection.execute(text("SELECT style_id, sequence FROM production_route_steps"))
+    }
+    existing_types = {
+        (row[0], row[1])
+        for row in connection.execute(text("SELECT style_id, step_type FROM production_route_steps"))
+    }
+    old_rows = connection.execute(text(
+        "SELECT company_id, style_id, sequence, subcontract_service_id, is_required, notes "
+        "FROM subcontract_chain_steps ORDER BY style_id, sequence"
+    )).fetchall()
+    by_style: dict[int, list] = {}
+    for row in old_rows:
+        by_style.setdefault(row[1], []).append(row)
+
+    def insert(company_id, style_id, sequence, step_type, service_id, is_required, notes):
+        if (style_id, sequence) in existing_seq:
+            return
+        connection.execute(
+            text(
+                "INSERT INTO production_route_steps "
+                "(company_id, style_id, sequence, step_type, subcontract_service_id, is_required, notes) "
+                "VALUES (:company_id, :style_id, :sequence, :step_type, :service_id, :is_required, :notes)"
+            ),
+            {
+                "company_id": company_id, "style_id": style_id, "sequence": sequence, "step_type": step_type,
+                "service_id": service_id, "is_required": is_required, "notes": notes,
+            },
+        )
+        existing_seq.add((style_id, sequence))
+
+    for style_id, rows in by_style.items():
+        company_id = rows[0][0]
+        if (style_id, "cutting") not in existing_types:
+            insert(company_id, style_id, 0, "cutting", None, True, "Migrado automaticamente: o corte era sempre obrigatório antes de qualquer subcontrato.")
+            existing_types.add((style_id, "cutting"))
+        for _, _, sequence, service_id, is_required, notes in rows:
+            insert(company_id, style_id, sequence, "subcontract", service_id, is_required, notes)
+        if (style_id, "sewing") not in existing_types:
+            max_seq = max(row[2] for row in rows)
+            insert(company_id, style_id, max_seq + 10, "sewing", None, True, "Migrado automaticamente: a confeção interna ficava sempre no fim da cadeia antiga.")
+            existing_types.add((style_id, "sewing"))
+
+
 def ensure_schema() -> None:
     inspector = inspect(engine)
     if "companies" not in inspector.get_table_names():
@@ -98,3 +157,4 @@ def ensure_schema() -> None:
             )
         for table, column, ddl in COLUMN_MIGRATIONS:
             _add_column(connection, table, column, ddl)
+        _migrate_subcontract_chain_to_route(connection)

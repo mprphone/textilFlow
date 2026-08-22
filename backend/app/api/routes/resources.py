@@ -7,7 +7,8 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Session
 
 from ...db import get_db
-from ...models import BOMItem, CapacityDay, CapacityEvent, Company, CostLine, CostSheet, Customer, CuttingJob, Employee, EmployeeSkill, ExternalCapacity, Machine, Material, ProductOperation, ProductionMaterialRequirement, ProductionOrder, PurchaseOrder, PurchaseOrderLine, Sample, SewingPlan, Style, StyleRevision, SubcontractChainStep, SubcontractJob, SubcontractService, User
+from ...models import BOMItem, CapacityDay, CapacityEvent, Company, CostLine, CostSheet, Customer, CuttingJob, Employee, EmployeeSkill, ExternalCapacity, Machine, Material, ProductOperation, ProductionMaterialRequirement, ProductionOrder, ProductionRouteStep, PurchaseOrder, PurchaseOrderLine, Sample, SewingPlan, Style, StyleRevision, SubcontractJob, SubcontractService, User
+from ...schemas import ProductionRouteStepIn
 from ...services.primavera_sync import queue_master_record
 from ...services.audit import record_audit
 from ...services.costing import rebuild_product_cost, recalculate_sheet, refresh_style_costs
@@ -15,7 +16,7 @@ from ...services.production import employee_hourly_rate, refresh_employee_rate
 from ...services.crud import apply_payload, coerce_value, resource_model
 from ...services.proposal_release import ReleaseConflictError, release_order_reservations
 from ...services.production_stage import create_batches_from_cutting, update_order_stage
-from ...services.subcontract_chain import assign_chain_step, assert_chain_ready
+from ...services.production_route import assert_route_ready, assign_route_step, build_route_status
 from ...services.registry import RESOURCE_MODELS
 from ...services.serialization import model_to_dict
 from ..deps import current_user, require_company, require_resource_read, require_resource_write, require_role
@@ -175,9 +176,9 @@ def _prepare_subcontract_job(db, instance):
 
     order = db.get(ProductionOrder, instance.production_order_id) if instance.production_order_id else None
     if order and order.style_id:
-        chain_steps = assign_chain_step(db, instance, order)
-        if chain_steps and instance.status in {"planned", "sent"}:
-            check = assert_chain_ready(db, order, instance.chain_step_sequence, override=True)
+        assign_route_step(db, instance, order)
+        if instance.chain_step_sequence and instance.status in {"planned", "sent"}:
+            check = assert_route_ready(db, order, step_type="subcontract", subcontract_service_id=instance.subcontract_service_id, override=True)
             if not check["ready"] and instance.status == "sent":
                 # Guardar aviso sem bloquear a criação via API genérica; o distribute já bloqueia.
                 instance.notes = (instance.notes or "") + " [AVISO: passo anterior não concluído]"
@@ -443,16 +444,16 @@ def delete_record(resource: str, item_id: int, company_id: int, db: Session = De
         raise HTTPException(409, "O registo está em utilização e não pode ser eliminado") from exc
 
 
-@router.get("/styles/{style_id}/subcontract-chain")
-def list_subcontract_chain(style_id: int, company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+@router.get("/styles/{style_id}/production-route")
+def list_production_route(style_id: int, company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     style = db.get(Style, style_id)
     if not style or style.company_id != company_id:
         raise HTTPException(404, "Modelo não encontrado")
     require_resource_read(db, user, company_id, "subcontract_services")
     steps = (
-        db.query(SubcontractChainStep)
+        db.query(ProductionRouteStep)
         .filter_by(style_id=style_id)
-        .order_by(SubcontractChainStep.sequence)
+        .order_by(ProductionRouteStep.sequence)
         .all()
     )
     services = {row.id: row for row in db.query(SubcontractService).filter_by(company_id=company_id).all()}
@@ -460,6 +461,7 @@ def list_subcontract_chain(style_id: int, company_id: int, db: Session = Depends
         {
             "id": step.id,
             "sequence": step.sequence,
+            "step_type": step.step_type,
             "subcontract_service_id": step.subcontract_service_id,
             "service": {"id": s.id, "code": s.code, "name": s.name, "category": s.category, "supplier_id": s.supplier_id}
             if (s := services.get(step.subcontract_service_id)) else None,
@@ -470,43 +472,49 @@ def list_subcontract_chain(style_id: int, company_id: int, db: Session = Depends
     ]
 
 
-@router.post("/styles/{style_id}/subcontract-chain", status_code=201)
-def save_subcontract_chain(style_id: int, company_id: int, payload: list[dict], db: Session = Depends(get_db), user: User = Depends(current_user)):
+@router.post("/styles/{style_id}/production-route", status_code=201)
+def save_production_route(style_id: int, company_id: int, payload: list[ProductionRouteStepIn], db: Session = Depends(get_db), user: User = Depends(current_user)):
     style = db.get(Style, style_id)
     if not style or style.company_id != company_id:
         raise HTTPException(404, "Modelo não encontrado")
     require_resource_write(db, user, company_id, "subcontract_services")
+    seen_types: set[str] = set()
+    for index, item in enumerate(payload, start=1):
+        if item.step_type == "subcontract":
+            service = db.get(SubcontractService, item.subcontract_service_id) if item.subcontract_service_id else None
+            if not service or service.company_id != company_id:
+                raise HTTPException(422, f"Serviço inválido no passo {index}")
+        elif item.step_type in seen_types:
+            raise HTTPException(422, f"Só pode haver um passo de \"{item.step_type}\" na sequência")
+        else:
+            seen_types.add(item.step_type)
     existing = (
-        db.query(SubcontractChainStep)
+        db.query(ProductionRouteStep)
         .filter_by(style_id=style_id)
-        .order_by(SubcontractChainStep.sequence)
+        .order_by(ProductionRouteStep.sequence)
         .all()
     )
     for step in existing:
         db.delete(step)
+    db.flush()
     for index, item in enumerate(payload, start=1):
-        service_id = int(item.get("subcontract_service_id") or 0)
-        service = db.get(SubcontractService, service_id) if service_id else None
-        if not service or service.company_id != company_id:
-            raise HTTPException(422, f"Serviço inválido no passo {index}")
-        step = SubcontractChainStep(
+        db.add(ProductionRouteStep(
             company_id=company_id,
             style_id=style_id,
-            sequence=int(item.get("sequence") or index),
-            subcontract_service_id=service_id,
-            is_required=bool(item.get("is_required", True)),
-            notes=item.get("notes"),
-        )
-        db.add(step)
+            sequence=item.sequence or index * 10,
+            step_type=item.step_type,
+            subcontract_service_id=item.subcontract_service_id if item.step_type == "subcontract" else None,
+            is_required=item.is_required,
+            notes=item.notes,
+        ))
     db.commit()
-    return list_subcontract_chain(style_id, company_id, db, user)
+    return list_production_route(style_id, company_id, db, user)
 
 
-@router.get("/production-orders/{order_id}/subcontract-chain")
-def order_subcontract_chain(order_id: int, company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    from ...services.subcontract_chain import build_chain_status
+@router.get("/production-orders/{order_id}/production-route")
+def order_production_route(order_id: int, company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     order = db.get(ProductionOrder, order_id)
     if not order or order.company_id != company_id:
         raise HTTPException(404, "Ordem não encontrada")
     require_resource_read(db, user, company_id, "subcontract_jobs")
-    return build_chain_status(db, order)
+    return build_route_status(db, order)
