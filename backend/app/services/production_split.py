@@ -70,7 +70,7 @@ def _reduce_internal(plans: list[SewingPlan], quantity: float) -> None:
         raise ValueError("Não há quantidade suficiente na confeção interna")
 
 
-def _add_internal(db: Session, order: ProductionOrder, line_id: int, quantity: float) -> SewingPlan:
+def _add_internal(db: Session, order: ProductionOrder, line_id: int, quantity: float, planned_date: date | None = None) -> SewingPlan:
     from .production_route import assert_route_ready, route_for_style
     if route_for_style(db, order.style_id):
         ready = assert_route_ready(db, order, step_type="sewing")
@@ -84,10 +84,13 @@ def _add_internal(db: Session, order: ProductionOrder, line_id: int, quantity: f
         existing.quantity = round((existing.quantity or 0) + quantity, 2)
         existing.status = "in_progress"
         order.line_id = line_id
+        if planned_date:
+            existing.start_date = planned_date
         return existing
-    start = date.today()
+    start = planned_date or date.today()
     sam = _sam(db, order.style_id)
-    seq = db.query(SewingPlan).filter_by(company_id=order.company_id).count() + 1
+    from .sequences import next_value
+    seq = next_value(db, order.company_id, "sewing_plan")
     plan = SewingPlan(
         company_id=order.company_id,
         code=f"DIST-{order.order_no}-{seq:03d}",
@@ -109,12 +112,13 @@ def _add_internal(db: Session, order: ProductionOrder, line_id: int, quantity: f
     )
     db.add(plan)
     order.line_id = line_id
-    order.current_stage = "confeção"
     order.status = "in_progress"
+    from .production_stage import update_order_stage
+    update_order_stage(db, order)
     return plan
 
 
-def _add_subcontract(db: Session, order: ProductionOrder, service_id: int, quantity: float, override: bool = False) -> SubcontractJob:
+def _add_subcontract(db: Session, order: ProductionOrder, service_id: int, quantity: float, override: bool = False, planned_date: date | None = None) -> SubcontractJob:
     service = db.get(SubcontractService, service_id)
     if not service or service.company_id != order.company_id or not service.active:
         raise ValueError("Serviço subcontratado inválido")
@@ -132,8 +136,12 @@ def _add_subcontract(db: Session, order: ProductionOrder, service_id: int, quant
         if step_sequence is None:
             raise ValueError(f"O serviço {service.code} não faz parte da sequência de produção definida para este artigo.")
     prefix = date.today().strftime("EXT-%Y%m%d-")
-    n = db.query(SubcontractJob).filter(SubcontractJob.company_id == order.company_id, SubcontractJob.reference.like(f"{prefix}%")).count() + 1
-    sent = date.today()
+    from .sequences import formatted
+    reference = formatted(
+        db, order.company_id, "subcontract", prefix=prefix, width=3,
+        period=date.today().strftime("%Y%m%d"),
+    )
+    sent = planned_date or date.today()
     expected = sent + timedelta(days=int(service.lead_time_days or 0)) if service.lead_time_days else None
     job = SubcontractJob(
         company_id=order.company_id,
@@ -141,7 +149,7 @@ def _add_subcontract(db: Session, order: ProductionOrder, service_id: int, quant
         subcontract_service_id=service.id,
         supplier_id=service.supplier_id,
         chain_step_sequence=step_sequence,
-        reference=f"{prefix}{n:03d}",
+        reference=reference,
         quantity=quantity,
         unit=service.unit or "un",
         unit_cost=service.unit_cost or 0,
@@ -149,7 +157,7 @@ def _add_subcontract(db: Session, order: ProductionOrder, service_id: int, quant
         sent_date=sent,
         expected_date=expected,
         status="sent",
-        notes=f"Distribuído a partir da OF {order.order_no}",
+        notes=f"Distribuído a partir da OF {order.order_no}" + (" · excepção à sequência" if override else ""),
     )
     db.add(job)
     db.flush()
@@ -173,6 +181,9 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
     # dois pedidos de distribuicao concorrentes nao passarem ambos a mesma
     # validacao de saldo antes de qualquer um escrever (no-op no SQLite).
     db.query(ProductionOrder).filter_by(id=order.id).with_for_update().first()
+    override = bool(payload.get("override") or payload.get("exception"))
+    planned_date_raw = payload.get("planned_date")
+    planned_date = date.fromisoformat(str(planned_date_raw)[:10]) if planned_date_raw else None
     from .order_followup import assert_can_distribute
     assert_can_distribute(db, order, payload)
 
@@ -184,16 +195,18 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
             raise ValueError(f"Só há {stock['internal']:.0f} na confeção interna")
         _reduce_internal(stock["plans"], quantity)
 
+    subcontract_job_id = None
     if destination == "internal":
         line_id = int(payload.get("line_id") or 0)
         if not line_id:
             raise ValueError("Escolha a linha de confeção")
-        _add_internal(db, order, line_id, quantity)
+        _add_internal(db, order, line_id, quantity, planned_date=planned_date)
     elif destination == "subcontract":
         service_id = int(payload.get("subcontract_service_id") or 0)
         if not service_id:
             raise ValueError("Escolha o serviço e o fornecedor")
-        _add_subcontract(db, order, service_id, quantity)
+        job = _add_subcontract(db, order, service_id, quantity, override=override, planned_date=planned_date)
+        subcontract_job_id = job.id
     else:
         # `completed_quantity` representa produção real (peças confecionadas) e só
         # é escrito por register_output/register de eventos — aqui só se regista o
@@ -204,9 +217,10 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
         order.custom_data = data
         produced = order.completed_quantity or 0
         target = order.quantity or 0
-        if produced >= target * 0.99 > 0 and stock["external"] <= 0:
-            order.current_stage = "shipping"
-            order.status = "completed" if new_shipped >= target - 0.001 else order.status
+        from .production_stage import update_order_stage
+        update_order_stage(db, order)
+        if produced >= target * 0.99 > 0 and stock["external"] <= 0 and new_shipped >= target - 0.001:
+            order.status = "completed"
 
     db.commit()
     db.refresh(order)
@@ -214,4 +228,5 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
     return {
         "order_id": order.id,
         "holdings": {key: stock[key] for key in ("internal", "external", "shipped", "unassigned", "total")},
+        "subcontract_job_id": subcontract_job_id,
     }

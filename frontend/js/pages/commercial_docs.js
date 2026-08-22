@@ -1,4 +1,5 @@
 import { get, post, put } from '../api.js';
+import { emit } from '../events.js?v=20260822-30';
 import { options } from '../data.js';
 import { badge, date, esc, money, number } from '../format.js?v=20260819-5';
 import { CIVA, f4Field, openF4 } from '../primavera_lookup.js?v=20260821-10';
@@ -46,7 +47,7 @@ export async function render(container) {
   container.innerHTML = pageHeader(
     `Documentos · ${system}`,
     `Família, depois tipo de documento e série — o hábito do ${system}.`,
-    `<a class="btn" href="#/erp-capture">Ler foto / PDF</a><button class="btn" data-from-purchase>A partir da OC</button><button class="btn" data-from-sales>A partir da encomenda</button><button class="btn primary" data-new-doc>+ Novo</button>`
+    `<a class="btn" href="#/erp-capture">Ler foto / PDF</a><button class="btn" data-new-order>Encomenda</button><button class="btn" data-from-purchase>A partir da OC</button><button class="btn" data-from-sales>A partir da encomenda</button><button class="btn primary" data-new-doc>+ Novo</button>`
   ) + `
     <div class="tabs pri-families">${(catalog.families || []).map(item => `<button class="tab ${item.id===listState.family?'active':''}" data-family="${item.id}">${esc(item.label)}</button>`).join('')}</div>
     <div class="pri-docbar">
@@ -75,6 +76,7 @@ export async function render(container) {
   container.querySelector('[data-series]')?.addEventListener('change', event => { listState.series = event.target.value; render(container); });
   container.querySelector('[data-query]')?.addEventListener('keydown', event => { if (event.key === 'Enter') { listState.query = event.target.value; render(container); } });
   container.querySelector('[data-new-doc]').addEventListener('click', () => openCreate(container, catalog));
+  container.querySelector('[data-new-order]')?.addEventListener('click', () => startSupplierOrder());
   container.querySelector('[data-from-purchase]').addEventListener('click', () => openFromPurchase(container, catalog));
   container.querySelector('[data-from-sales]').addEventListener('click', () => openFromSales(container, catalog));
   container.querySelectorAll('[data-open-doc]').forEach(row => row.addEventListener('click', event => {
@@ -186,6 +188,7 @@ function collectEditor(container) {
     supplier_id: Number(container.querySelector('[name="entity"]')?.dataset.supplierId) || undefined,
     doc_date: header.querySelector('[name="doc_date"]')?.value,
     due_date: header.querySelector('[name="due_date"]')?.value,
+    delivery_date: header.querySelector('[name="due_date"]')?.value,
     your_ref: header.querySelector('[name="your_ref"]')?.value,
     warehouse: header.querySelector('[data-f4-field="warehouse"]')?.value,
     commercial_discount: Number(header.querySelector('[name="commercial_discount"]')?.value || 0),
@@ -352,11 +355,14 @@ export async function renderDocument(container) {
     : done ? 'Documento oficial concluído no Primavera. Aqui fica só o rasto do envio.'
     : queued ? 'Já foi exportado. A numeração e o ATCUD ficam no Primavera.'
     : 'Rascunho. Enviar para o Primavera; a fatura definitiva emite-se lá.';
+  const secondDateLabel = doc.doc_type === 'requisition' ? 'Data Entrega' : 'Data Venc.';
+  const secondDateValue = extra.delivery_date || extra.due_date || doc.doc_date || '';
   const convertBtns = !official ? (doc.can_convert || []).map(kind => {
     const label = esc(CONVERT_LABEL[kind] || kind);
     return `<button type="button" data-erp-act="convert" data-kind="${kind}"><i></i>${label}</button>`;
   }).join('') : '';
   const internalTools = official ? '' : `
+        <button type="button" data-new-order class="pri-tb-new"><i></i>Encomenda</button>
         <button type="button" data-new-editor class="pri-tb-new"><i></i>Novo</button>
         <button type="button" data-print-doc class="pri-tb-print"><i></i>Imprimir</button>
         <button type="button" data-print-layout class="pri-tb-print"><i></i>Layout</button>
@@ -411,7 +417,7 @@ export async function renderDocument(container) {
           </div>
           <div class="pri-row">
             <label>Data Doc.</label><div class="pri-ctl"><input name="doc_date" type="date" value="${esc(String(doc.doc_date || '').slice(0,10))}"></div>
-            <label>Data Venc.</label><div class="pri-ctl"><input name="due_date" type="date" value="${esc(String(extra.due_date || doc.doc_date || '').slice(0,10))}"></div>
+            <label>${esc(secondDateLabel)}</label><div class="pri-ctl"><input name="due_date" type="date" value="${esc(String(secondDateValue || '').slice(0,10))}"></div>
             <label>Cond. Pag.</label><div class="pri-ctl">${payField}</div>
           </div>
           <div class="pri-row">
@@ -551,6 +557,7 @@ export async function renderDocument(container) {
     }
   });
   container.querySelector('[data-new-editor]')?.addEventListener('click', () => openCreate(container, catalog));
+  container.querySelector('[data-new-order]')?.addEventListener('click', () => startSupplierOrder());
   container.querySelector('[data-print-doc]')?.addEventListener('click', () => printSheet(doc, container, {autoPrint: true}));
   container.querySelectorAll('[data-print-layout]').forEach(button => button.addEventListener('click', () => printSheet(doc, container, {autoPrint: false})));
   container.querySelector('[data-send-internal]')?.addEventListener('click', async () => {
@@ -651,6 +658,30 @@ async function openFromSales(container, catalog) {
   });
 }
 
+export async function startSupplierOrder(line = null, docType = 'requisition') {
+  const payload = {
+    doc_type: docType,
+    series: 'A',
+    prepare: false,
+    supplier_id: line?.supplier_id || null,
+    extra: {warehouse: line?.warehouse || '', ...(line?.extra || {})},
+    lines: line ? [{
+      material_id: line.material_id || null,
+      style_id: line.style_id || null,
+      code: line.code || '',
+      description: line.name || line.description || '',
+      quantity: Number(line.quantity) || 1,
+      unit_cost: Number(line.unit_price) || 0,
+      unit: line.unit || 'UN',
+      warehouse: line.warehouse || '',
+      vat_code: line.vat_code || '23',
+    }] : [],
+  };
+  const saved = await post(`/erp/${state.companyId}/documents`, payload);
+  location.hash = `#/erp-doc/${saved.id}`;
+  return saved;
+}
+
 export async function prepareFromPurchase(orderId, docType = 'requisition') {
   return post(`/erp/${state.companyId}/documents/from-purchase/${orderId}`, {doc_type: docType, prepare: true});
 }
@@ -709,6 +740,7 @@ export async function renderCapture(container) {
         const payload = readPreview(container, preview);
         const saved = await post(`/erp/${state.companyId}/capture/confirm`, payload);
         const extra = (saved.follow_on || []).map(item => item.doc_no).filter(Boolean);
+        emit('ops-changed', { source: 'stock-receipt', docNo: saved.doc_no });
         toast(`${saved.doc_no} criado${extra.length ? ` e ${extra.join(', ')}` : ''} preparado para o Primavera. Os artigos ligados ficam na memória.`);
         location.hash = '#/erp-docs';
       } catch (error) { toast(error.message, 'error'); }

@@ -1,13 +1,18 @@
-import { get, post } from '../api.js';
+import { get, patch, post } from '../api.js';
 import { options } from '../data.js';
 import { renderEntityTabs } from '../entity.js?v=20260819-9';
-import { badge, date, datetime, esc, money, number } from '../format.js?v=20260819-5';
-import { recordModal } from '../quick_create.js';
+import { badge, date, datetime, esc, humanize, money, number } from '../format.js?v=20260819-5';
+import { loadOrderDossier } from '../production/dossier.js?v=20260822-20';
+import { stageLabel } from '../production/cycle.js?v=20260822-20';
 import { state } from '../state.js';
-import { toast } from '../ui.js?v=20260820-5';
-import { prepareFromPurchase } from './commercial_docs.js?v=20260822-14';
+import { loading, openModal, pageHeader, toast } from '../ui.js?v=20260820-5';
+import { prepareFromPurchase, startSupplierOrder } from './commercial_docs.js?v=20260822-31';
 
-async function erpPurchaseAction(event, rows) {
+function reload(container) {
+  return render(container, container.dataset.stockView || 'mp');
+}
+
+async function erpPurchaseAction(event) {
   const button = event.target.closest('[data-erp-po]');
   if (!button) return;
   const id = Number(button.dataset.id);
@@ -18,22 +23,180 @@ async function erpPurchaseAction(event, rows) {
   } catch (error) { toast(error.message, 'error'); }
 }
 
-async function movementAction(event) {
-  const button=event.target.closest('[data-movement]');if(!button)return;
-  const orderOptions = await options('production-orders','order_no');
-  recordModal({title:`Movimento do lote ${button.dataset.lot}`,values:{stock_lot_id:Number(button.dataset.movement)},fields:[
-    {key:'stock_lot_id',type:'hidden'},{key:'movement_type',label:'Tipo',type:'select',required:true,options:['receipt','issue','consume','return','transfer_in','transfer_out','adjustment_in','adjustment_out']},
-    {key:'quantity',label:'Quantidade',type:'number',required:true},{key:'production_order_id',label:'Ordem de fabrico',type:'select',options:orderOptions},{key:'location_to',label:'Local destino'},{key:'reference',label:'Referência / documento'},
-  ],save:payload=>post(`/production/${state.companyId}/stock-movements`,payload),onSaved:()=>render(document.getElementById('page-content'))});
+function bindStockPage(container) {
+  if (container.dataset.stockBound) return;
+  container.dataset.stockBound = '1';
+  container.addEventListener('click', async event => {
+    const sync = event.target.closest('[data-sync-pri]');
+    if (sync) {
+      try {
+        toast('A puxar tabelas do Primavera…');
+        const result = await post(`/integrations/${state.companyId}/primavera/sync`, {resources:[sync.dataset.syncPri]});
+        const row = (result.results || [])[0] || {};
+        toast(`Sincronizado: ${row.created || 0} novos, ${row.updated || 0} actualizados.`);
+        await reload(container);
+      } catch (error) { toast(error.message, 'error'); }
+      return;
+    }
+    if (event.target.closest('[data-encomenda]')) {
+      try {
+        toast('A abrir encomenda no ERP…');
+        await startSupplierOrder();
+      } catch (error) { toast(error.message, 'error'); }
+      return;
+    }
+    const item = event.target.closest('[data-open-item]');
+    if (item) {
+      await openItemHistory(item.dataset.openItem || item.dataset.code);
+      return;
+    }
+    const req = event.target.closest('[data-requisitar]');
+    if (!req) return;
+    try {
+      toast('A abrir requisição no ERP…');
+      await startSupplierOrder({
+        material_id: Number(req.dataset.materialId) || null,
+        supplier_id: Number(req.dataset.supplierId) || null,
+        code: req.dataset.code,
+        name: req.dataset.name,
+        quantity: Number(req.dataset.qty) || 1,
+        unit_price: Number(req.dataset.price) || 0,
+        unit: req.dataset.unit,
+        warehouse: req.dataset.warehouse,
+        vat_code: req.dataset.vat,
+      });
+    } catch (error) { toast(error.message, 'error'); }
+  });
 }
 
-export async function render(container){
-  const shell = document.createElement('div');
-  const tabs = document.createElement('div');
-  container.replaceChildren(shell, tabs);
-  shell.innerHTML = '<section class="card"><div class="card-header"><h2>Stock Primavera</h2><span>A carregar…</span></div></section>';
-  renderPrimaveraStock(shell);
-  await renderEntityTabs(tabs,[
+function orderQty(row) {
+  const available = Number(row.available) || 0;
+  const requested = Number(row.requested) || 0;
+  if (requested > available) return requested - Math.max(0, available);
+  if (available <= 0) return Math.max(requested, 1);
+  return 0;
+}
+
+async function board() {
+  return get(`/production/${state.companyId}/stock-board`);
+}
+
+function emptyRow(cols, title, text) {
+  return `<tr><td colspan="${cols}"><div class="empty"><strong>${esc(title)}</strong>${esc(text)}</div></td></tr>`;
+}
+
+async function renderMp(container) {
+  const data = await board();
+  const items = data.raw_items || [];
+  const pri = data.primavera || {};
+  const totals = items.reduce((sum, row) => ({
+    value: sum.value + (Number(row.on_hand) || 0) * (Number(row.unit_price) || 0),
+    on_hand: sum.on_hand + (Number(row.on_hand) || 0),
+    reserved: sum.reserved + (Number(row.reserved) || 0),
+    available: sum.available + (Number(row.available) || 0),
+    requested: sum.requested + (Number(row.requested) || 0),
+  }), {value: 0, on_hand: 0, reserved: 0, available: 0, requested: 0});
+  container.innerHTML = pageHeader(
+    'Stock de matérias-primas',
+    'Só artigos com stock ou necessidade. O cadastro único está em Tabelas → Artigos.',
+    '<button class="btn primary" data-encomenda>Encomenda</button><button class="btn" data-sync-pri="items">Puxar artigos do Primavera</button>',
+    'compact',
+  ) + `
+    <section class="listing-panel"><div class="table-wrap listing-table"><table class="data-table stock-table">
+      <thead>
+        <tr class="stock-group"><th colspan="2">Artigo</th><th colspan="2">Preço</th><th colspan="4">Quantidades</th><th></th></tr>
+        <tr>
+          <th>Artigo</th>
+          <th>Descrição</th>
+          <th class="num">P. uni</th>
+          <th>Und</th>
+          <th class="num">Qt armazém</th>
+          <th class="num">Qt reservada</th>
+          <th class="num">Qt disponível</th>
+          <th class="num">Qt requisitada</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>${items.length ? items.map(row => {
+        const qty = orderQty(row);
+        return `<tr class="${pri.ok && !row.in_primavera ? 'is-warning' : ''}${qty ? ' is-shortage' : ''}">
+        <td class="stock-code"><button type="button" class="stock-item-link" data-open-item="${row.material_id || ''}" data-code="${esc(row.code)}">${esc(row.code)}</button></td>
+        <td class="stock-name"><button type="button" class="stock-item-link stock-item-name" data-open-item="${row.material_id || ''}" data-code="${esc(row.code)}">${esc(row.name)}</button></td>
+        <td class="num">${money(row.unit_price)}</td>
+        <td>${esc(row.unit)}</td>
+        <td class="num">${number(row.on_hand)}</td>
+        <td class="num">${number(row.reserved)}</td>
+        <td class="num">${number(row.available)}</td>
+        <td class="num">${number(row.requested)}</td>
+        <td class="listing-actions">${qty ? `<button class="btn small primary" data-requisitar data-material-id="${row.material_id || ''}" data-supplier-id="${row.supplier_id || ''}" data-code="${esc(row.code)}" data-name="${esc(row.name)}" data-qty="${qty}" data-price="${row.unit_price || 0}" data-unit="${esc(row.unit)}" data-warehouse="${esc(row.warehouse || '')}" data-vat="${esc(row.vat_code || '23')}">Requisitar</button>` : ''}</td>
+      </tr>`;
+      }).join('') : emptyRow(9, 'Sem artigos', 'Puxe os artigos do Primavera ou receba uma compra.')}</tbody>
+      ${items.length ? `<tfoot><tr>
+        <td colspan="2"><b>Total</b> · ${number(items.length)} artigos · ${money(totals.value)}</td>
+        <td class="num"></td>
+        <td></td>
+        <td class="num">${number(totals.on_hand)}</td>
+        <td class="num">${number(totals.reserved)}</td>
+        <td class="num">${number(totals.available)}</td>
+        <td class="num">${number(totals.requested)}</td>
+        <td></td>
+      </tr></tfoot>` : ''}
+    </table></div></section>
+    ${primaveraBlock(pri)}`;
+  bindStockPage(container);
+}
+
+async function renderWip(container) {
+  const data = await board();
+  const rows = data.wip || [];
+  container.innerHTML = pageHeader(
+    'Stock em fabrico',
+    'Peças ainda na fábrica. O código do artigo é o mesmo de Tabelas → Artigos.',
+    '<a class="btn" href="#/stock-mp">Matérias-primas</a><a class="btn" href="#/stock-fg">Produtos acabados</a>',
+    'compact',
+  ) + `
+    <section class="listing-panel"><div class="table-wrap listing-table"><table class="data-table stock-table"><thead><tr><th>OF</th><th>Artigo</th><th>Descrição</th><th>Fase</th><th>Local</th><th class="num">Em aberto</th><th class="num">MP reservada</th><th></th></tr></thead>
+      <tbody>${rows.length ? rows.map(row => `<tr>
+        <td class="stock-code">${esc(row.order_no)}</td>
+        <td class="stock-code">${esc(row.article_code || '')}</td>
+        <td class="stock-name">${esc(row.article_name || row.article || '—')}</td>
+        <td>${badge(stageLabel(row.stage))}</td>
+        <td>${esc(row.location)}</td>
+        <td class="num">${number(row.in_progress)} / ${number(row.quantity)}</td>
+        <td class="num">${number(row.reserved_mp)}</td>
+        <td class="listing-actions"><button class="btn small" data-open-of="${row.id}">Ver OF</button></td>
+      </tr>`).join('') : emptyRow(8, 'Nada em fabrico', 'Quando uma OF arranca, as peças saem do stock de MP e entram aqui até serem embaladas.')}</tbody>
+      ${rows.length ? `<tfoot><tr><td colspan="5"><b>Total</b> · ${number(rows.length)} OF</td><td class="num">${number(data.wip_pieces)}</td><td class="num">${number(rows.reduce((sum, row) => sum + (Number(row.reserved_mp) || 0), 0))}</td><td></td></tr></tfoot>` : ''}
+    </table></div></section>`;
+  container.querySelectorAll('[data-open-of]').forEach(button => button.addEventListener('click', () => loadOrderDossier(Number(button.dataset.openOf))));
+}
+
+async function renderFg(container) {
+  const data = await board();
+  const rows = data.finished || [];
+  container.innerHTML = pageHeader(
+    'Stock de produtos acabados',
+    'OF já revistas e embaladas, à espera de expedição. A saída confirma-se no menu Embalagem / Expedição.',
+    '<a class="btn" href="#/embalagem">Embalagem</a><a class="btn primary" href="#/shipping">Expedição</a>',
+    'compact',
+  ) + `
+    <section class="listing-panel"><div class="table-wrap listing-table"><table class="data-table stock-table"><thead><tr><th>OF</th><th>Artigo</th><th>Descrição</th><th>Fase</th><th class="num">Embalado</th><th>Local</th><th></th></tr></thead>
+      <tbody>${rows.length ? rows.map(row => `<tr>
+        <td class="stock-code">${esc(row.order_no)}</td>
+        <td class="stock-code">${esc(row.article_code || '')}</td>
+        <td class="stock-name">${esc(row.article_name || row.article || '—')}</td>
+        <td>${badge(stageLabel(row.stage))}</td>
+        <td class="num">${number(row.packed)}</td>
+        <td>${esc(row.location)}</td>
+        <td class="listing-actions"><button class="btn small" data-open-of="${row.id}">Ver OF</button></td>
+      </tr>`).join('') : emptyRow(7, 'Sem produto acabado em armazém', 'Depois da embalagem a OF aparece aqui até sair para o cliente.')}</tbody>
+      ${rows.length ? `<tfoot><tr><td colspan="4"><b>Total</b> · ${number(rows.length)} OF</td><td class="num">${number(data.finished_pieces)}</td><td colspan="2"></td></tr></tfoot>` : ''}
+    </table></div></section>`;
+  container.querySelectorAll('[data-open-of]').forEach(button => button.addEventListener('click', () => loadOrderDossier(Number(button.dataset.openOf))));
+}
+
+async function articleTabs() {
+  return [
     {label:'Artigos',config:{resource:'materials',title:'Artigos (Primavera)',subtitle:'Código artigo, unidade, IVA, família e armazém — os mesmos campos de Base/Items.',singular:'artigo',newLabel:'Novo artigo',extraActions:'<button class="btn" data-sync-pri="items">Puxar artigos do Primavera</button>',fields:async()=>[
       {key:'code',label:'Artigo',required:true,help:'Mesmo código do Primavera'},{key:'name',label:'Descrição',required:true},{key:'item_type',label:'Tipo artigo',default:'M',help:'M mercadoria, S serviço'},
       {key:'category',label:'Categoria interna',type:'select',options:['fabric','thread','trim','label','packaging','chemical','other'],default:'fabric'},
@@ -46,12 +209,11 @@ export async function render(container){
     {label:'Armazéns',config:{resource:'warehouses',title:'Armazéns',subtitle:'Códigos de armazém iguais ao Primavera (Base/Warehouses).',singular:'armazém',newLabel:'Novo armazém',extraActions:'<button class="btn" data-sync-pri="warehouses">Puxar armazéns</button>',fields:[
       {key:'code',label:'Código',required:true},{key:'name',label:'Descrição',required:true},{key:'location',label:'Localização'},{key:'active',label:'Activo',type:'checkbox',default:true},
     ],columns:[{key:'code',label:'Armazém'},{key:'name',label:'Descrição'},{key:'location',label:'Local'},{key:'active',label:'Estado',render:r=>badge(r.active?'activo':'inactivo')}]}},
-    {label:'Lotes de stock',config:{resource:'stock-lots',title:'Lotes e localizações',subtitle:'Disponível, reservado, custo e rastreabilidade documental.',singular:'lote',newLabel:'Novo lote',fields:async()=>[
-      {key:'material_id',label:'Material',type:'select',required:true,options:await options('materials',r=>`${r.code} · ${r.name}`)},{key:'supplier_id',label:'Fornecedor',type:'select',options:await options('suppliers','name')},{key:'lot_no',label:'Lote',required:true},
-      {key:'location',label:'Localização'},{key:'quantity',label:'Quantidade',type:'number',default:0},{key:'reserved',label:'Reservado',type:'number',default:0},{key:'unit_cost',label:'Custo unitário',type:'number',default:0},
-      {key:'received_date',label:'Receção',type:'date'},{key:'expiry_date',label:'Validade',type:'date'},{key:'status',label:'Estado',type:'select',options:['available','quarantine','blocked','consumed'],default:'available'},
-      {key:'certification_snapshot',label:'Certificados na receção (JSON)',type:'json',default:{},full:true},
-    ],rowActions:r=>`<button class="btn small primary" data-movement="${r.id}" data-lot="${esc(r.lot_no)}">Movimento</button>`,onAction:movementAction,columns:[{key:'lot_no',label:'Lote',render:r=>`<b>${esc(r.lot_no)}</b>`},{key:'material_id',label:'Material'},{key:'location',label:'Local'},{key:'quantity',label:'Stock',render:r=>number(r.quantity)},{key:'reserved',label:'Reservado',render:r=>number(r.reserved)},{key:'available',label:'Disponível',render:r=>number(r.quantity-r.reserved)},{key:'unit_cost',label:'Custo',render:r=>money(r.unit_cost)},{key:'received_date',label:'Receção',render:r=>date(r.received_date)},{key:'status',label:'Estado',render:r=>badge(r.status)}]}},
+  ];
+}
+
+async function purchaseTabs() {
+  return [
     {label:'Compras',config:{resource:'purchase-orders',title:'Ordens de compra',subtitle:'Fornecedores, prazos, receções e valor. Os botões preparam o documento para o Primavera.',singular:'ordem de compra',newLabel:'Nova compra',fields:async()=>[
       {key:'supplier_id',label:'Fornecedor',type:'select',required:true,options:await options('suppliers','name')},{key:'order_no',label:'Número',required:true},{key:'order_date',label:'Data',type:'date'},{key:'expected_date',label:'Entrega prevista',type:'date'},
       {key:'status',label:'Estado',type:'select',options:['draft','sent','partial','received','cancelled'],default:'draft'},{key:'total',label:'Total',type:'number',default:0},{key:'notes',label:'Notas',type:'textarea',full:true},
@@ -60,36 +222,172 @@ export async function render(container){
       {key:'purchase_order_id',label:'Ordem de compra',type:'select',required:true,options:await options('purchase-orders','order_no')},{key:'material_id',label:'Material',type:'select',required:true,options:await options('materials',r=>`${r.code} · ${r.name}`)},
       {key:'quantity',label:'Quantidade',type:'number',required:true},{key:'unit_cost',label:'Custo unitário',type:'number',default:0},{key:'received_quantity',label:'Recebido',type:'number',default:0},
     ],columns:[{key:'purchase_order_id',label:'OC'},{key:'material_id',label:'Material'},{key:'quantity',label:'Encomendado',render:r=>number(r.quantity)},{key:'received_quantity',label:'Recebido',render:r=>number(r.received_quantity)},{key:'unit_cost',label:'Custo',render:r=>money(r.unit_cost)}]}},
-    {label:'Movimentos',config:{resource:'inventory-movements',readOnly:true,title:'Histórico de movimentos',subtitle:'Livro de stock imutável por lote, ordem e utilizador.',singular:'movimento',fields:[],columns:[{key:'movement_time',label:'Data/hora',render:r=>datetime(r.movement_time)},{key:'stock_lot_id',label:'Lote ID'},{key:'movement_type',label:'Tipo',render:r=>badge(r.movement_type)},{key:'quantity',label:'Quantidade',render:r=>number(r.quantity)},{key:'unit_cost',label:'Custo',render:r=>money(r.unit_cost)},{key:'production_order_id',label:'OF'},{key:'reference',label:'Referência'},{key:'user_id',label:'Utilizador'}]}},
-  ]);
-  if (!container.dataset.syncPriBound) {
-    container.dataset.syncPriBound = '1';
-    container.addEventListener('click', async event => {
-      const button = event.target.closest('[data-sync-pri]');
-      if (!button) return;
+  ];
+}
+
+function historyTable(headers, rows, emptyText) {
+  const body = rows.length
+    ? rows.join('')
+    : `<tr><td colspan="${headers.length}" class="muted">${esc(emptyText)}</td></tr>`;
+  return `<div class="table-wrap"><table class="data-table"><thead><tr>${headers.map(label => `<th>${label}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+function historyHtml(data) {
+  const item = data.material || {};
+  const summary = data.summary || {};
+  const suppliers = data.suppliers || [];
+  const purchases = data.purchases || [];
+  const prices = data.prices || [];
+  const documents = data.documents || [];
+  const lots = data.lots || [];
+  const movements = data.movements || [];
+  const aliases = data.aliases || [];
+  return `<div class="item-history">
+    <p class="dossier-meta">${esc(item.code)} · ${esc(item.name)} · ${esc(item.unit)}${item.composition ? ` · ${esc(item.composition)}` : ''}${item.warehouse ? ` · armazém ${esc(item.warehouse)}` : ''}</p>
+    <div class="dossier-kpis">
+      <div><span>Último preço</span><strong>${money(summary.last_price)}</strong></div>
+      <div><span>Média recente</span><strong>${money(summary.average_price)}</strong></div>
+      <div><span>Prazo</span><strong>${summary.lead_time_days ? `${number(summary.lead_time_days)} dias` : '—'}</strong></div>
+      <div><span>Em armazém</span><strong>${number(summary.on_hand)} ${esc(item.unit || '')}</strong></div>
+      <div><span>Fornecedores</span><strong>${number(summary.suppliers)}</strong></div>
+    </div>
+    <section class="dossier-block"><h3>Onde comprámos</h3>
+      ${historyTable(
+        ['Fornecedor', 'Prazo', 'Último preço', 'Última compra', 'Notas'],
+        suppliers.map(row => `<tr>
+          <td><b>${esc(row.name)}</b>${row.preferred ? ' <small>preferencial</small>' : ''}<div class="table-subline">${esc(row.code)}${row.payment_terms ? ` · ${esc(row.payment_terms)}` : ''}</div></td>
+          <td>${row.lead_time_days ? `${number(row.lead_time_days)} dias` : '—'}</td>
+          <td>${row.last_price ? money(row.last_price) : '—'}</td>
+          <td>${esc(row.last_order_no || '—')}<div class="table-subline">${date(row.last_order_date)}</div></td>
+          <td>${esc(row.notes || '—')}</td>
+        </tr>`),
+        'Ainda não há fornecedor associado a este artigo.',
+      )}
+    </section>
+    <section class="dossier-block"><h3>Compras</h3>
+      ${historyTable(
+        ['Documento', 'Data', 'Fornecedor', 'Qtd', 'Preço', 'Entrega', 'Estado'],
+        purchases.map(row => `<tr>
+          <td><b>${esc(row.order_no)}</b></td>
+          <td>${date(row.order_date)}</td>
+          <td>${esc(row.supplier_name)}</td>
+          <td>${number(row.received_quantity)} / ${number(row.quantity)} ${esc(item.unit || '')}</td>
+          <td>${money(row.unit_cost)}</td>
+          <td>${date(row.expected_date)}${row.lead_days != null ? `<div class="table-subline">${number(row.lead_days)} dias</div>` : ''}</td>
+          <td>${badge(row.status)}</td>
+        </tr>`),
+        'Sem encomendas a fornecedor para este artigo.',
+      )}
+    </section>
+    <div class="dossier-grid">
+      <section class="dossier-block"><h3>Últimos preços</h3>
+        ${historyTable(
+          ['Data', 'Origem', 'Fornecedor', 'Preço'],
+          prices.map(row => `<tr>
+            <td>${date(row.date)}</td>
+            <td>${esc(humanize(row.source))}<div class="table-subline">${esc(row.reference || '')}</div></td>
+            <td>${esc(row.supplier_name || '—')}</td>
+            <td>${money(row.unit_price)}</td>
+          </tr>`),
+          'Ainda não há histórico de preço.',
+        )}
+      </section>
+      <section class="dossier-block"><h3>Documentos ERP</h3>
+        ${historyTable(
+          ['Documento', 'Tipo', 'Fornecedor', 'Preço'],
+          documents.map(row => `<tr>
+            <td><b>${esc(row.doc_no)}</b><div class="table-subline">${date(row.doc_date)}</div></td>
+            <td>${badge(row.doc_type)}</td>
+            <td>${esc(row.supplier_name)}</td>
+            <td>${money(row.unit_price)}</td>
+          </tr>`),
+          'Sem requisições, guias ou faturas ligadas.',
+        )}
+      </section>
+    </div>
+    <section class="dossier-block"><h3>Lotes e movimentos</h3>
+      ${historyTable(
+        ['Lote', 'Entrada', 'Fornecedor', 'Local', 'Qtd', 'Custo'],
+        lots.map(row => `<tr>
+          <td><b>${esc(row.lot_no)}</b></td>
+          <td>${date(row.received_date)}</td>
+          <td>${esc(row.supplier_name)}</td>
+          <td>${esc(row.location || '—')}</td>
+          <td>${number(row.quantity)}</td>
+          <td>${money(row.unit_cost)}</td>
+        </tr>`),
+        'Sem lotes em armazém.',
+      )}
+      ${movements.length ? historyTable(
+        ['Quando', 'Movimento', 'Qtd', 'Ref. / OF'],
+        movements.map(row => `<tr>
+          <td>${datetime(row.movement_time)}</td>
+          <td>${badge(row.movement_type)}</td>
+          <td>${number(row.quantity)}</td>
+          <td>${esc(row.reference || row.order_no || row.lot_no || '—')}</td>
+        </tr>`),
+        '',
+      ) : ''}
+    </section>
+    ${aliases.length ? `<section class="dossier-block"><h3>Como o fornecedor escreve</h3>
+      <p class="muted">${aliases.map(row => `${esc(row.source_name || row.source_code)} (${number(row.hits)})`).join(' · ')}</p>
+    </section>` : ''}
+    <section class="dossier-block"><h3>Anotações</h3>
+      <textarea data-item-notes rows="4" placeholder="Prazos combinados, qualidade, mínimo de encomenda, contactos…">${esc(item.notes || '')}</textarea>
+      <div class="actions" style="margin-top:8px"><button class="btn primary" type="button" data-save-notes>Gravar anotações</button></div>
+    </section>
+  </div>`;
+}
+
+async function openItemHistory(key) {
+  if (!key) return;
+  openModal('Historial do artigo', loading('A carregar compras, preços e fornecedores…'), String(key));
+  try {
+    const data = await get(`/production/${state.companyId}/materials/${encodeURIComponent(key)}/history`);
+    const item = data.material || {};
+    openModal(item.code || 'Artigo', historyHtml(data), item.name || '');
+    document.querySelector('[data-save-notes]')?.addEventListener('click', async () => {
       try {
-        toast('A puxar tabelas do Primavera…');
-        const result = await post(`/integrations/${state.companyId}/primavera/sync`, {resources:[button.dataset.syncPri]});
-        const row = (result.results || [])[0] || {};
-        toast(`Sincronizado: ${row.created || 0} novos, ${row.updated || 0} actualizados.`);
-        await render(container);
+        await patch(`/production/${state.companyId}/materials/${item.id}/notes`, {
+          notes: document.querySelector('[data-item-notes]')?.value || '',
+        });
+        toast('Anotações gravadas no artigo.');
       } catch (error) { toast(error.message, 'error'); }
     });
+  } catch (error) {
+    toast(error.message, 'error');
   }
 }
 
-async function renderPrimaveraStock(container) {
-  try {
-    const data = await get(`/integrations/${state.companyId}/primavera/stock`);
-    const items = data.items || [];
-    container.innerHTML = `<section class="card"><div class="card-header"><h2>Stock Primavera</h2><span>${data.count || 0} artigos · ${esc(data.path || '')}</span></div>
+async function renderPurchases(container) {
+  container.innerHTML = pageHeader('Compras', 'Encomendas a fornecedores. A receção entra no stock de matérias-primas.', '<a class="btn" href="#/stock-mp">Stock MP</a>', 'compact') + '<div data-purchase-tabs></div>';
+  await renderEntityTabs(container.querySelector('[data-purchase-tabs]'), await purchaseTabs());
+}
+
+async function renderCatalog(container) {
+  container.innerHTML = pageHeader('Artigos', 'Cadastro de artigos e armazéns, iguais ao Primavera.', '<button class="btn" data-sync-pri="items">Puxar artigos do Primavera</button>', 'compact') + '<div data-catalog-tabs></div>';
+  await renderEntityTabs(container.querySelector('[data-catalog-tabs]'), await articleTabs());
+  bindStockPage(container);
+}
+
+function primaveraBlock(pri) {
+  if (pri.ok) {
+    const items = pri.items || [];
+    return `<section class="card" style="margin-top:16px"><div class="card-header"><h2>Stock Primavera</h2><span>${number(pri.count)} linhas · ${esc(pri.path || '')}</span></div>
       ${items.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Artigo</th><th>Armazém</th><th>Stock</th><th>Reservado</th><th>Disponível</th></tr></thead>
-      <tbody>${items.slice(0, 80).map(row => `<tr><td><b>${esc(row.item)}</b></td><td>${esc(row.warehouse)}</td><td>${number(row.quantity)}</td><td>${number(row.reserved)}</td><td>${number(row.available)}</td></tr>`).join('')}</tbody></table></div>
-      ${items.length > 80 ? `<p class="muted">A mostrar 80 de ${items.length}. Use o Primavera para a lista completa.</p>` : ''}` : '<p class="muted">A Web API não devolveu linhas de stock. Confirme o caminho Inventory/ItemWarehouses.</p>'}
-    </section>`;
-  } catch (error) {
-    container.innerHTML = `<section class="card"><div class="card-header"><h2>Stock Primavera</h2><span>Não ligado</span></div>
-      <p class="muted">${esc(error.message)} Configure a Web API em ERP → Ligação Primavera. Até lá o stock local nos lotes continua a ser a referência operacional.</p>
+      <tbody>${items.map(row => `<tr><td><b>${esc(row.item)}</b></td><td>${esc(row.warehouse)}</td><td>${number(row.quantity)}</td><td>${number(row.reserved)}</td><td>${number(row.available)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">A Web API não devolveu linhas de stock.</p>'}
     </section>`;
   }
+  return `<section class="card" style="margin-top:16px"><div class="card-header"><h2>Stock Primavera</h2><span>Não ligado</span></div>
+    <p class="muted">${esc(pri.error || 'Configure a Web API em ERP → Ligação Primavera.')} Enquanto não houver ligação, a listagem usa os artigos já sincronizados.</p>
+  </section>`;
+}
+
+export async function render(container, view = 'mp') {
+  container.dataset.stockView = view;
+  if (view === 'wip') return renderWip(container);
+  if (view === 'fg') return renderFg(container);
+  if (view === 'purchases') return renderPurchases(container);
+  if (view === 'catalog') return renderCatalog(container);
+  return renderMp(container);
 }

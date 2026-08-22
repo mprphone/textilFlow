@@ -2,39 +2,40 @@ import { post } from './api.js?v=20260822-16';
 import { clearSession, setCompany, setSession, state } from './state.js';
 import { closeModal, loading, toast } from './ui.js?v=20260821-19';
 import { recordModal } from './quick_create.js?v=20260821-19';
-import { initExperience } from './experience.js?v=20260822-15';
+import { initExperience } from './experience.js?v=20260822-23';
 import * as dashboard from './pages/dashboard.js?v=20260822-10';
 import * as live from './pages/live.js?v=20260819-7';
 import * as styles from './pages/styles.js?v=20260822-15';
-import * as samples from './pages/samples.js?v=20260819-10';
-import * as costing from './pages/costing.js?v=20260822-12';
-import * as orders from './pages/orders.js?v=20260822-13';
-import * as floor from './pages/floor.js?v=20260819-7';
-import * as cutting from './pages/cutting.js?v=20260822-14';
-import * as quality from './pages/quality.js?v=20260819-8';
-import * as inventory from './pages/inventory.js?v=20260822-14';
+import * as samples from './pages/samples.js?v=20260822-30';
+import * as costing from './pages/costing.js?v=20260822-30';
+import * as orders from './pages/orders.js?v=20260822-30';
+import * as floor from './pages/floor.js?v=20260822-30';
+import * as cutting from './pages/cutting.js?v=20260822-30';
+import * as quality from './pages/quality.js?v=20260822-22';
+import { renderRevista, renderEmbalagem } from './pages/finish_areas.js?v=20260822-22';
+import * as inventoryPage from './pages/inventory.js?v=20260822-31';
 import * as people from './pages/people.js?v=20260822-1';
 import * as machines from './pages/machines.js?v=20260822-1';
 import * as operations from './pages/operations.js?v=20260822-1';
 import * as overheads from './pages/overheads.js?v=20260819-8';
-import * as confection from './pages/confection.js?v=20260822-14';
+import * as confection from './pages/confection.js?v=20260822-30';
 import * as processPlant from './pages/process.js?v=20260820-1';
-import * as tracking from './pages/tracking.js?v=20260822-13';
-import * as subcontracts from './pages/subcontracts.js?v=20260820-8';
+import * as tracking from './pages/tracking.js?v=20260822-31';
+import * as subcontracts from './pages/subcontracts.js?v=20260822-20';
 import * as reports from './pages/reports.js?v=20260819-7';
 import * as partners from './pages/partners.js?v=20260821-6';
-import * as tables from './pages/tables.js?v=20260821-22';
-import * as shipping from './pages/shipping.js?v=20260820-6';
-import * as commercialDocs from './pages/commercial_docs.js?v=20260822-17';
-import * as settings from './pages/settings.js?v=20260821-23';
-import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260822-15';
+import * as tables from './pages/tables.js?v=20260822-29';
+import * as shipping from './pages/shipping.js?v=20260822-23';
+import * as commercialDocs from './pages/commercial_docs.js?v=20260822-31';
+import * as settings from './pages/settings.js?v=20260822-27';
+import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260822-27';
 
 async function renderDesign(container, view) {
   const { render } = await import('./pages/design.js?v=20260822-16');
   return render(container, view);
 }
 
-const routes={dashboard,planning:tracking,live,styles,samples,costing,orders,confection,floor,cutting,quality,inventory,people,machines,operations,overheads,subcontracts,reports,partners,settings,shipping,tracking,
+const routes={dashboard,planning:tracking,live,styles,samples,costing,orders,confection,floor,cutting,quality,people,machines,operations,overheads,subcontracts,reports,partners,settings,shipping,tracking,
   'design-today':{render:container=>renderDesign(container,'today')},
   'design-requests':{render:container=>renderDesign(container,'requests')},
   'design-samples':{render:container=>renderDesign(container,'samples')},
@@ -57,6 +58,13 @@ const routes={dashboard,planning:tracking,live,styles,samples,costing,orders,con
   laundry:{render:container=>processPlant.render(container,'laundry')},
   embroidery:{render:container=>processPlant.render(container,'embroidery')},
   finishing:{render:container=>processPlant.render(container,'finishing')},
+  revista:{render:container=>renderRevista(container)},
+  embalagem:{render:container=>renderEmbalagem(container)},
+  'stock-mp':{render:container=>inventoryPage.render(container,'mp')},
+  'stock-wip':{render:container=>inventoryPage.render(container,'wip')},
+  'stock-fg':{render:container=>inventoryPage.render(container,'fg')},
+  purchases:{render:container=>inventoryPage.render(container,'purchases')},
+  inventory:{render:container=>inventoryPage.render(container,'catalog')},
   'settings-users':{render:container=>settings.render(container,4,false)},
   'settings-companies':{render:container=>settings.render(container,6,false)},
   'settings-primavera':{render:container=>settings.render(container,7,false)},
@@ -77,7 +85,7 @@ function allowedModules(){
   if(!membership.id)return[];
   if(explicit.includes('none'))return[];
   const enabled=new Set(membership.enabled_modules?.length?membership.enabled_modules:DEFAULT_ENABLED_MODULES);
-  const legacy={product:['commercial','design'],logistics:['shipping','subcontracting']};
+  const legacy={product:['commercial','design'],logistics:['shipping','subcontracting','inventory']};
   let visible=MODULES.filter(module=>enabled.has(module.id));
   if(explicit.includes('*'))return visible;
   if(explicit.length){
@@ -136,7 +144,7 @@ function renderNavigation(route){
     const daily=active.routes.filter(item=>!item[3]);
     const recursos=active.routes.filter(item=>item[3]==='recursos');
     const cadastro=active.routes.filter(item=>item[3]==='cadastro');
-    const dailyTitle=recursos.length||active.id==='production'?'HOJE':'OPÇÕES';
+    const dailyTitle=recursos.length||['production','quality','shipping','inventory'].includes(active.id)?'HOJE':'OPÇÕES';
     mainNav.innerHTML=`${navBlock(dailyTitle,daily,navRoute)}${navBlock('RECURSOS',recursos,navRoute)}${navBlock('CADASTROS',cadastro,navRoute)}`;
   }
   document.getElementById('sidebar-shortcuts').innerHTML=active&&quick.length?`<span>TRANSIÇÃO RÁPIDA</span>${quick.map(([key,label])=>`<button data-shortcut-route="${key}">${label}<i>→</i></button>`).join('')}`:'';
@@ -157,6 +165,7 @@ async function navigate(){
   closeModal();
   let route=(location.hash.replace(/^#\//,'').split(/[/?]/)[0]||'dashboard');
   if(route==='planning')route='tracking';
+  if(route==='inventory'){location.hash='#/tables-items';return;}
   const visibleModules=allowedModules();
   if(!visibleModules.length){renderNavigation(route);content.innerHTML=`<section class="access-empty"><span>◎</span><h1>Sem módulos atribuídos</h1><p>O seu utilizador está ativo, mas ainda não tem módulos visíveis nesta empresa.</p><button class="btn" id="access-logout">Terminar sessão</button></section>`;document.getElementById('access-logout').addEventListener('click',logout);return;}
   const permitted=new Set(visibleModules.flatMap(module=>module.routes.map(item=>item[0])));
@@ -213,5 +222,5 @@ export async function bootApp(){
 }
 
 if(!document.querySelector('script[src*="login.js"]')){
-  import('./login.js?v=20260822-17');
+  import('./login.js?v=20260822-21');
 }
