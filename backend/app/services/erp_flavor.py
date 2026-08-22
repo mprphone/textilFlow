@@ -19,7 +19,7 @@ FAMILIES = [
     {"id": "accounts", "label": "Contas correntes"},
 ]
 
-INTERNAL_TYPES = {"requisition", "stock_receipt", "fabric_issue"}
+INTERNAL_TYPES = {"requisition", "stock_receipt", "fabric_issue", "internal_transfer"}
 
 
 def is_official(doc_type: str) -> bool:
@@ -83,6 +83,11 @@ TYPE_CATALOG = {
         "codes": {"primavera": "SAI", "generic": "SAI"},
         "titles": {"primavera": "Saída de malha", "generic": "Saída de malha"},
     },
+    "internal_transfer": {
+        "families": ("internal",),
+        "codes": {"primavera": "GTI", "generic": "GTI"},
+        "titles": {"primavera": "Guia de transferência interna", "generic": "Guia de transferência interna"},
+    },
 }
 
 SYSTEMS = {
@@ -132,7 +137,7 @@ def default_series(company, doc_type: str, system: str | None = None) -> str:
         return str(cfg.get("sales_series") or "A")
     if doc_type in {"sales_delivery", "supplier_transport"}:
         return str(cfg.get("delivery_series") or "A")
-    if doc_type.startswith("purchase") or doc_type in {"requisition", "stock_receipt", "fabric_issue"}:
+    if doc_type.startswith("purchase") or doc_type in {"requisition", "stock_receipt", "fabric_issue", "internal_transfer"}:
         return str(cfg.get("purchase_series") or cfg.get("sales_series") or "A")
     return str(cfg.get("sales_series") or "A")
 

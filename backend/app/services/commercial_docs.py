@@ -6,8 +6,9 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..models import (
-    CommercialDocument, Company, Customer, InventoryMovement, Material, PurchaseOrder,
-    PurchaseOrderLine, SalesOrder, SalesOrderLine, Shipment, StockLot, Style, Supplier,
+    CommercialDocument, Company, Customer, Department, InventoryMovement, Material, ProductionLine,
+    ProductionOrder, PurchaseOrder, PurchaseOrderLine, SalesOrder, SalesOrderLine, Shipment, StockLot,
+    Style, SubcontractService, Supplier,
 )
 from .company_profile import public_company
 from .erp_flavor import identity_for, is_official
@@ -59,6 +60,10 @@ DOC_TYPES = {
     "sales_delivery": {
         "label": "Guia de transporte a cliente", "prefix": "GT", "side": "sales",
         "kind": "delivery", "entity": "C",
+    },
+    "internal_transfer": {
+        "label": "Guia de transferência interna", "prefix": "GTI", "side": "internal",
+        "kind": "internal_transfer", "entity": "I",
     },
 }
 
@@ -216,6 +221,12 @@ def public_document(db: Session, document: CommercialDocument, company: Company 
     data["can_prepare"] = is_official(document.doc_type) and document.primavera_status != "sent" and not locked
     data["primavera_done"] = document.primavera_status == "sent" or document.status == "posted"
     data["primavera_queued"] = document.primavera_status in {"queued", "pending", "prepared"}
+    # O Primavera só guarda o fornecedor/cliente do documento, não o serviço ou
+    # departamento específico dentro dele (ex. qual dos vários serviços de um
+    # fornecedor, ou para que área interna vai a mercadoria) — isso só fica
+    # registado aqui, em extra, gravado por from_distribution().
+    data["area"] = extra.get("service_category") or ("internal" if extra.get("department") else None)
+    data["area_detail"] = extra.get("service_name") or extra.get("department") or None
     data["unlock_reason"] = extra.get("unlock_reason")
     data["unlocked_by"] = extra.get("unlocked_by")
     data["lock_events"] = extra.get("lock_events") or []
@@ -350,9 +361,11 @@ def create_document(db: Session, company_id: int, payload: dict) -> CommercialDo
         extra["series"] = payload["series"]
     if payload.get("erp_code"):
         extra["erp_code"] = payload["erp_code"]
-    for key in ("due_date", "your_ref", "warehouse", "commercial_discount", "additional_discount", "vat_pct"):
+    for key in ("due_date", "delivery_date", "your_ref", "warehouse", "commercial_discount", "additional_discount", "vat_pct"):
         if payload.get(key) not in (None, ""):
             extra[key] = payload[key]
+    if extra.get("due_date") and not extra.get("delivery_date"):
+        extra["delivery_date"] = extra["due_date"]
     document = CommercialDocument(
         company_id=company_id,
         doc_type=doc_type,
@@ -392,9 +405,11 @@ def update_document(db: Session, company: Company, document: CommercialDocument,
         document.doc_type = payload["doc_type"]
         document.primavera_kind = _meta(payload["doc_type"])["kind"]
     extra.update(identity_for(company, payload.get("doc_type") or document.doc_type, extra))
-    for key in ("due_date", "your_ref", "warehouse", "commercial_discount", "additional_discount", "vat_pct"):
+    for key in ("due_date", "delivery_date", "your_ref", "warehouse", "commercial_discount", "additional_discount", "vat_pct"):
         if key in payload and payload[key] not in (None, ""):
             extra[key] = payload[key]
+    if extra.get("due_date") and not extra.get("delivery_date"):
+        extra["delivery_date"] = extra["due_date"]
     if "notes" in payload:
         extra["observacoes"] = payload.get("notes") or ""
     document.extra = extra
@@ -451,6 +466,65 @@ def from_sales_order(db: Session, company_id: int, order_id: int, doc_type: str 
             for line in rows
         ],
     })
+
+
+def from_distribution(
+    db: Session, company_id: int, *, order_id: int, quantity: float, destination: str,
+    line_id: int | None = None, subcontract_service_id: int | None = None, subcontract_job_id: int | None = None,
+) -> CommercialDocument:
+    """Prepara o documento certo a partir de uma distribuição de OF (modal Distribuir).
+
+    Externo (serviço subcontratado) -> guia de transporte a fornecedor, com o
+    serviço/categoria gravado em extra (o Primavera só sabe o fornecedor, não
+    qual dos vários serviços desse fornecedor). Interno (linha de confeção) ->
+    guia de transferência interna, com o departamento da linha gravado em
+    extra (não existe no Primavera de todo).
+    """
+    order = db.get(ProductionOrder, order_id)
+    if not order or order.company_id != company_id:
+        raise HTTPException(404, "Ordem de fabrico não encontrada")
+    style = db.get(Style, order.style_id)
+    line_item = {
+        "style_id": order.style_id,
+        "code": style.reference if style else "",
+        "description": style.description if style else "",
+        "quantity": quantity,
+        "unit": "un",
+    }
+    if destination == "subcontract":
+        service = db.get(SubcontractService, subcontract_service_id) if subcontract_service_id else None
+        if not service or service.company_id != company_id:
+            raise HTTPException(422, "Serviço subcontratado inválido")
+        return create_document(db, company_id, {
+            "doc_type": "supplier_transport",
+            "supplier_id": service.supplier_id,
+            "notes": f"Distribuído a partir da OF {order.order_no}",
+            "lines": [line_item],
+            "extra": {
+                "production_order_id": order.id,
+                "subcontract_job_id": subcontract_job_id,
+                "service_category": service.category,
+                "service_name": service.name,
+            },
+        })
+    if destination == "internal":
+        line = db.get(ProductionLine, line_id) if line_id else None
+        if not line or line.company_id != company_id:
+            raise HTTPException(422, "Linha de confeção inválida")
+        department = db.get(Department, line.department_id) if line.department_id else None
+        return create_document(db, company_id, {
+            "doc_type": "internal_transfer",
+            "notes": f"Distribuído a partir da OF {order.order_no}",
+            "lines": [line_item],
+            "extra": {
+                "production_order_id": order.id,
+                "line_id": line.id,
+                "line_name": line.name,
+                "department": department.name if department else None,
+                "department_id": line.department_id,
+            },
+        })
+    raise HTTPException(422, "Destino inválido para gerar documento")
 
 
 def convert_document(db: Session, company_id: int, document_id: int, doc_type: str) -> CommercialDocument:

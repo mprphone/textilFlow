@@ -5,7 +5,6 @@ import { readForm, renderForm } from '../forms.js?v=20260822-2';
 import { loadOrderDossier } from '../production/dossier.js?v=20260822-21';
 import { state } from '../state.js';
 import { closeModal, openModal, pageHeader, toast } from '../ui.js?v=20260820-5';
-import { startSupplierOrder } from './commercial_docs.js?v=20260822-31';
 
 const JOB_STATUS = {planned:'A enviar', sent:'No fornecedor', partial:'Parcial', received:'Recebido', problem:'Incidência', cancelled:'Anulado'};
 const SERVICE = {sewing:'Confeção', dyeing:'Tinturaria', printing:'Estamparia', embroidery:'Bordado', laundry:'Lavandaria', finishing:'Acabamento', transport:'Transporte', cutting:'Corte', other:'Outro'};
@@ -28,6 +27,12 @@ function jobOverdue(job, today) {
 
 function shippedQty(order) {
   return Number(order.custom_data?.shipped_quantity || 0);
+}
+
+async function createDistributionDocument(orderId, payload) {
+  const document = await post(`/production/orders/${orderId}/distribution-document`, payload);
+  location.hash = `#/erp-doc/${document.id}`;
+  return document;
 }
 
 function places(order, jobs, plans, maps) {
@@ -172,18 +177,11 @@ export async function render(container) {
       event.stopPropagation();
       const job = jobs.find(item => item.id === Number(button.dataset.jobTransport));
       if (!job) return;
-      const relatedOrder = orders.find(item => item.id === job.production_order_id);
-      const styleRow = relatedOrder ? maps.styleMap[relatedOrder.style_id] : null;
       try {
-        await startSupplierOrder({
-          supplier_id: job.supplier_id || maps.serviceMap[job.subcontract_service_id]?.supplier_id,
-          style_id: relatedOrder?.style_id,
-          code: styleRow?.reference || '',
-          description: styleRow?.description || '',
-          quantity: jobOut(job),
-          unit: job.unit || 'un',
-          extra: {subcontract_job_id: job.id, production_order_id: job.production_order_id},
-        }, 'supplier_transport');
+        await createDistributionDocument(job.production_order_id, {
+          destination: 'subcontract', subcontract_service_id: job.subcontract_service_id,
+          subcontract_job_id: job.id, quantity: jobOut(job),
+        });
       } catch (error) { toast(error.message, 'error'); }
     }));
   };
@@ -264,7 +262,7 @@ function datesTabHtml() {
 
 function openDistribute(row, options, reload) {
   if (!row) return;
-  const {order, unassigned, internal, style} = row;
+  const {order, unassigned, internal} = row;
   const defaultQty = unassigned || internal || 0;
   const defaultSource = unassigned ? 'unassigned' : 'internal';
 
@@ -285,7 +283,11 @@ function openDistribute(row, options, reload) {
         ${renderForm(fields, values, {formId: 'distribute-form'})}
         <div class="transport-action" data-transport-action hidden>
           <button type="button" class="btn" data-transport-guide>Guia de transporte</button>
-          <small class="muted">Cria a guia de transporte (GTS) para o fornecedor do serviço, já com o artigo e a quantidade preenchidos, e abre no ERP.</small>
+          <small class="muted">Cria a guia de transporte para o fornecedor, já com o artigo, a quantidade e o serviço certo (tinturaria, estamparia, lavandaria…) — o Primavera só mostra o fornecedor, isso fica registado aqui.</small>
+        </div>
+        <div class="transport-action" data-internal-doc-action hidden>
+          <button type="button" class="btn" data-internal-doc>Documento interno</button>
+          <small class="muted">Cria a guia de transferência interna para a linha/departamento de destino, já com o artigo e a quantidade preenchidos.</small>
         </div>
       </div>
       <div data-tab-panel="quantities" hidden>${quantitiesTabHtml(order, row, steps)}</div>
@@ -305,15 +307,18 @@ function openDistribute(row, options, reload) {
     const serviceField = form.elements.subcontract_service_id;
     const lineField = form.elements.line_id;
     const transportAction = body.querySelector('[data-transport-action]');
+    const internalDocAction = body.querySelector('[data-internal-doc-action]');
     const updateVisibility = () => {
       const isInternal = destinationField.value === 'internal';
       const isSubcontract = destinationField.value === 'subcontract';
       lineField.closest('.field').hidden = !isInternal;
       serviceField.closest('.field').hidden = !isSubcontract;
       transportAction.hidden = !(isSubcontract && serviceField.value);
+      internalDocAction.hidden = !(isInternal && lineField.value);
     };
     destinationField.addEventListener('change', updateVisibility);
     serviceField.addEventListener('change', updateVisibility);
+    lineField.addEventListener('change', updateVisibility);
     updateVisibility();
 
     form.addEventListener('submit', async event => {
@@ -330,18 +335,19 @@ function openDistribute(row, options, reload) {
     body.querySelector('[data-transport-guide]')?.addEventListener('click', async () => {
       const serviceId = Number(serviceField.value || 0);
       const quantity = Number(form.elements.quantity.value || 0);
-      const service = (options.services || []).find(item => Number(item.value) === serviceId);
-      if (!serviceId || !service || !quantity) { toast('Escolha o serviço e a quantidade antes de gerar a guia.', 'error'); return; }
+      if (!serviceId || !quantity) { toast('Escolha o serviço e a quantidade antes de gerar a guia.', 'error'); return; }
       try {
-        await startSupplierOrder({
-          supplier_id: service.supplier_id,
-          style_id: order.style_id,
-          code: style?.reference || '',
-          description: style?.description || '',
-          quantity,
-          unit: 'un',
-          extra: {production_order_id: order.id},
-        }, 'supplier_transport');
+        await createDistributionDocument(order.id, {destination: 'subcontract', subcontract_service_id: serviceId, quantity});
+        closeModal();
+      } catch (error) { toast(error.message, 'error'); }
+    });
+
+    body.querySelector('[data-internal-doc]')?.addEventListener('click', async () => {
+      const lineId = Number(lineField.value || 0);
+      const quantity = Number(form.elements.quantity.value || 0);
+      if (!lineId || !quantity) { toast('Escolha a linha e a quantidade antes de gerar o documento.', 'error'); return; }
+      try {
+        await createDistributionDocument(order.id, {destination: 'internal', line_id: lineId, quantity});
         closeModal();
       } catch (error) { toast(error.message, 'error'); }
     });

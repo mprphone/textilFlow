@@ -7,9 +7,10 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.db import Base
 from backend.app.models import (
-    Company, Customer, ProductionLine, ProductionOrder, SalesOrder, SalesOrderLine,
+    Company, Customer, Department, ProductionLine, ProductionOrder, SalesOrder, SalesOrderLine,
     SewingPlan, Style, SubcontractJob, SubcontractService, Supplier,
 )
+from backend.app.services.commercial_docs import from_distribution
 from backend.app.services.production_split import distribute
 
 
@@ -23,9 +24,12 @@ class ProductionSplitTest(unittest.TestCase):
         self.db.flush()
         self.customer = Customer(company_id=self.company.id, code="C", name="Cliente")
         self.style = Style(company_id=self.company.id, reference="ST", description="Sweat")
-        self.line = ProductionLine(company_id=self.company.id, code="L1", name="Linha 1")
+        self.department = Department(company_id=self.company.id, code="CONF", name="Confeção")
         self.supplier = Supplier(company_id=self.company.id, code="TIN", name="Tinturaria", supplier_type="dyeing")
-        self.db.add_all([self.customer, self.style, self.line, self.supplier])
+        self.db.add_all([self.customer, self.style, self.department, self.supplier])
+        self.db.flush()
+        self.line = ProductionLine(company_id=self.company.id, code="L1", name="Linha 1", department_id=self.department.id)
+        self.db.add(self.line)
         self.db.flush()
         self.service = SubcontractService(
             company_id=self.company.id, supplier_id=self.supplier.id, code="D", name="Tingir",
@@ -75,6 +79,37 @@ class ProductionSplitTest(unittest.TestCase):
         self.assertIsNone(result["subcontract_job_id"])
         plan = self.db.query(SewingPlan).filter_by(production_order_id=self.order.id).one()
         self.assertEqual(plan.start_date, date.today())
+
+    def test_from_distribution_subcontract_tags_service_category(self):
+        document = from_distribution(
+            self.db, self.company.id, order_id=self.order.id, quantity=25, destination="subcontract",
+            subcontract_service_id=self.service.id, subcontract_job_id=999,
+        )
+        self.db.commit()
+        self.assertEqual(document.doc_type, "supplier_transport")
+        self.assertEqual(document.supplier_id, self.supplier.id)
+        self.assertEqual(document.extra["service_category"], "dyeing")
+        self.assertEqual(document.extra["service_name"], "Tingir")
+        self.assertEqual(document.extra["subcontract_job_id"], 999)
+        self.assertEqual(document.lines[0]["style_id"], self.style.id)
+        self.assertEqual(document.lines[0]["quantity"], 25)
+
+    def test_from_distribution_internal_tags_department(self):
+        document = from_distribution(
+            self.db, self.company.id, order_id=self.order.id, quantity=40, destination="internal",
+            line_id=self.line.id,
+        )
+        self.db.commit()
+        self.assertEqual(document.doc_type, "internal_transfer")
+        self.assertIsNone(document.supplier_id)
+        self.assertEqual(document.extra["department"], "Confeção")
+        self.assertEqual(document.extra["department_id"], self.department.id)
+        self.assertEqual(document.extra["line_name"], "Linha 1")
+        self.assertEqual(document.lines[0]["quantity"], 40)
+
+    def test_from_distribution_invalid_destination_raises(self):
+        with self.assertRaises(Exception):
+            from_distribution(self.db, self.company.id, order_id=self.order.id, quantity=10, destination="shipped")
 
 
 if __name__ == "__main__":

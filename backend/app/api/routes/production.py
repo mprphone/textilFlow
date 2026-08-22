@@ -12,14 +12,15 @@ from ...models import (
 )
 from ...schemas import ProductionEventRequest, StockMovementRequest
 from ...services.analytics import line_performance
-from ...services.inventory import register_movement
+from ...services.commercial_docs import from_distribution, public_document
+from ...services.inventory import material_history, register_movement, save_material_notes, stock_board
 from ...services.primavera import queue_delivery
 from ...services.corrections import compensate_event
 from ...services.production import register_output
 from ...services.production_cockpit import order_cockpit
 from ...services.production_split import distribute as distribute_order
 from ...services.kanban import complete_sewing_batch, kanban_board, release_batch_to_sewing, request_next_batch
-from ...services.production_stage import dispatch_ready_status, update_order_stage
+from ...services.production_stage import dispatch_ready_status, record_packing, record_revista, update_order_stage
 from ...services.serialization import model_to_dict
 from ..deps import current_user, require_module_access, require_role
 
@@ -55,6 +56,11 @@ def release_sample_to_production(sample_id: int, payload: dict, db: Session = De
     try:
         db.add(order)
         db.flush()
+        style = db.get(Style, sample.style_id)
+        from ...services.inventory import ensure_item_for_style
+        ensure_item_for_style(db, style)
+        from ...services.cutting_map import ensure_cutting_job_for_order
+        ensure_cutting_job_for_order(db, order)
         metadata.update({"production_order_id": order.id, "released_to_production_at": datetime.now(timezone.utc).isoformat(), "released_to_production_by": user.id})
         sample.custom_data = metadata
         db.commit()
@@ -127,6 +133,48 @@ def distribute_production_order(order_id: int, payload: dict, db: Session = Depe
         raise HTTPException(422, str(exc)) from exc
 
 
+@router.post("/orders/{order_id}/distribution-document", status_code=201)
+def create_distribution_document(order_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    order = db.get(ProductionOrder, order_id)
+    if not order:
+        raise HTTPException(404, "Ordem de fabrico não encontrada")
+    require_role(db, user, order.company_id, {"admin", "manager", "planner", "supervisor"})
+    require_module_access(db, user, order.company_id, {"production", "confection", "subcontracting"})
+    document = from_distribution(
+        db, order.company_id, order_id=order_id, quantity=float(payload.get("quantity") or 0),
+        destination=payload.get("destination"), line_id=payload.get("line_id"),
+        subcontract_service_id=payload.get("subcontract_service_id"), subcontract_job_id=payload.get("subcontract_job_id"),
+    )
+    db.commit()
+    db.refresh(document)
+    return public_document(db, document)
+
+
+@router.post("/orders/{order_id}/revista")
+def complete_revista(order_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    order = db.get(ProductionOrder, order_id)
+    if not order:
+        raise HTTPException(404, "Ordem de fabrico não encontrada")
+    require_role(db, user, order.company_id, {"admin", "manager", "planner", "supervisor", "quality", "operator"})
+    require_module_access(db, user, order.company_id, {"quality", "production"})
+    inspection = record_revista(db, order, payload or {})
+    db.commit()
+    db.refresh(order)
+    return {"inspection": model_to_dict(inspection), "current_stage": order.current_stage}
+
+
+@router.post("/orders/{order_id}/pack")
+def pack_production_order(order_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    order = db.get(ProductionOrder, order_id)
+    if not order:
+        raise HTTPException(404, "Ordem de fabrico não encontrada")
+    require_role(db, user, order.company_id, {"admin", "manager", "planner", "supervisor", "warehouse", "operator"})
+    require_module_access(db, user, order.company_id, {"shipping", "production"})
+    result = record_packing(db, order, payload or {})
+    db.commit()
+    return result
+
+
 @router.post("/events", status_code=201)
 def output_event(payload: ProductionEventRequest, db: Session = Depends(get_db), user: User = Depends(current_user)):
     assignment = db.get(WorkAssignment, payload.assignment_id)
@@ -151,9 +199,30 @@ def compensate_output_event(event_id: int, payload: dict, db: Session = Depends(
     return model_to_dict(compensating)
 
 
+@router.get("/{company_id}/stock-board")
+def get_stock_board(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_module_access(db, user, company_id, {"inventory", "shipping", "production"})
+    return stock_board(db, company_id)
+
+
+@router.get("/{company_id}/materials/{item_key}/history")
+def get_material_history(company_id: int, item_key: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_module_access(db, user, company_id, {"inventory", "shipping", "production", "commercial"})
+    return material_history(db, company_id, item_key)
+
+
+@router.patch("/{company_id}/materials/{item_key}/notes")
+def patch_material_notes(company_id: int, item_key: str, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_module_access(db, user, company_id, {"inventory", "commercial"})
+    material = save_material_notes(db, company_id, item_key, str(payload.get("notes") or ""))
+    db.commit()
+    db.refresh(material)
+    return {"id": material.id, "code": material.code, "notes": material.notes or ""}
+
+
 @router.post("/{company_id}/stock-movements", status_code=201)
 def stock_movement(company_id: int, payload: StockMovementRequest, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    require_module_access(db, user, company_id, {"production", "shipping"})
+    require_module_access(db, user, company_id, {"inventory", "production", "shipping"})
     movement = register_movement(db, company_id=company_id, user_id=user.id, payload=payload)
     db.commit()
     db.refresh(movement)
@@ -174,10 +243,13 @@ def live(company_id: int, db: Session = Depends(get_db), user: User = Depends(cu
         operation = db.get(Operation, row.operation_id)
         order = db.get(ProductionOrder, row.production_order_id)
         style = db.get(Style, order.style_id) if order else None
+        batch = db.get(ProductionBatch, row.batch_id) if row.batch_id else None
         assignments.append({
             **model_to_dict(row), "employee": employee.name if employee else "Por atribuir",
             "machine": machine.name if machine else "Manual", "operation": operation.name if operation else "",
             "order_no": order.order_no if order else "", "reference": style.reference if style else "",
+            "batch_no": batch.batch_no if batch else "",
+            "barcode": (batch.barcode if batch else None) or (order.order_no if order else ""),
             "progress": round(row.completed_quantity / row.planned_quantity * 100, 1) if row.planned_quantity else 0,
             "efficiency": round(row.standard_minutes / row.actual_minutes * 100, 1) if row.actual_minutes else 0,
         })

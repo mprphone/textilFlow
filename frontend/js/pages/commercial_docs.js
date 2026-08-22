@@ -61,7 +61,7 @@ export async function render(container) {
       <td><b>${esc(row.erp_code || '')}</b><div class="muted">${esc(row.type_label || '')}</div></td>
       <td>${esc(row.series || '—')}</td>
       <td><b>${esc(row.doc_no)}</b></td>
-      <td>${esc(row.partner_name || '—')}</td>
+      <td>${esc(row.partner_name || '—')}${row.area_detail ? `<div class="muted">${esc(row.area_detail)}</div>` : ''}</td>
       <td>${date(row.doc_date)}</td>
       <td>${money(row.total)}</td>
       <td>${badge(row.status)}</td>
@@ -390,6 +390,7 @@ export async function renderDocument(container) {
         <span>${docCode} ${esc(doc.series || 'A')} · ${docNo}</span>
         <em>${esc(erpStateLabel(doc))}</em>
       </div>
+      ${doc.area_detail ? `<div class="doc-area-banner"><b>Vai para: ${esc(doc.area_detail)}</b><span>Só fica registado aqui no TextileFlow — o Primavera só mostra o fornecedor/cliente, não esta distinção.</span></div>` : ''}
       <div class="pri-toolbar">
         ${!locked ? `<button type="button" data-save-doc class="pri-tb-save"><i></i>${saveLabel}</button>` : ''}
         ${internalTools}

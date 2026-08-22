@@ -6,7 +6,7 @@ import { loadOrderDossier } from '../production/dossier.js?v=20260822-21';
 import { stageLabel } from '../production/cycle.js?v=20260822-20';
 import { state } from '../state.js';
 import { loading, openModal, pageHeader, toast } from '../ui.js?v=20260820-5';
-import { prepareFromPurchase, startSupplierOrder } from './commercial_docs.js?v=20260822-31';
+import { prepareFromPurchase, startSupplierOrder } from './commercial_docs.js?v=20260822-32';
 
 function reload(container) {
   return render(container, container.dataset.stockView || 'mp');
