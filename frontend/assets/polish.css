@@ -182,8 +182,10 @@
 /* ---------- Distribuir OF: separadores, quantidades, datas ---------- */
 .modal:has(.distribute-tabs) .modal-card{width:min(760px,96vw)}
 .distribute-tabs{margin-bottom:14px}
-.transport-action{display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
-.transport-action[hidden]{display:none}
+.distribute-outcome{
+  margin:-6px 0 0;padding:9px 12px;border:1px solid #c9d7f2;background:#eef4ff;
+  border-radius:var(--r-sm);color:#1a335c!important;font-size:11.5px;
+}
 .qty-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
 .qty-card{padding:12px 14px;border:1px solid var(--line);border-radius:var(--r-sm);background:#f8fafc}
 .qty-card span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
@@ -200,6 +202,7 @@
 .tranche-status.error{color:var(--red)}
 .tranche-status.pending{color:var(--chrome-blue)}
 .tranche-status.skip{color:var(--muted)}
+.tranche-status a{color:var(--chrome-blue);font-weight:700}
 .tranche-note{font-size:11px;margin-top:10px}
 
 /* ---------- Documento do ERP: área/serviço que o Primavera não guarda ---------- */

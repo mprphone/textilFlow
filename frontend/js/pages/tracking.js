@@ -200,12 +200,12 @@ function stepBadge(status) {
   return `<span class="badge ${meta.cls}">${esc(meta.label)}</span>`;
 }
 
-function distributeFields(order, row, current, sewingLocked, options) {
+function distributeFields(order, row, current, options) {
   const {unassigned, internal} = row;
   const destinations = [
-    {value: 'internal', label: sewingLocked ? 'Confeção interna (fora de sequência)' : 'Confeção interna'},
-    {value: 'subcontract', label: current ? `Serviço externo · recomendado: ${current.label}` : 'Serviço externo (tinturaria / costura / outros)'},
-    {value: 'shipped', label: 'Expedição (já saiu)'},
+    {value: 'internal', label: 'Confeção interna'},
+    {value: 'subcontract', label: 'Serviço externo'},
+    {value: 'shipped', label: 'Expedição'},
   ];
   return [
     {key: 'quantity', label: 'Quantidade', type: 'number', required: true, section: 'Quantidade', help: `Por distribuir ${number(unassigned)} · na confeção ${number(internal)} · total ${number(order.quantity)}${current ? ` · passo recomendado: ${current.label}` : ''}`},
@@ -269,7 +269,7 @@ function openDistribute(row, options, reload) {
   get(`/production/orders/${order.id}/trace`).then(data => data.services || []).catch(() => []).then(steps => {
     const current = steps.find(step => step.can_distribute && step.kind === 'external') || steps.find(step => step.status === 'ready');
     const sewingLocked = steps.some(step => step.key === 'sewing' && step.locked);
-    const fields = distributeFields(order, row, current, sewingLocked, options);
+    const fields = distributeFields(order, row, current, options);
     const defaultDestination = current && current.kind === 'external' && !sewingLocked ? 'subcontract' : 'internal';
     const values = {quantity: defaultQty, source: defaultSource, destination: defaultDestination};
 
@@ -280,19 +280,12 @@ function openDistribute(row, options, reload) {
         <button type="button" class="tab" data-tab="dates">Datas</button>
       </div>
       <div data-tab-panel="distribute">
-        ${renderForm(fields, values, {formId: 'distribute-form'})}
-        <div class="transport-action" data-transport-action hidden>
-          <button type="button" class="btn" data-transport-guide>Guia de transporte</button>
-          <small class="muted">Cria a guia de transporte para o fornecedor, já com o artigo, a quantidade e o serviço certo (tinturaria, estamparia, lavandaria…) — o Primavera só mostra o fornecedor, isso fica registado aqui.</small>
-        </div>
-        <div class="transport-action" data-internal-doc-action hidden>
-          <button type="button" class="btn" data-internal-doc>Documento interno</button>
-          <small class="muted">Cria a guia de transferência interna para a linha/departamento de destino, já com o artigo e a quantidade preenchidos.</small>
-        </div>
+        ${renderForm(fields, values, {formId: 'distribute-form', submitLabel: 'Distribuir'})}
+        <p class="muted distribute-outcome" data-distribute-note></p>
       </div>
       <div data-tab-panel="quantities" hidden>${quantitiesTabHtml(order, row, steps)}</div>
       <div data-tab-panel="dates" hidden>${datesTabHtml()}</div>
-    `, 'A sequência é uma recomendação. Se a encomenda sair do normal, marque a exceção.');
+    `, 'Cada distribuição fica sempre associada a um documento no ERP — nunca é só uma gravação.');
 
     const body = document.getElementById('modal-body');
     body.querySelectorAll('[data-close-modal]').forEach(button => button.addEventListener('click', closeModal));
@@ -306,49 +299,38 @@ function openDistribute(row, options, reload) {
     const destinationField = form.elements.destination;
     const serviceField = form.elements.subcontract_service_id;
     const lineField = form.elements.line_id;
-    const transportAction = body.querySelector('[data-transport-action]');
-    const internalDocAction = body.querySelector('[data-internal-doc-action]');
+    const submitButton = form.querySelector('button[type="submit"]');
+    const outcomeNote = body.querySelector('[data-distribute-note]');
+    const OUTCOME = {
+      internal: {label: 'Distribuir e criar documento interno', note: 'Cria a guia de transferência interna para a linha, já com o artigo e a quantidade — fica tudo agrupado no ERP.'},
+      subcontract: {label: 'Distribuir e criar guia de transporte', note: 'Cria a guia de transporte para o fornecedor, com o serviço certo (tinturaria, estamparia, lavandaria…) e o artigo/quantidade preenchidos.'},
+      shipped: {label: 'Registar expedição', note: 'Regista a quantidade já expedida nesta OF. A guia ao cliente faz-se em Expedição.'},
+    };
     const updateVisibility = () => {
       const isInternal = destinationField.value === 'internal';
       const isSubcontract = destinationField.value === 'subcontract';
       lineField.closest('.field').hidden = !isInternal;
       serviceField.closest('.field').hidden = !isSubcontract;
-      transportAction.hidden = !(isSubcontract && serviceField.value);
-      internalDocAction.hidden = !(isInternal && lineField.value);
+      const outcome = OUTCOME[destinationField.value] || OUTCOME.internal;
+      if (submitButton) submitButton.textContent = outcome.label;
+      if (outcomeNote) outcomeNote.textContent = outcome.note;
     };
     destinationField.addEventListener('change', updateVisibility);
-    serviceField.addEventListener('change', updateVisibility);
-    lineField.addEventListener('change', updateVisibility);
     updateVisibility();
 
     form.addEventListener('submit', async event => {
       event.preventDefault();
       try {
         const payload = readForm(form, fields);
-        await post(`/production/orders/${order.id}/distribute`, payload);
-        toast('Distribuição guardada.');
+        const result = await post(`/production/orders/${order.id}/distribute-and-document`, payload);
         closeModal();
-        await reload();
-      } catch (error) { toast(error.message, 'error'); }
-    });
-
-    body.querySelector('[data-transport-guide]')?.addEventListener('click', async () => {
-      const serviceId = Number(serviceField.value || 0);
-      const quantity = Number(form.elements.quantity.value || 0);
-      if (!serviceId || !quantity) { toast('Escolha o serviço e a quantidade antes de gerar a guia.', 'error'); return; }
-      try {
-        await createDistributionDocument(order.id, {destination: 'subcontract', subcontract_service_id: serviceId, quantity});
-        closeModal();
-      } catch (error) { toast(error.message, 'error'); }
-    });
-
-    body.querySelector('[data-internal-doc]')?.addEventListener('click', async () => {
-      const lineId = Number(lineField.value || 0);
-      const quantity = Number(form.elements.quantity.value || 0);
-      if (!lineId || !quantity) { toast('Escolha a linha e a quantidade antes de gerar o documento.', 'error'); return; }
-      try {
-        await createDistributionDocument(order.id, {destination: 'internal', line_id: lineId, quantity});
-        closeModal();
+        if (result.document) {
+          toast('Distribuição guardada e documento criado.');
+          location.hash = `#/erp-doc/${result.document.id}`;
+        } else {
+          toast('Distribuição guardada.');
+          await reload();
+        }
       } catch (error) { toast(error.message, 'error'); }
     });
 
@@ -380,8 +362,9 @@ function openDistribute(row, options, reload) {
         if (!qty) { statusEl.textContent = 'Sem quantidade'; statusEl.className = 'tranche-status error'; stopped = true; continue; }
         statusEl.textContent = 'A processar…'; statusEl.className = 'tranche-status pending';
         try {
-          await post(`/production/orders/${order.id}/distribute`, {...base, quantity: qty, planned_date: plannedDate});
-          statusEl.textContent = 'OK'; statusEl.className = 'tranche-status ok';
+          const result = await post(`/production/orders/${order.id}/distribute-and-document`, {...base, quantity: qty, planned_date: plannedDate});
+          statusEl.innerHTML = result.document ? `OK · <a href="#/erp-doc/${result.document.id}">ver documento</a>` : 'OK';
+          statusEl.className = 'tranche-status ok';
           anyOk = true;
         } catch (error) {
           statusEl.textContent = error.message; statusEl.className = 'tranche-status error';

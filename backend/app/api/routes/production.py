@@ -150,6 +150,35 @@ def create_distribution_document(order_id: int, payload: dict, db: Session = Dep
     return public_document(db, document)
 
 
+@router.post("/orders/{order_id}/distribute-and-document", status_code=201)
+def distribute_with_document(order_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Distribuir nunca fica só num registo: sai sempre com o documento certo no ERP
+    (guia de transporte para serviço externo, guia interna para confeção), para o
+    estado da OF ficar sempre rastreável a um documento — nunca só numa gravação silenciosa."""
+    order = db.get(ProductionOrder, order_id)
+    if not order:
+        raise HTTPException(404, "Ordem de fabrico não encontrada")
+    require_role(db, user, order.company_id, {"admin", "manager", "planner", "supervisor"})
+    require_module_access(db, user, order.company_id, {"production", "confection", "subcontracting"})
+    try:
+        result = distribute_order(db, order, payload)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    destination = payload.get("destination")
+    document = None
+    if destination in {"internal", "subcontract"}:
+        document = from_distribution(
+            db, order.company_id, order_id=order_id, quantity=float(payload.get("quantity") or 0),
+            destination=destination, line_id=payload.get("line_id"),
+            subcontract_service_id=payload.get("subcontract_service_id"),
+            subcontract_job_id=result.get("subcontract_job_id"),
+        )
+        db.commit()
+        db.refresh(document)
+    result["document"] = public_document(db, document) if document else None
+    return result
+
+
 @router.post("/orders/{order_id}/revista")
 def complete_revista(order_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
     order = db.get(ProductionOrder, order_id)
