@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -12,8 +14,8 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
 @router.get("/{company_id}")
-def dashboard(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def dashboard(company_id: int, start: date | None = None, end: date | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_module_access(db, user, company_id, {"overview"})
-    result = dashboard_metrics(db, company_id)
+    result = dashboard_metrics(db, company_id, start, end)
     result["briefing"] = operational_briefing(db, company_id, result)
     return result

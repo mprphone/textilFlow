@@ -126,6 +126,7 @@ class Operation(Base, TimestampMixin):
     machine_type = Column(String(100))
     standard_time_min = Column(Float, default=0, nullable=False)
     cost_per_minute = Column(Float, default=0, nullable=False)
+    machine_cost_per_minute = Column(Float, default=0, nullable=False)
     instruction = Column(Text)
     media_url = Column(Text)
     active = Column(Boolean, default=True, nullable=False)

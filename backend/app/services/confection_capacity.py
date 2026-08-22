@@ -65,6 +65,26 @@ def _remaining_plan(db, plan: SewingPlan) -> tuple[float, float]:
     return quantity, minutes
 
 
+def _earned_minutes_resolver(db, company_id: int):
+    # Mesma prioridade SMV-do-artigo > tempo generico da operacao usada em
+    # costing.py e capacity_check - ver tambem analytics.py::_earned_minutes_resolver.
+    operations = {row.id: row for row in db.query(Operation).filter_by(company_id=company_id).all()}
+    orders = {row.id: row for row in db.query(ProductionOrder).filter_by(company_id=company_id).all()}
+    smv_by_style_operation = {}
+    for row in db.query(ProductOperation).filter_by(company_id=company_id).all():
+        if row.smv:
+            smv_by_style_operation[(row.style_id, row.operation_id)] = row.smv
+
+    def earned_minutes(event) -> float:
+        operation = operations.get(event.operation_id)
+        order = orders.get(event.production_order_id)
+        style_smv = smv_by_style_operation.get((order.style_id, event.operation_id)) if order else None
+        minutes = style_smv or (operation.standard_time_min if operation else 0) or 0
+        return minutes * (event.quantity_good or 0)
+
+    return earned_minutes
+
+
 def _historical_efficiency(db, company_id: int, line_ids: list[int]) -> dict[int, float]:
     since = datetime.combine(date.today() - timedelta(days=60), time.min, tzinfo=timezone.utc)
     rows = db.query(ProductionEvent).filter(
@@ -74,11 +94,10 @@ def _historical_efficiency(db, company_id: int, line_ids: list[int]) -> dict[int
     ).all() if line_ids else []
     actual = defaultdict(float)
     earned = defaultdict(float)
-    operations = {row.id: row for row in db.query(Operation).filter_by(company_id=company_id).all()}
+    earned_minutes = _earned_minutes_resolver(db, company_id)
     for event in rows:
         actual[event.line_id] += event.duration_minutes or 0
-        operation = operations.get(event.operation_id)
-        earned[event.line_id] += (operation.standard_time_min if operation else 0) * (event.quantity_good or 0)
+        earned[event.line_id] += earned_minutes(event)
     return {
         line_id: round(earned[line_id] / actual[line_id] * 100, 1) if actual[line_id] else 0
         for line_id in line_ids
@@ -138,15 +157,14 @@ def capacity_data(db, company_id: int, start: date, end: date) -> dict:
         ProductionEvent.event_time >= datetime.combine(start, time.min, tzinfo=timezone.utc),
         ProductionEvent.event_time < datetime.combine(end + timedelta(days=1), time.min, tzinfo=timezone.utc),
     ).all()
-    operations = {row.id: row for row in db.query(Operation).filter_by(company_id=company_id).all()}
+    earned_minutes = _earned_minutes_resolver(db, company_id)
     actual = defaultdict(lambda: {"minutes": 0.0, "earned": 0.0, "good": 0.0, "rejected": 0.0})
     for event in actual_rows:
         key = (event.line_id, event.event_time.date())
         actual[key]["minutes"] += event.duration_minutes or 0
         actual[key]["good"] += event.quantity_good or 0
         actual[key]["rejected"] += event.quantity_rejected or 0
-        operation = operations.get(event.operation_id)
-        actual[key]["earned"] += (operation.standard_time_min if operation else 0) * (event.quantity_good or 0)
+        actual[key]["earned"] += earned_minutes(event)
 
     plans = db.query(SewingPlan).filter(
         SewingPlan.company_id == company_id,

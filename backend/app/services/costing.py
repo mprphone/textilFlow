@@ -32,6 +32,13 @@ def rebuild_product_cost(db, sheet: CostSheet) -> CostSheet:
             description=operation.name, quantity=minutes, unit="min",
             unit_cost=rate, amount=minutes * rate, source_type="operation", source_id=product_operation.id,
         ))
+        machine_rate = operation.machine_cost_per_minute or 0
+        if machine_rate:
+            db.add(CostLine(
+                company_id=sheet.company_id, cost_sheet_id=sheet.id, category="machine",
+                description=operation.name, quantity=minutes, unit="min",
+                unit_cost=machine_rate, amount=minutes * machine_rate, source_type="operation", source_id=product_operation.id,
+            ))
     db.flush()
     return recalculate_sheet(db, sheet)
 

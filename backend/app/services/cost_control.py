@@ -5,7 +5,7 @@ from sqlalchemy import func
 
 from ..models import (
     ActualCostEntry, BOMItem, CostLine, CostSheet, Customer, CuttingJob, InventoryMovement,
-    Material, OverheadCost, ProductionEvent, ProductionOrder, SalesOrder,
+    Machine, Material, OverheadCost, ProductionEvent, ProductionLine, ProductionOrder, SalesOrder,
     SalesOrderLine, StockLot, Style, SubcontractJob, SubcontractService,
 )
 from .costing import recalculate_sheet
@@ -153,44 +153,86 @@ def approved_baseline(db, order: ProductionOrder) -> CostSheet | None:
     return sheets[0] if sheets else None
 
 
+def _department_line_ids(db, company_id: int, department_id: int | None) -> set[int] | None:
+    """None = sem filtro (todas). Conjunto vazio = filtro ativo mas nada corresponde."""
+    if not department_id:
+        return None
+    return {row.id for row in db.query(ProductionLine.id).filter_by(company_id=company_id, department_id=department_id).all()}
+
+
+def _department_machine_ids(db, company_id: int, department_id: int | None) -> set[int] | None:
+    if not department_id:
+        return None
+    return {row.id for row in db.query(Machine.id).filter_by(company_id=company_id, department_id=department_id).all()}
+
+
+def _basis_metric(db, company_id: int | None, order_id: int | None, basis: str, department_id: int | None, start, end) -> float:
+    """Metrica de rateio para UM lado (a OF ou a empresa toda) no periodo do custo geral.
+
+    company_id filtra por empresa (lado "empresa"); order_id filtra por OF (lado
+    "OF"). Um dos dois vem None consoante o lado a calcular.
+    """
+    line_filter = _department_line_ids(db, company_id, department_id) if company_id else None
+    machine_filter = _department_machine_ids(db, company_id, department_id) if company_id else None
+
+    def event_query():
+        q = db.query(ProductionEvent).filter(ProductionEvent.event_time >= start, ProductionEvent.event_time < end)
+        q = q.filter(ProductionEvent.production_order_id == order_id) if order_id else q.filter(ProductionEvent.company_id == company_id)
+        if line_filter is not None:
+            q = q.filter(ProductionEvent.line_id.in_(line_filter))
+        return q
+
+    def cutting_query():
+        q = db.query(CuttingJob).filter(CuttingJob.created_at >= start, CuttingJob.created_at < end)
+        q = q.filter(CuttingJob.production_order_id == order_id) if order_id else q.filter(CuttingJob.company_id == company_id)
+        if machine_filter is not None:
+            q = q.filter(CuttingJob.machine_id.in_(machine_filter))
+        return q
+
+    if basis == "units":
+        return sum(row.quantity_good or 0 for row in event_query().all())
+    if basis == "labor_hours":
+        return sum((row.duration_minutes or 0) for row in event_query().filter(ProductionEvent.employee_id.isnot(None)).all()) / 60
+    if basis == "machine_hours":
+        machine_minutes = sum((row.duration_minutes or 0) for row in event_query().filter(ProductionEvent.machine_id.isnot(None)).all())
+        machine_minutes += sum((row.duration_minutes or 0) for row in cutting_query().filter(CuttingJob.machine_id.isnot(None)).all())
+        return machine_minutes / 60
+    if basis == "revenue":
+        total = 0.0
+        for row in event_query().all():
+            order = db.get(ProductionOrder, row.production_order_id)
+            baseline = approved_baseline(db, order) if order else None
+            total += (row.quantity_good or 0) * (baseline.selling_price if baseline else 0)
+        return total
+    # production_minutes (default e fallback)
+    return sum(row.duration_minutes or 0 for row in event_query().all()) + sum(row.duration_minutes or 0 for row in cutting_query().all())
+
+
 def _overhead_allocation(db, order: ProductionOrder) -> tuple[float, list[dict]]:
     entries = []
     total = 0.0
+    basis_label = {
+        "production_minutes": "minutos de produção", "units": "unidades produzidas",
+        "labor_hours": "horas de mão de obra", "machine_hours": "horas de máquina", "revenue": "receita",
+    }
     for overhead in db.query(OverheadCost).filter_by(company_id=order.company_id).all():
         start = datetime.combine(overhead.period_start, time.min, tzinfo=timezone.utc)
         end = datetime.combine(overhead.period_end + timedelta(days=1), time.min, tzinfo=timezone.utc)
-        order_event_minutes = db.query(func.coalesce(func.sum(ProductionEvent.duration_minutes), 0)).filter(
-            ProductionEvent.production_order_id == order.id,
-            ProductionEvent.event_time >= start,
-            ProductionEvent.event_time < end,
-        ).scalar() or 0
-        order_cutting_minutes = db.query(func.coalesce(func.sum(CuttingJob.duration_minutes), 0)).filter(
-            CuttingJob.production_order_id == order.id,
-            CuttingJob.created_at >= start,
-            CuttingJob.created_at < end,
-        ).scalar() or 0
-        order_minutes = order_event_minutes + order_cutting_minutes
-        if not order_minutes:
+        basis = overhead.allocation_basis if overhead.allocation_basis in basis_label else "production_minutes"
+        order_metric = _basis_metric(db, None, order.id, basis, overhead.department_id, start, end)
+        if not order_metric:
             continue
-        company_event_minutes = db.query(func.coalesce(func.sum(ProductionEvent.duration_minutes), 0)).filter(
-            ProductionEvent.company_id == order.company_id,
-            ProductionEvent.event_time >= start,
-            ProductionEvent.event_time < end,
-        ).scalar() or 0
-        company_cutting_minutes = db.query(func.coalesce(func.sum(CuttingJob.duration_minutes), 0)).filter(
-            CuttingJob.company_id == order.company_id,
-            CuttingJob.created_at >= start,
-            CuttingJob.created_at < end,
-        ).scalar() or 0
-        company_minutes = company_event_minutes + company_cutting_minutes
-        if not company_minutes:
+        company_metric = _basis_metric(db, order.company_id, None, basis, overhead.department_id, start, end)
+        if not company_metric:
             continue
-        amount = _round(overhead.amount * min(1, order_minutes / company_minutes))
+        amount = _round(overhead.amount * min(1, order_metric / company_metric))
         if amount:
             total += amount
             entries.append({
                 "category": "overhead", "description": overhead.description,
-                "amount": amount, "source": "rateio_real", "reference": f"{overhead.period_start} a {overhead.period_end}",
+                "amount": amount, "source": "rateio_real",
+                "reference": f"{overhead.period_start} a {overhead.period_end} · rateio por {basis_label[basis]}"
+                + (" · departamento" if overhead.department_id else ""),
             })
     return _round(total), entries
 
@@ -285,7 +327,13 @@ def order_control(db, order: ProductionOrder) -> dict:
     actual_unit = _round(actual_total / completed) if completed else 0
     deviation = _round(actual_total - earned_budget)
     deviation_pct = round(deviation / earned_budget * 100, 2) if earned_budget else (100 if actual_total else 0)
-    forecast_total = _round(actual_total + max(0, order.quantity - completed) * baseline.total_cost)
+    # Previsao do custo final (EAC): com produção suficiente para o custo real
+    # observado ser fiável (>=10% da OF), extrapola o que falta a esse ritmo em
+    # vez de assumir que o resto vai custar exatamente o orçamento-padrão.
+    remaining_qty = max(0, (order.quantity or 0) - completed)
+    progress_ratio = completed / order.quantity if order.quantity else 0
+    remaining_unit_cost = actual_unit if progress_ratio >= 0.1 and actual_unit else baseline.total_cost
+    forecast_total = _round(actual_total + remaining_qty * remaining_unit_cost)
     comparison = []
     for category in CATEGORIES:
         allowed = _round(budget_unit[category] * completed)

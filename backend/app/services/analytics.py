@@ -1,16 +1,52 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import func
 
 from ..models import (
-    Certification, Company, CuttingJob, Employee, Machine, Operation, ProductionEvent,
+    Certification, Company, CuttingJob, Employee, Machine, Operation, ProductOperation, ProductionEvent,
     ProductionLine, ProductionOrder, QualityInspection, Sample, StockLot, Style,
 )
 
 
-def dashboard_metrics(db, company_id: int) -> dict:
+def _earned_minutes_resolver(db, company_id: int):
+    """Resolve minutos-padrao por evento usando o SMV do artigo (ProductOperation),
+    com fallback para o tempo generico da operacao - a mesma prioridade ja usada em
+    costing.py e confection_capacity.py::capacity_check, agora tambem aqui. Pre-carrega
+    tudo de uma vez para nao repetir uma query por evento."""
+    operations = {row.id: row for row in db.query(Operation).filter_by(company_id=company_id).all()}
+    orders = {row.id: row for row in db.query(ProductionOrder).filter_by(company_id=company_id).all()}
+    smv_by_style_operation = {}
+    for row in db.query(ProductOperation).filter_by(company_id=company_id).all():
+        if row.smv:
+            smv_by_style_operation[(row.style_id, row.operation_id)] = row.smv
+
+    def earned_minutes(event) -> float:
+        operation = operations.get(event.operation_id)
+        order = orders.get(event.production_order_id)
+        style_smv = smv_by_style_operation.get((order.style_id, event.operation_id)) if order else None
+        minutes = style_smv or (operation.standard_time_min if operation else 0) or 0
+        return minutes * (event.quantity_good or 0)
+
+    return earned_minutes
+
+
+def _in_period(event, start: date | None, end: date | None) -> bool:
+    if not start and not end:
+        return True
+    when = event.event_time
+    if when is None:
+        return False
+    day = when.date() if isinstance(when, datetime) else when
+    if start and day < start:
+        return False
+    if end and day > end:
+        return False
+    return True
+
+
+def dashboard_metrics(db, company_id: int, start: date | None = None, end: date | None = None) -> dict:
     orders = db.query(ProductionOrder).filter_by(company_id=company_id).all()
-    events = db.query(ProductionEvent).filter_by(company_id=company_id).all()
+    events = [row for row in db.query(ProductionEvent).filter_by(company_id=company_id).all() if _in_period(row, start, end)]
     quality = db.query(QualityInspection).filter_by(company_id=company_id).all()
     total_planned = sum(row.quantity for row in orders)
     total_completed = sum(row.completed_quantity for row in orders)
@@ -36,7 +72,8 @@ def dashboard_metrics(db, company_id: int) -> dict:
         "direct_cost": round(labor_cost + machine_cost, 2),
         "alerts": alerts,
         "orders": [order_summary(db, row) for row in sorted(active, key=lambda item: (item.priority, item.planned_end or date.max))[:12]],
-        "lines": line_performance(db, company_id),
+        "lines": line_performance(db, company_id, start, end),
+        "period": {"start": start.isoformat() if start else None, "end": end.isoformat() if end else None},
     }
 
 
@@ -82,18 +119,19 @@ def order_summary(db, order: ProductionOrder) -> dict:
     }
 
 
-def line_performance(db, company_id: int) -> list[dict]:
+def line_performance(db, company_id: int, start: date | None = None, end: date | None = None) -> list[dict]:
     lines = db.query(ProductionLine).filter_by(company_id=company_id, active=True).all()
+    earned_minutes = _earned_minutes_resolver(db, company_id)
     result = []
     for line in lines:
-        events = db.query(ProductionEvent).filter_by(company_id=company_id, line_id=line.id).all()
+        events = [
+            row for row in db.query(ProductionEvent).filter_by(company_id=company_id, line_id=line.id).all()
+            if _in_period(row, start, end)
+        ]
         minutes = sum(row.duration_minutes for row in events)
         good = sum(row.quantity_good for row in events)
         rejected = sum(row.quantity_rejected for row in events)
-        earned = 0
-        for event in events:
-            operation = db.get(Operation, event.operation_id) if event.operation_id else None
-            earned += (operation.standard_time_min if operation else 0) * event.quantity_good
+        earned = sum(earned_minutes(row) for row in events)
         efficiency = round(earned / minutes * 100, 1) if minutes else 0
         result.append({
             "id": line.id, "code": line.code, "name": line.name,
@@ -104,15 +142,19 @@ def line_performance(db, company_id: int) -> list[dict]:
     return result
 
 
-def employee_performance(db, company_id: int) -> list[dict]:
+def employee_performance(db, company_id: int, start: date | None = None, end: date | None = None) -> list[dict]:
     employees = db.query(Employee).filter_by(company_id=company_id, active=True).all()
+    earned_minutes = _earned_minutes_resolver(db, company_id)
     rows = []
     for employee in employees:
-        events = db.query(ProductionEvent).filter_by(company_id=company_id, employee_id=employee.id).all()
+        events = [
+            row for row in db.query(ProductionEvent).filter_by(company_id=company_id, employee_id=employee.id).all()
+            if _in_period(row, start, end)
+        ]
         minutes = sum(event.duration_minutes for event in events)
         good = sum(event.quantity_good for event in events)
         rejected = sum(event.quantity_rejected for event in events)
-        earned = sum((db.get(Operation, event.operation_id).standard_time_min if event.operation_id and db.get(Operation, event.operation_id) else 0) * event.quantity_good for event in events)
+        earned = sum(earned_minutes(event) for event in events)
         rows.append({
             "id": employee.id, "code": employee.code, "name": employee.name,
             "job_title": employee.job_title, "good": good, "rejected": rejected,
@@ -123,11 +165,14 @@ def employee_performance(db, company_id: int) -> list[dict]:
     return sorted(rows, key=lambda row: row["efficiency"], reverse=True)
 
 
-def machine_performance(db, company_id: int) -> list[dict]:
+def machine_performance(db, company_id: int, start: date | None = None, end: date | None = None) -> list[dict]:
     machines = db.query(Machine).filter_by(company_id=company_id, active=True).all()
     rows = []
     for machine in machines:
-        events = db.query(ProductionEvent).filter_by(company_id=company_id, machine_id=machine.id).all()
+        events = [
+            row for row in db.query(ProductionEvent).filter_by(company_id=company_id, machine_id=machine.id).all()
+            if _in_period(row, start, end)
+        ]
         minutes = sum(event.duration_minutes for event in events)
         good = sum(event.quantity_good for event in events)
         rejected = sum(event.quantity_rejected for event in events)

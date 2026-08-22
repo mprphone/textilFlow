@@ -12,6 +12,7 @@ class QualityInspection(Base, TimestampMixin):
     batch_id = Column(Integer, ForeignKey("production_batches.id"))
     operation_id = Column(Integer, ForeignKey("operations.id"))
     employee_id = Column(Integer, ForeignKey("employees.id"))
+    machine_id = Column(Integer, ForeignKey("machines.id"))
     supplier_id = Column(Integer, ForeignKey("suppliers.id"))
     inspection_type = Column(String(50), default="inline", nullable=False)
     inspected_quantity = Column(Float, default=0, nullable=False)

@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -11,15 +13,15 @@ router = APIRouter(prefix="/reports", tags=["Relatórios"])
 
 
 @router.get("/{company_id}/employees")
-def employees(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def employees(company_id: int, start: date | None = None, end: date | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_module_access(db, user, company_id, {"overview"})
-    return employee_performance(db, company_id)
+    return employee_performance(db, company_id, start, end)
 
 
 @router.get("/{company_id}/machines")
-def machines(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def machines(company_id: int, start: date | None = None, end: date | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_module_access(db, user, company_id, {"overview"})
-    return machine_performance(db, company_id)
+    return machine_performance(db, company_id, start, end)
 
 
 @router.get("/{company_id}/costs")
