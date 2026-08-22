@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#e4eef8">
+  <title>TextileFlow AI</title>
+  <link rel="stylesheet" href="/assets/styles.css?v=20260819-4">
+  <link rel="stylesheet" href="/assets/costing.css?v=20260819-13">
+  <link rel="stylesheet" href="/assets/experience.css?v=20260820-8">
+  <link rel="stylesheet" href="/assets/wizard.css?v=20260819-8">
+  <link rel="stylesheet" href="/assets/confection.css?v=20260822-3">
+  <link rel="stylesheet" href="/assets/confection-map.css?v=20260822-15">
+  <link rel="stylesheet" href="/assets/chrome.css?v=20260821-23">
+</head>
+<body>
+  <section id="login-screen" class="login-screen">
+    <div class="login-brand">
+      <span class="eyebrow">PLM · ERP · MES TÊXTIL</span>
+      <h1>Textile<span>Flow</span></h1>
+      <p>Do primeiro desenho à expedição. Produto, custos, capacidade, pessoas, máquinas e produção real numa única plataforma.</p>
+      <div class="feature-row"><span>Fichas adaptativas</span><span>Chão de fábrica</span><span>Custos reais</span></div>
+    </div>
+    <form id="login-form" class="login-card">
+      <div><span class="status-dot"></span><small>Sistema local disponível</small></div>
+      <h2>Bem-vindo</h2>
+  <p class="muted">Entre com <b>admin</b> / <b>admin123</b>. A senha muda-se depois, no círculo do utilizador no canto superior direito.</p>
+      <label>Utilizador<input id="login-username" autocomplete="username" value="admin" required></label>
+      <label>Palavra-passe<input id="login-password" type="password" autocomplete="current-password" value="admin123" required></label>
+      <button class="btn primary wide" type="submit">Entrar</button>
+      <p id="login-message" class="form-message"></p>
+    </form>
+  </section>
+
+  <div id="app-shell" class="app-shell saft-shell hidden">
+    <header class="topbar">
+      <button id="menu-toggle" class="icon-button" aria-label="Menu">☰</button>
+      <a class="brand" href="#/dashboard">Textile<span>Flow</span></a>
+      <div class="topbar-title"><strong id="page-title">Dashboard</strong><span id="page-subtitle">Controlo industrial integrado</span></div>
+      <nav id="module-nav" class="module-nav" aria-label="Módulos principais"></nav>
+      <div class="topbar-actions">
+        <button id="quick-action" class="btn primary quick-action" type="button">＋ Novo</button>
+        <button id="user-button" class="user-chip" type="button">A</button>
+        <span id="user-meta" class="user-meta"></span>
+        <button id="logout-button" class="topbar-logout" type="button">Sair</button>
+      </div>
+    </header>
+    <aside class="sidebar">
+      <div class="company-card">
+        <label><span>EMPRESA</span><select id="company-select" aria-label="Empresa"></select></label>
+        <strong id="company-card-name">—</strong>
+        <small id="company-card-meta"></small>
+        <span id="api-status" class="api-status"><i></i> Sistema em direto</span>
+      </div>
+      <div class="sidebar-context"><span>MÓDULO ATUAL</span><strong id="sidebar-module-title">Visão geral</strong></div>
+      <nav id="main-nav"></nav>
+      <div id="sidebar-shortcuts" class="sidebar-shortcuts"></div>
+    </aside>
+    <div class="workspace">
+      <main id="page-content" class="page-content"></main>
+    </div>
+  </div>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+    <button id="modal-emergency-close" class="modal-emergency-close" type="button" aria-label="Fechar janela">×</button>
+    <div class="modal-card">
+      <header>
+        <div><h2 id="modal-title">Registo</h2><p id="modal-subtitle"></p></div>
+        <div class="modal-header-right">
+          <div id="modal-status-slot"></div>
+          <button id="modal-close" class="icon-button">×</button>
+        </div>
+      </header>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+  <div id="toast-stack" class="toast-stack"></div>
+  <script type="module" src="/js/app.js?v=20260822-14"></script>
+</body>
+</html>
