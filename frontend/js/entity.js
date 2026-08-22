@@ -19,8 +19,8 @@ export async function renderEntityPage(container, config) {
         <label class="listing-size">Mostrar <select data-page-size><option>25</option><option selected>50</option><option>100</option></select> registos</label>
         <div class="table-search"><span>⌕</span><input class="filter-input" data-filter placeholder="Procurar…"></div>
       </div>
-      <div class="table-wrap listing-table"><table class="data-table"><thead><tr>${config.columns.map(column => `<th>${esc(column.label)}</th>`).join('')}<th></th></tr></thead><tbody data-body></tbody></table></div>
-      <div class="list-pager" data-list-pager></div>
+      <div class="table-wrap listing-table"><table class="data-table" aria-label="${esc(config.title || 'Registos')}"><thead><tr>${config.columns.map(column => `<th scope="col">${esc(column.label)}</th>`).join('')}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody data-body></tbody></table></div>
+      <div class="list-pager" data-list-pager role="status" aria-live="polite"></div>
     </section>`;
   const body = container.querySelector('[data-body]');
   const pager = container.querySelector('[data-list-pager]');

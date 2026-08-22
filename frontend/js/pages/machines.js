@@ -13,7 +13,7 @@ export async function render(container) {
       {key:'manufacturer',label:'Fabricante'},{key:'model',label:'Modelo'},{key:'serial_no',label:'N.º série'},
       {key:'hourly_cost',label:'Custo/hora',type:'number',default:0},{key:'target_units_hour',label:'Objetivo un./h',type:'number',default:0},
       {key:'status',label:'Estado',type:'select',options:['available','running','maintenance','stopped'],default:'available'},
-      {key:'next_maintenance',label:'Próxima manutenção',type:'date'},{key:'iot_identifier',label:'Identificador IoT'},{key:'active',label:'Ativa',type:'checkbox',default:true},
+      {key:'next_maintenance',label:'Próxima manutenção',type:'date'},{key:'iot_identifier',label:'Identificador IoT',help:'Só como referência — não há hoje nenhuma integração automática que leia este identificador.'},{key:'active',label:'Ativa',type:'checkbox',default:true},
     ],columns:[{key:'code',label:'Código'},{key:'name',label:'Máquina'},{key:'machine_type',label:'Tipo'},{key:'line_id',label:'Linha'},{key:'hourly_cost',label:'Custo/h',render:r=>money(r.hourly_cost)},{key:'target_units_hour',label:'Objetivo/h',render:r=>number(r.target_units_hour)},{key:'next_maintenance',label:'Manutenção',render:r=>date(r.next_maintenance)},{key:'status',label:'Estado',render:r=>badge(r.status)}]}},
     {label:'Linhas / células',config:{resource:'production-lines',title:'Linhas e células',subtitle:'Modos de produção e capacidade diária.',singular:'linha',newLabel:'Nova linha',fields:async()=>[
       {key:'code',label:'Código',required:true},{key:'name',label:'Nome',required:true},{key:'department_id',label:'Departamento',type:'select',options:await options('departments','name')},

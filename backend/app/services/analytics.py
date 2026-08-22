@@ -3,9 +3,15 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import func
 
 from ..models import (
-    Certification, Company, CuttingJob, Employee, Machine, Operation, ProductOperation, ProductionEvent,
-    ProductionLine, ProductionOrder, QualityInspection, Sample, StockLot, Style,
+    Certification, Company, CuttingJob, DowntimeEvent, Employee, Machine, Operation, ProductOperation,
+    ProductionEvent, ProductionLine, ProductionOrder, QualityInspection, Sample, StockLot, Style,
 )
+
+DOWNTIME_REASON_LABEL = {
+    "breakdown": "Avaria", "setup": "Preparação/mudança", "material": "Falta de material",
+    "quality": "Paragem de qualidade", "maintenance": "Manutenção planeada", "no_operator": "Sem operador",
+    "other": "Outro",
+}
 
 
 def _earned_minutes_resolver(db, company_id: int):
@@ -202,4 +208,56 @@ def cost_overview(db, company_id: int) -> dict:
         "production_rejected": sum(row.quantity_rejected for row in events),
         "employee_rows": employee_performance(db, company_id),
         "machine_rows": machine_performance(db, company_id),
+    }
+
+
+def downtime_summary(db, company_id: int, start: date | None = None, end: date | None = None) -> dict:
+    """Paragens por linha/motivo e um OEE aproximado a partir dos dados já
+    recolhidos (Disponibilidade x Desempenho x Qualidade) - antes, DowntimeEvent
+    era capturado no chão de fábrica e nunca lido em lado nenhum."""
+    downtimes = [
+        row for row in db.query(DowntimeEvent).filter_by(company_id=company_id).all()
+        if (not start or (row.started_at and row.started_at.date() >= start))
+        and (not end or (row.started_at and row.started_at.date() <= end))
+    ]
+    events = [row for row in db.query(ProductionEvent).filter_by(company_id=company_id).all() if _in_period(row, start, end)]
+    earned_minutes = _earned_minutes_resolver(db, company_id)
+
+    by_reason: dict[str, float] = {}
+    by_line: dict[int, float] = {}
+    for row in downtimes:
+        by_reason[row.reason_code] = by_reason.get(row.reason_code, 0) + (row.duration_minutes or 0)
+        if row.line_id:
+            by_line[row.line_id] = by_line.get(row.line_id, 0) + (row.duration_minutes or 0)
+
+    lines = db.query(ProductionLine).filter_by(company_id=company_id, active=True).all()
+    line_rows = []
+    for line in lines:
+        line_events = [row for row in events if row.line_id == line.id]
+        productive = sum(row.duration_minutes or 0 for row in line_events)
+        downtime = by_line.get(line.id, 0)
+        good = sum(row.quantity_good or 0 for row in line_events)
+        rejected = sum(row.quantity_rejected or 0 for row in line_events)
+        earned = sum(earned_minutes(row) for row in line_events)
+        availability = productive / (productive + downtime) if (productive + downtime) else 0
+        performance = min(1, earned / productive) if productive else 0
+        quality = good / (good + rejected) if (good + rejected) else 1
+        if not productive and not downtime:
+            continue
+        line_rows.append({
+            "id": line.id, "name": line.name,
+            "productive_minutes": round(productive, 1), "downtime_minutes": round(downtime, 1),
+            "availability_pct": round(availability * 100, 1), "performance_pct": round(performance * 100, 1),
+            "quality_pct": round(quality * 100, 1), "oee_pct": round(availability * performance * quality * 100, 1),
+        })
+
+    reason_rows = sorted(
+        [{"reason_code": code, "label": DOWNTIME_REASON_LABEL.get(code, code), "minutes": round(minutes, 1)} for code, minutes in by_reason.items()],
+        key=lambda row: row["minutes"], reverse=True,
+    )
+    return {
+        "lines": line_rows,
+        "reasons": reason_rows,
+        "total_downtime_minutes": round(sum(by_reason.values()), 1),
+        "event_count": len(downtimes),
     }

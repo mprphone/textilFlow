@@ -6,7 +6,7 @@ export function assistantPanel(briefing) {
   return `<section class="factory-copilot"><div class="copilot-head"><div><span>✦</span><div><b>Assistente da fábrica</b><small>Responde com os dados reais do sistema</small></div></div><em>IA operacional</em></div>
     <div class="copilot-prompts">${briefing.questions.map(question => `<button data-question="${esc(question)}">${esc(question)}</button>`).join('')}</div>
     <div class="copilot-input"><input id="factory-question" placeholder="Pergunte sobre custos, prazos, eficiência ou qualidade…"><button data-ask aria-label="Perguntar">→</button></div>
-    <div id="factory-answer" class="copilot-answer hidden"></div>
+    <div id="factory-answer" class="copilot-answer hidden" role="status" aria-live="polite"></div>
   </section>`;
 }
 

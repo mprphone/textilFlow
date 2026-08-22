@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ...db import get_db
 from ...models import User
-from ...services.analytics import cost_overview, employee_performance, machine_performance
+from ...services.analytics import cost_overview, downtime_summary, employee_performance, machine_performance
 from ..deps import current_user, require_module_access
 
 
@@ -28,3 +28,9 @@ def machines(company_id: int, start: date | None = None, end: date | None = None
 def costs(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_module_access(db, user, company_id, {"overview"})
     return cost_overview(db, company_id)
+
+
+@router.get("/{company_id}/downtime")
+def downtime(company_id: int, start: date | None = None, end: date | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_module_access(db, user, company_id, {"overview"})
+    return downtime_summary(db, company_id, start, end)
