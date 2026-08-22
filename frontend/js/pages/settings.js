@@ -56,7 +56,6 @@ async function renderIntegrations(panel){
       <form id="erp-system-form" class="form-grid">
         <div class="field"><label>Trabalham com<select name="system">
           <option value="primavera" ${erpSystem==='primavera'?'selected':''}>Primavera (tipo FA + série)</option>
-          <option value="moloni" ${erpSystem==='moloni'?'selected':''}>Moloni (FT, série do ano)</option>
           <option value="generic" ${erpSystem==='generic'?'selected':''}>Outro / genérico TextileFlow</option>
         </select></label><small class="muted">O separador Documentos usa os códigos e a série desse sistema, para a fábrica não mudar de hábitos.</small></div>
         ${canManage?'<div class="form-footer"><button class="btn primary" type="submit">Guardar sistema</button></div>':''}
@@ -305,7 +304,6 @@ function refreshCompanySelect() {
 
 const KNOWN_BILLING_SOFTWARE = [
   {value:'primavera', label:'Primavera'},
-  {value:'moloni', label:'Moloni'},
   {value:'generic', label:'TextileFlow / genérico'},
 ];
 
