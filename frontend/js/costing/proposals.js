@@ -368,6 +368,7 @@ async function saveProposal(root, sheetId) {
     valid_until:valueOf(root, '[name="valid_until"]') || null,
     notes:valueOf(root, '[name="notes"]') || null,
     vat_pct:validNumber(root, '[name="vat_pct"]', 'IVA'),
+    currency:valueOf(root, '[name="currency"]') || null,
     payment_terms:valueOf(root, '[name="payment_terms"]') || '30 dias',
     client_notes:valueOf(root, '[name="client_notes"]') || null,
     lines:readLines(root),
@@ -641,9 +642,11 @@ export async function renderProposalDetail(container, sheetId) {
           <label>Quantidade<input name="quantity" type="number" min="1" step="1" value="${finiteNumber(sheet.quantity_basis, 1)}" ${locked ? 'disabled' : ''}></label>
           <label>Cliente<select name="customer_id" ${locked ? 'disabled' : ''}><option value="">Ficha interna</option>${customers.map(row => `<option value="${row.id}" data-payment="${esc(row.payment_terms || '')}" ${String(row.id) === String(sheet.customer_id) ? 'selected' : ''}>${esc(row.name)}</option>`).join('')}</select></label>
           <label>Venda / peça s/ IVA<input name="selling_price" type="number" min="0" step="any" value="${finiteNumber(sheet.selling_price)}" ${locked ? 'disabled' : ''}></label>
+          <label>Moeda<select name="currency" ${locked ? 'disabled' : ''}>${['EUR','USD','GBP','CHF'].map(code => `<option value="${code}" ${(sheet.currency || 'EUR') === code ? 'selected' : ''}>${code}</option>`).join('')}</select></label>
           <label>Válida até<input name="valid_until" type="date" value="${esc(sheet.valid_until || '')}" ${locked ? 'disabled' : ''}></label>
           <label>Notas internas<input name="notes" value="${esc(sheet.notes || '')}" placeholder="Só para a fábrica" ${locked ? 'disabled' : ''}></label>
         </div>
+        ${sheet.currency && sheet.currency !== sheet.base_currency ? `<p class="muted" style="margin:8px 12px 0">${sheet.fx_missing ? `⚠ Sem taxa de câmbio ${esc(sheet.currency)} → ${esc(sheet.base_currency)} configurada em Tabelas → Câmbio — os totais em ${esc(sheet.base_currency)} não são mostrados.` : `≈ ${money(sheet.sales_total_base)} ${esc(sheet.base_currency)} à taxa de ${finiteNumber(sheet.fx_rate).toFixed(4)} (venda) · margem ≈ ${money(sheet.margin_value_base)} ${esc(sheet.base_currency)}`}</p>` : ''}
       </section>
       <div class="proposal-alerts" data-proposal-alerts></div>
       <section class="card cost-composition-card">

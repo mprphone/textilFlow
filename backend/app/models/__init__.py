@@ -2,7 +2,7 @@ from .alias import ItemAlias
 from .commercial import CommercialDocument
 from .configuration import AuditLog, FieldDefinition, FormTemplate, WorkflowDefinition
 from .confection import CapacityDay, CapacityEvent, EmployeeSkill, ExternalCapacity, SewingPlan, WorkShift
-from .costs import ActualCostEntry, CostLine, CostSheet, OverheadCost
+from .costs import ActualCostEntry, CostLine, CostSheet, ExchangeRate, OverheadCost
 from .development import Development, DevelopmentAssignee, DevelopmentComment, DevelopmentStageEvent, DevelopmentTask
 from .factory import Department, Employee, Facility, Machine, MachineType, ProductionLine, SkillType
 from .identity import Company, User, UserCompany

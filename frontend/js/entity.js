@@ -1,6 +1,6 @@
 import { crudCreate, crudDelete, crudList, crudUpdate } from './api.js';
 import { esc, humanize } from './format.js?v=20260819-5';
-import { bindPasswordToggles, readForm, renderForm } from './forms.js?v=20260821-18';
+import { bindPasswordToggles, bindPhotoFields, readForm, renderForm } from './forms.js?v=20260822-2';
 import { state } from './state.js';
 import { closeModal, confirmDelete, empty, openModal, pageHeader, toast } from './ui.js?v=20260820-5';
 
@@ -60,6 +60,7 @@ export async function renderEntityPage(container, config) {
     const fields = typeof config.fields === 'function' ? await config.fields(row) : defaultFields;
     openModal(row ? `Editar ${config.singular}` : config.newLabel || `Novo ${config.singular}`, renderForm(fields, row || {}), config.formSubtitle || 'Os campos marcados com * são obrigatórios.');
     bindPasswordToggles(document.getElementById('modal-body'));
+    bindPhotoFields(document.getElementById('modal-body'));
     document.querySelector('[data-close-modal]').addEventListener('click', closeModal);
     document.getElementById('record-form').addEventListener('submit', async event => {
       event.preventDefault();

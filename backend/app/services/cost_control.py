@@ -4,11 +4,12 @@ from datetime import datetime, time, timedelta, timezone
 from sqlalchemy import func
 
 from ..models import (
-    ActualCostEntry, BOMItem, CostLine, CostSheet, Customer, CuttingJob, InventoryMovement,
+    ActualCostEntry, BOMItem, Company, CostLine, CostSheet, Customer, CuttingJob, InventoryMovement,
     Machine, Material, OverheadCost, ProductionEvent, ProductionLine, ProductionOrder, SalesOrder,
     SalesOrderLine, StockLot, Style, SubcontractJob, SubcontractService,
 )
 from .costing import recalculate_sheet
+from .currency import base_currency, convert_to_base
 from .proposal_release import ACCEPTED_STATUSES, annotated_cost_lines, production_preview
 from .serialization import model_to_dict
 
@@ -35,7 +36,22 @@ def sheet_view(db, sheet: CostSheet) -> dict:
     lines = annotated_cost_lines(db, sheet)
     preview = production_preview(db, sheet)
     result = model_to_dict(sheet)
+    company = db.get(Company, sheet.company_id)
+    sheet_currency = sheet.currency or base_currency(company)
+    sales_total_native = _round(sheet.selling_price * sheet.quantity_basis)
+    proposal_total_native = _round(sheet.total_cost * sheet.quantity_basis)
+    margin_native = _round((sheet.selling_price - sheet.total_cost) * sheet.quantity_basis)
+    fx = convert_to_base(db, company, sales_total_native, sheet_currency)
+    fx_cost = convert_to_base(db, company, proposal_total_native, sheet_currency)
+    fx_margin = convert_to_base(db, company, margin_native, sheet_currency)
     result.update({
+        "currency": sheet_currency,
+        "base_currency": base_currency(company),
+        "fx_missing": fx["fx_missing"],
+        "fx_rate": fx["rate"],
+        "sales_total_base": fx["amount"],
+        "proposal_total_base": fx_cost["amount"],
+        "margin_value_base": fx_margin["amount"],
         "quote_no": meta.get("quote_no") or f"PROP-{sheet.id:05d}",
         "customer_id": customer.id if customer else None,
         "customer_name": customer.name if customer else "—",
@@ -115,6 +131,9 @@ def save_sheet(db, sheet: CostSheet, payload) -> CostSheet:
     sheet.custom_data = meta
     sheet.quantity_basis = payload.quantity
     sheet.selling_price = payload.selling_price
+    currency = (getattr(payload, "currency", None) or "").strip().upper()
+    if currency:
+        sheet.currency = currency
     db.query(CostLine).filter_by(cost_sheet_id=sheet.id).delete(synchronize_session=False)
     for item in payload.lines:
         category = item.category if item.category in CATEGORIES else "other"
@@ -323,11 +342,19 @@ def order_control(db, order: ProductionOrder) -> dict:
             "baseline": None, "actual": actual, "metrics": {"actual_total": actual_total}, "comparison": [],
         }
     lines = db.query(CostLine).filter_by(cost_sheet_id=baseline.id).all()
+    # O custo real (actual_order_cost) e sempre incorrido na moeda da empresa
+    # (mao de obra/maquina/material locais); o orcamento vem da ficha de custo,
+    # que pode ter sido cotada noutra moeda. Converte o orcamento para a moeda
+    # da empresa antes de comparar - senao a comparacao mistura moedas.
+    company = db.get(Company, order.company_id)
+    fx = convert_to_base(db, company, 1, baseline.currency)
+    fx_rate = fx["rate"] if not fx["fx_missing"] else 1.0
     budget_unit = defaultdict(float)
     for line in lines:
-        budget_unit[line.category if line.category in CATEGORIES else "other"] += line.amount or 0
-    earned_budget = _round(baseline.total_cost * completed)
-    full_budget = _round(baseline.total_cost * order.quantity)
+        budget_unit[line.category if line.category in CATEGORIES else "other"] += (line.amount or 0) * fx_rate
+    baseline_unit_cost = baseline.total_cost * fx_rate
+    earned_budget = _round(baseline_unit_cost * completed)
+    full_budget = _round(baseline_unit_cost * order.quantity)
     actual_unit = _round(actual_total / completed) if completed else 0
     deviation = _round(actual_total - earned_budget)
     deviation_pct = round(deviation / earned_budget * 100, 2) if earned_budget else (100 if actual_total else 0)
@@ -336,7 +363,7 @@ def order_control(db, order: ProductionOrder) -> dict:
     # vez de assumir que o resto vai custar exatamente o orçamento-padrão.
     remaining_qty = max(0, (order.quantity or 0) - completed)
     progress_ratio = completed / order.quantity if order.quantity else 0
-    remaining_unit_cost = actual_unit if progress_ratio >= 0.1 and actual_unit else baseline.total_cost
+    remaining_unit_cost = actual_unit if progress_ratio >= 0.1 and actual_unit else baseline_unit_cost
     forecast_total = _round(actual_total + remaining_qty * remaining_unit_cost)
     comparison = []
     for category in CATEGORIES:
@@ -369,8 +396,8 @@ def order_control(db, order: ProductionOrder) -> dict:
             "material_id": material_id, "description": line.description, "unit": line.unit,
             "planned_quantity": planned_quantity, "actual_quantity": _round(actual_item["quantity"]),
             "quantity_deviation": _round(actual_item["quantity"] - planned_quantity),
-            "planned_cost": _round(line.amount * completed), "actual_cost": _round(actual_item["amount"]),
-            "cost_deviation": _round(actual_item["amount"] - line.amount * completed),
+            "planned_cost": _round(line.amount * fx_rate * completed), "actual_cost": _round(actual_item["amount"]),
+            "cost_deviation": _round(actual_item["amount"] - line.amount * fx_rate * completed),
         })
     status = "risk" if deviation_pct > 5 else "warning" if deviation_pct > 0 else "on_track"
     return {
@@ -379,9 +406,10 @@ def order_control(db, order: ProductionOrder) -> dict:
         "actual": actual,
         "metrics": {
             "completed_quantity": completed, "progress_pct": round(completed / order.quantity * 100, 2) if order.quantity else 0,
-            "budget_unit": _round(baseline.total_cost), "budget_total": full_budget,
+            "budget_unit": _round(baseline_unit_cost), "budget_total": full_budget,
             "earned_budget": earned_budget, "actual_total": actual_total, "actual_unit": actual_unit,
             "deviation": deviation, "deviation_pct": deviation_pct, "forecast_total": forecast_total, "status": status,
+            "baseline_currency": baseline.currency or base_currency(company), "fx_rate": fx["rate"], "fx_missing": fx["fx_missing"],
         },
         "comparison": comparison,
         "material_comparison": material_comparison,

@@ -80,6 +80,7 @@ def create_sheet(payload: CostSheetCreate, db: Session = Depends(get_db), user: 
     sheet = CostSheet(
         company_id=payload.company_id, style_id=style.id, version=version, status="draft",
         quantity_basis=payload.quantity, selling_price=payload.selling_price,
+        currency=(customer.currency if payload.customer_id and customer and customer.currency else None),
         custom_data={
             "customer_id": payload.customer_id,
             "quote_no": payload.quote_no,
@@ -230,6 +231,7 @@ def duplicate_sheet(sheet_id: int, db: Session = Depends(get_db), user: User = D
     copy = CostSheet(
         company_id=source.company_id, style_id=source.style_id, version=version, status="draft",
         quantity_basis=source.quantity_basis, selling_price=source.selling_price, custom_data=meta,
+        currency=source.currency,
     )
     db.add(copy)
     db.flush()

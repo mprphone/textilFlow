@@ -21,6 +21,7 @@ class CostSheet(Base, TimestampMixin):
     total_cost = Column(Float, default=0, nullable=False)
     selling_price = Column(Float, default=0, nullable=False)
     margin_pct = Column(Float, default=0, nullable=False)
+    currency = Column(String(3))
     custom_data = Column(JSON, default=dict, nullable=False)
     __table_args__ = (UniqueConstraint("style_id", "version"),)
 
@@ -52,6 +53,21 @@ class OverheadCost(Base, TimestampMixin):
     amount = Column(Float, default=0, nullable=False)
     allocation_basis = Column(String(40), default="production_minutes", nullable=False)
     custom_data = Column(JSON, default=dict, nullable=False)
+
+
+class ExchangeRate(Base, TimestampMixin):
+    """Taxa de cambio manual de uma moeda estrangeira para a moeda da empresa
+    (Company.currency). Nao e um modulo de tesouraria - apenas o suficiente
+    para nao somar valores de moedas diferentes como se fossem iguais."""
+
+    __tablename__ = "exchange_rates"
+    id = Column(Integer, primary_key=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    currency = Column(String(3), nullable=False)
+    rate_to_base = Column(Float, nullable=False)
+    effective_date = Column(Date, nullable=False)
+    notes = Column(Text)
+    __table_args__ = (UniqueConstraint("company_id", "currency", "effective_date"),)
 
 
 class ActualCostEntry(Base, TimestampMixin):

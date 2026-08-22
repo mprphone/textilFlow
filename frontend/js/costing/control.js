@@ -71,6 +71,7 @@ export async function renderControlDetail(container, orderId) {
       <div><b>${number(metrics.progress_pct)}%</b><span>Produção concluída</span></div>
       <p>Comparamos o custo real já incorrido com o orçamento correspondente às ${number(metrics.completed_quantity)} peças concluídas.</p>
     </div>
+    ${metrics.fx_missing ? `<p class="muted cost-bad">⚠ A proposta-base foi cotada em ${esc(metrics.baseline_currency)} e não há taxa de câmbio configurada — os valores abaixo estão em ${esc(metrics.baseline_currency)}, não convertidos. Configure a taxa em Tabelas → Câmbio.</p>` : ''}
     <div class="metric-grid cost-metrics">
       <div class="metric"><span class="label">Orçamento por peça</span><strong>${money(metrics.budget_unit)}</strong><span class="trend">proposta aprovada</span></div>
       <div class="metric"><span class="label">Orçamento até hoje</span><strong>${money(metrics.earned_budget)}</strong><span class="trend">para o já produzido</span></div>

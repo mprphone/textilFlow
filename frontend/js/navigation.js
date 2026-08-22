@@ -174,6 +174,7 @@ export const MODULES = [
       ['tables-suppliers','Fornecedores','⇄'],
       ['tables-items','Artigos','▣'],
       ['tables-banks','Bancos','€'],
+      ['tables-exchange-rates','Câmbio','€'],
     ],
     quick:[['tables-customers','Abrir clientes'],['tables-items','Abrir artigos']],
   },

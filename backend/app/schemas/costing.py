@@ -38,6 +38,7 @@ class CostSheetSave(CostingModel):
     quote_no: str | None = None
     quantity: float = Field(gt=0)
     selling_price: float = Field(ge=0)
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
     valid_until: date | None = None
     notes: str | None = None
     vat_pct: float = Field(default=23, ge=0, le=100)

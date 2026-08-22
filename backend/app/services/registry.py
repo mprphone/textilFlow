@@ -18,6 +18,7 @@ RESOURCE_MODELS = {
     "departments": models.Department,
     "downtimes": models.DowntimeEvent,
     "employees": models.Employee,
+    "exchange-rates": models.ExchangeRate,
     "employee-skills": models.EmployeeSkill,
     "external-capacities": models.ExternalCapacity,
     "facilities": models.Facility,

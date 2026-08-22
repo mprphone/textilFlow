@@ -76,6 +76,21 @@ function configs() {
         {key:'active', label:'Estado', render:r=>badge(r.active?'activo':'inactivo')},
       ],
     },
+    'exchange-rates': {
+      resource:'exchange-rates', title:'Câmbio', subtitle:'Taxa manual de conversão de moeda estrangeira para a moeda da empresa. Usada nas propostas e no controlo de custos em moeda diferente.',
+      singular:'taxa de câmbio', newLabel:'Nova taxa',
+      fields:[
+        {key:'currency', label:'Moeda estrangeira', required:true, placeholder:'USD'},
+        {key:'rate_to_base', label:'Taxa para a moeda da empresa', type:'number', required:true, help:'Quantas unidades da moeda da empresa equivalem a 1 unidade desta moeda (ex.: 1 USD = 0,92 EUR → 0.92).'},
+        {key:'effective_date', label:'Válida a partir de', type:'date', required:true},
+        {key:'notes', label:'Notas', type:'textarea', full:true},
+      ],
+      columns:[
+        {key:'currency', label:'Moeda', render:r=>`<b>${esc(r.currency)}</b>`},
+        {key:'rate_to_base', label:'Taxa', render:r=>money(r.rate_to_base)},
+        {key:'effective_date', label:'Válida desde'},
+      ],
+    },
     banks: {
       resource:'banks', title:'Bancos', subtitle:'Tabela Base/Banks do Primavera. '+syncHint(),
       singular:'banco', newLabel:'Novo banco', extraActions:'<button class="btn" type="button" data-sync-pri="banks">Puxar do Primavera</button>',

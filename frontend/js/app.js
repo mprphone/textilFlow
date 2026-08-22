@@ -25,7 +25,7 @@ import * as reports from './pages/reports.js?v=20260819-7';
 import * as partners from './pages/partners.js?v=20260821-6';
 import * as tables from './pages/tables.js?v=20260821-22';
 import * as shipping from './pages/shipping.js?v=20260820-6';
-import * as commercialDocs from './pages/commercial_docs.js?v=20260822-14';
+import * as commercialDocs from './pages/commercial_docs.js?v=20260822-17';
 import * as settings from './pages/settings.js?v=20260821-23';
 import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260822-15';
 
@@ -64,6 +64,7 @@ const routes={dashboard,planning:tracking,live,styles,samples,costing,orders,con
   'tables-suppliers':{render:container=>tables.render(container,'suppliers')},
   'tables-items':{render:container=>tables.render(container,'items')},
   'tables-banks':{render:container=>tables.render(container,'banks')},
+  'tables-exchange-rates':{render:container=>tables.render(container,'exchange-rates')},
 };
 const loginScreen=document.getElementById('login-screen');
 const shell=document.getElementById('app-shell');
@@ -212,5 +213,5 @@ export async function bootApp(){
 }
 
 if(!document.querySelector('script[src*="login.js"]')){
-  import('./login.js?v=20260822-16');
+  import('./login.js?v=20260822-17');
 }

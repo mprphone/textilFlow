@@ -50,6 +50,7 @@ COLUMN_MIGRATIONS = (
     ("production_batches", "sewing_line_id", "ALTER TABLE production_batches ADD COLUMN sewing_line_id INTEGER"),
     ("operations", "machine_cost_per_minute", "ALTER TABLE operations ADD COLUMN machine_cost_per_minute FLOAT DEFAULT 0"),
     ("quality_inspections", "machine_id", "ALTER TABLE quality_inspections ADD COLUMN machine_id INTEGER"),
+    ("cost_sheets", "currency", "ALTER TABLE cost_sheets ADD COLUMN currency VARCHAR(3)"),
 )
 
 

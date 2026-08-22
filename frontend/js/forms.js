@@ -1,4 +1,8 @@
 import { esc, humanize } from './format.js?v=20260819-5';
+import { toast } from './ui.js?v=20260821-19';
+
+const MAX_PHOTOS = 6;
+const MAX_PHOTO_BYTES = 1.5 * 1024 * 1024;
 
 function optionMarkup(option, selected) {
   const value = typeof option === 'object' ? option.value : option;
@@ -26,6 +30,47 @@ export function bindPasswordToggles(root = document) {
   });
 }
 
+export function bindPhotoFields(root = document) {
+  root.querySelectorAll('[data-photo-widget]').forEach(widget => {
+    if (widget.dataset.bound) return;
+    widget.dataset.bound = '1';
+    const hidden = widget.querySelector('[data-photo-value]');
+    const thumbs = widget.querySelector('[data-photo-thumbs]');
+    const input = widget.querySelector('[data-photo-input]');
+    const getPhotos = () => { try { return JSON.parse(hidden.value || '[]'); } catch { return []; } };
+    const renderThumbs = () => {
+      const photos = getPhotos();
+      thumbs.innerHTML = photos.map((src, index) => `<span class="photo-thumb"><img src="${esc(src)}" alt="Fotografia ${index + 1}"><button type="button" data-remove-photo="${index}" aria-label="Remover fotografia ${index + 1}">×</button></span>`).join('');
+      thumbs.querySelectorAll('[data-remove-photo]').forEach(button => button.addEventListener('click', () => {
+        const photos = getPhotos();
+        photos.splice(Number(button.dataset.removePhoto), 1);
+        hidden.value = JSON.stringify(photos);
+        renderThumbs();
+      }));
+    };
+    input.addEventListener('change', async () => {
+      const photos = getPhotos();
+      for (const file of Array.from(input.files || [])) {
+        if (photos.length >= MAX_PHOTOS) { toast(`Máximo de ${MAX_PHOTOS} fotografias.`, 'error'); break; }
+        if (file.size > MAX_PHOTO_BYTES) { toast(`"${file.name}" é maior que ${(MAX_PHOTO_BYTES / 1024 / 1024).toFixed(1)} MB.`, 'error'); continue; }
+        try {
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('Falha a ler o ficheiro'));
+            reader.readAsDataURL(file);
+          });
+          photos.push(dataUrl);
+        } catch { toast(`Não foi possível ler "${file.name}".`, 'error'); }
+      }
+      input.value = '';
+      hidden.value = JSON.stringify(photos);
+      renderThumbs();
+    });
+    renderThumbs();
+  });
+}
+
 export function renderForm(fields, values = {}, { submitLabel = 'Guardar', formId = 'record-form', formClass = 'form-grid' } = {}) {
   let section = null;
   const content = fields.map(field => {
@@ -34,10 +79,17 @@ export function renderForm(fields, values = {}, { submitLabel = 'Guardar', formI
     if (field.section) section = field.section;
     if (field.type === 'hidden') return `<input type="hidden" name="${field.key}" value="${esc(value)}">`;
     const required = field.required ? 'required' : '';
-    const spanClass = field.span === 2 ? 'span-2' : field.span === 3 ? 'span-3' : (['json'].includes(field.type) || field.full ? 'full' : '');
+    const spanClass = field.span === 2 ? 'span-2' : field.span === 3 ? 'span-3' : (['json','photo'].includes(field.type) || field.full ? 'full' : '');
     const title = field.title ? `title="${esc(field.title)}"` : '';
     let input;
-    if (field.type === 'select') {
+    if (field.type === 'photo') {
+      const photos = Array.isArray(value) ? value : [];
+      input = `<div class="photo-field" data-photo-widget="${field.key}">
+        <input type="hidden" name="${field.key}" data-photo-value value="${esc(JSON.stringify(photos))}">
+        <div class="photo-thumbs" data-photo-thumbs></div>
+        <label class="btn small">+ Adicionar fotografia<input type="file" accept="image/*" multiple data-photo-input style="display:none"></label>
+      </div>`;
+    } else if (field.type === 'select') {
       input = `<select name="${field.key}" ${required} ${title}><option value="">Selecionar…</option>${(field.options || []).map(option => optionMarkup(option, value)).join('')}</select>`;
     } else if (field.type === 'textarea' || field.type === 'json') {
       const shown = field.type === 'json' && typeof value === 'object' ? JSON.stringify(value, null, 2) : value;
@@ -83,6 +135,10 @@ export function readForm(form, fields) {
     if (field.type === 'json') {
       try { value = value.trim() ? JSON.parse(value) : {}; }
       catch { throw new Error(`O campo “${field.label}” não contém JSON válido.`); }
+    }
+    if (field.type === 'photo') {
+      try { value = value.trim() ? JSON.parse(value) : []; }
+      catch { value = []; }
     }
     if (value === '' && !field.required) value = null;
     data[field.key] = value;
