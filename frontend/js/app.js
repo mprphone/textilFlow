@@ -13,7 +13,7 @@ import * as floor from './pages/floor.js?v=20260822-30';
 import * as cutting from './pages/cutting.js?v=20260822-30';
 import * as quality from './pages/quality.js?v=20260822-22';
 import { renderRevista, renderEmbalagem } from './pages/finish_areas.js?v=20260822-22';
-import * as inventoryPage from './pages/inventory.js?v=20260822-32';
+import * as inventoryPage from './pages/inventory.js?v=20260822-33';
 import * as people from './pages/people.js?v=20260822-1';
 import * as machines from './pages/machines.js?v=20260822-1';
 import * as operations from './pages/operations.js?v=20260822-1';
@@ -26,7 +26,7 @@ import * as reports from './pages/reports.js?v=20260819-7';
 import * as partners from './pages/partners.js?v=20260821-6';
 import * as tables from './pages/tables.js?v=20260822-29';
 import * as shipping from './pages/shipping.js?v=20260822-23';
-import * as commercialDocs from './pages/commercial_docs.js?v=20260822-32';
+import * as commercialDocs from './pages/commercial_docs.js?v=20260822-33';
 import * as settings from './pages/settings.js?v=20260822-27';
 import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260822-27';
 

@@ -16,6 +16,15 @@ from .primavera import enqueue
 from .serialization import model_to_dict
 
 
+# Documentos que representam um movimento físico de mercadoria — aqui é que faz
+# sentido perguntar "para onde vai" (o Primavera não guarda essa distinção).
+MOVEMENT_DOC_TYPES = {"supplier_transport", "internal_transfer", "sales_delivery", "fabric_issue"}
+AREA_LABELS = {
+    "dyeing": "Tinturaria", "printing": "Estamparia", "embroidery": "Bordado", "laundry": "Lavandaria",
+    "finishing": "Acabamento", "cutting": "Corte", "sewing": "Confeção / Produção", "revista": "Revista",
+    "packing": "Embalagem", "warehouse": "Armazém", "transport": "Transporte", "other": "Outro",
+}
+
 DOC_TYPES = {
     "requisition": {
         "label": "Requisição a fornecedor", "prefix": "REQ", "side": "purchase",
@@ -221,12 +230,12 @@ def public_document(db: Session, document: CommercialDocument, company: Company 
     data["can_prepare"] = is_official(document.doc_type) and document.primavera_status != "sent" and not locked
     data["primavera_done"] = document.primavera_status == "sent" or document.status == "posted"
     data["primavera_queued"] = document.primavera_status in {"queued", "pending", "prepared"}
-    # O Primavera só guarda o fornecedor/cliente do documento, não o serviço ou
-    # departamento específico dentro dele (ex. qual dos vários serviços de um
-    # fornecedor, ou para que área interna vai a mercadoria) — isso só fica
-    # registado aqui, em extra, gravado por from_distribution().
-    data["area"] = extra.get("service_category") or ("internal" if extra.get("department") else None)
-    data["area_detail"] = extra.get("service_name") or extra.get("department") or None
+    # O Primavera só guarda o fornecedor/cliente do documento, não a área/serviço
+    # específico dentro dele (ex. qual dos vários serviços de um fornecedor, ou
+    # para que área interna vai a mercadoria) — isso só fica registado aqui, em
+    # extra["area"] (escolhido no editor ou pré-preenchido por from_distribution()).
+    data["area"] = extra.get("area") or extra.get("service_category") or None
+    data["area_detail"] = AREA_LABELS.get(data["area"]) or extra.get("service_name") or extra.get("department") or None
     data["unlock_reason"] = extra.get("unlock_reason")
     data["unlocked_by"] = extra.get("unlocked_by")
     data["lock_events"] = extra.get("lock_events") or []
@@ -361,7 +370,7 @@ def create_document(db: Session, company_id: int, payload: dict) -> CommercialDo
         extra["series"] = payload["series"]
     if payload.get("erp_code"):
         extra["erp_code"] = payload["erp_code"]
-    for key in ("due_date", "delivery_date", "your_ref", "warehouse", "commercial_discount", "additional_discount", "vat_pct"):
+    for key in ("due_date", "delivery_date", "your_ref", "warehouse", "commercial_discount", "additional_discount", "vat_pct", "area"):
         if payload.get(key) not in (None, ""):
             extra[key] = payload[key]
     if extra.get("due_date") and not extra.get("delivery_date"):
@@ -405,7 +414,7 @@ def update_document(db: Session, company: Company, document: CommercialDocument,
         document.doc_type = payload["doc_type"]
         document.primavera_kind = _meta(payload["doc_type"])["kind"]
     extra.update(identity_for(company, payload.get("doc_type") or document.doc_type, extra))
-    for key in ("due_date", "delivery_date", "your_ref", "warehouse", "commercial_discount", "additional_discount", "vat_pct"):
+    for key in ("due_date", "delivery_date", "your_ref", "warehouse", "commercial_discount", "additional_discount", "vat_pct", "area"):
         if key in payload and payload[key] not in (None, ""):
             extra[key] = payload[key]
     if extra.get("due_date") and not extra.get("delivery_date"):
@@ -505,6 +514,7 @@ def from_distribution(
                 "subcontract_job_id": subcontract_job_id,
                 "service_category": service.category,
                 "service_name": service.name,
+                "area": service.category if service.category in AREA_LABELS else "other",
             },
         })
     if destination == "internal":
@@ -522,6 +532,10 @@ def from_distribution(
                 "line_name": line.name,
                 "department": department.name if department else None,
                 "department_id": line.department_id,
+                # Não há forma fiável de mapear o nome livre do departamento para uma
+                # das áreas conhecidas — fica "sewing" (confeção) como valor de partida
+                # mais comum, mas o campo é editável e obrigatório antes de enviar.
+                "area": "sewing",
             },
         })
     raise HTTPException(422, "Destino inválido para gerar documento")
@@ -628,6 +642,8 @@ def prepare_primavera(db: Session, company: Company, document: CommercialDocumen
         raise HTTPException(422, "Indique o cliente antes de enviar para o Primavera.")
     if not document.lines:
         raise HTTPException(422, "Indique pelo menos uma linha de artigo")
+    if document.doc_type in MOVEMENT_DOC_TYPES and not extra.get("area"):
+        raise HTTPException(422, "Indique a área de destino antes de enviar para o Primavera.")
     cfg = dict((company.settings or {}).get("primavera") or {})
     type_map = {
         "requisition": cfg.get("requisition_doc_type") or "REQ",

@@ -19,6 +19,22 @@ const CONVERT_LABEL = {
   sales_debit:'Nota de débito',
 };
 
+const MOVEMENT_DOC_TYPES = new Set(['supplier_transport', 'internal_transfer', 'sales_delivery', 'fabric_issue']);
+const AREA_OPTIONS = [
+  {value: 'dyeing', label: 'Tinturaria'},
+  {value: 'printing', label: 'Estamparia'},
+  {value: 'embroidery', label: 'Bordado'},
+  {value: 'laundry', label: 'Lavandaria'},
+  {value: 'finishing', label: 'Acabamento'},
+  {value: 'cutting', label: 'Corte'},
+  {value: 'sewing', label: 'Confeção / Produção'},
+  {value: 'revista', label: 'Revista'},
+  {value: 'packing', label: 'Embalagem'},
+  {value: 'warehouse', label: 'Armazém'},
+  {value: 'transport', label: 'Transporte'},
+  {value: 'other', label: 'Outro'},
+];
+
 let listState = { family: '', doc_type: '', series: '', query: '' };
 
 function erpName() {
@@ -191,6 +207,7 @@ function collectEditor(container) {
     delivery_date: header.querySelector('[name="due_date"]')?.value,
     your_ref: header.querySelector('[name="your_ref"]')?.value,
     warehouse: header.querySelector('[data-f4-field="warehouse"]')?.value,
+    area: header.querySelector('[data-area-field]')?.value,
     commercial_discount: Number(header.querySelector('[name="commercial_discount"]')?.value || 0),
     additional_discount: Number(header.querySelector('[name="additional_discount"]')?.value || 0),
     notes: header.querySelector('[name="notes"]')?.value,
@@ -390,7 +407,6 @@ export async function renderDocument(container) {
         <span>${docCode} ${esc(doc.series || 'A')} · ${docNo}</span>
         <em>${esc(erpStateLabel(doc))}</em>
       </div>
-      ${doc.area_detail ? `<div class="doc-area-banner"><b>Vai para: ${esc(doc.area_detail)}</b><span>Só fica registado aqui no TextileFlow — o Primavera só mostra o fornecedor/cliente, não esta distinção.</span></div>` : ''}
       <div class="pri-toolbar">
         ${!locked ? `<button type="button" data-save-doc class="pri-tb-save"><i></i>${saveLabel}</button>` : ''}
         ${internalTools}
@@ -416,6 +432,16 @@ export async function renderDocument(container) {
             <div class="pri-ctl pri-ctl-code">${entityField}</div>
             <div class="pri-ctl pri-ctl-grow"><input name="entity_name" value="${esc(partner.name || '')}" readonly class="pri-name"></div>
           </div>
+          ${MOVEMENT_DOC_TYPES.has(doc.doc_type) ? `<div class="pri-row pri-row-notes pri-row-area">
+            <label>Área destino *</label>
+            <div class="pri-ctl pri-ctl-grow">
+              <select name="area" required data-area-field>
+                <option value="">Selecionar…</option>
+                ${AREA_OPTIONS.map(item => `<option value="${item.value}" ${doc.area === item.value ? 'selected' : ''}>${esc(item.label)}</option>`).join('')}
+              </select>
+              <small class="muted">Obrigatório — para onde vai a mercadoria (tinturaria, corte, revista…). Só fica registado aqui, o Primavera não guarda esta distinção.</small>
+            </div>
+          </div>` : ''}
           <div class="pri-row">
             <label>Data Doc.</label><div class="pri-ctl"><input name="doc_date" type="date" value="${esc(String(doc.doc_date || '').slice(0,10))}"></div>
             <label>${esc(secondDateLabel)}</label><div class="pri-ctl"><input name="due_date" type="date" value="${esc(String(secondDateValue || '').slice(0,10))}"></div>
@@ -541,7 +567,17 @@ export async function renderDocument(container) {
       onSaved: () => renderDocument(container),
     });
   });
+  const requireArea = () => {
+    const field = container.querySelector('[data-area-field]');
+    if (field && !field.value) {
+      toast('Indique a área de destino antes de guardar.', 'error');
+      field.focus();
+      return false;
+    }
+    return true;
+  };
   container.querySelector('[data-save-doc]')?.addEventListener('click', async () => {
+    if (!requireArea()) return;
     try {
       const payload = collectEditor(container);
       if (side === 'sales') payload.supplier_id = null;
@@ -562,6 +598,7 @@ export async function renderDocument(container) {
   container.querySelector('[data-print-doc]')?.addEventListener('click', () => printSheet(doc, container, {autoPrint: true}));
   container.querySelectorAll('[data-print-layout]').forEach(button => button.addEventListener('click', () => printSheet(doc, container, {autoPrint: false})));
   container.querySelector('[data-send-internal]')?.addEventListener('click', async () => {
+    if (!requireArea()) return;
     try {
       const payload = collectEditor(container);
       if (side === 'sales') payload.supplier_id = null;
@@ -585,6 +622,7 @@ export async function renderDocument(container) {
     });
   }));
   container.querySelectorAll('[data-erp-act]').forEach(button => button.addEventListener('click', async () => {
+    if (button.dataset.erpAct === 'prepare' && !requireArea()) return;
     try {
       await put(`/erp/${state.companyId}/documents/${doc.id}`, collectEditor(container));
       if (button.dataset.erpAct === 'prepare') {

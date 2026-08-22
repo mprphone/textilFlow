@@ -203,12 +203,11 @@
 .tranche-note{font-size:11px;margin-top:10px}
 
 /* ---------- Documento do ERP: área/serviço que o Primavera não guarda ---------- */
-.doc-area-banner{
-  display:flex;flex-direction:column;gap:2px;margin:0 0 10px;padding:10px 14px;
-  border:1px solid #c9d7f2;background:#eef4ff;border-radius:var(--r-sm);color:#1a335c;font-size:13px;
-}
-.doc-area-banner b{font-size:13px}
-.doc-area-banner span{font-size:11px;color:#4a6288}
+.pri-fields select{height:22px;border:1px solid #7a90a6;padding:0 4px;font:12px Tahoma,sans-serif;background:#fff;box-shadow:inset 1px 1px 0 #eef2f6;min-width:0;box-sizing:border-box;width:100%}
+.pri-row-area{background:#eef4ff;margin:2px -8px;padding:4px 8px;border-radius:6px}
+.pri-row-area label{color:#1a335c;font-weight:700}
+.pri-row-area select:invalid{border-color:#c22f3c}
+.pri-row-area small{display:block;margin-top:2px;color:#4a6288}
 
 @media(max-width:900px){
   #app-shell.saft-shell .page-head{padding:12px 14px!important}

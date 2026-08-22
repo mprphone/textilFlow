@@ -10,7 +10,7 @@ from backend.app.models import (
     Company, Customer, Department, ProductionLine, ProductionOrder, SalesOrder, SalesOrderLine,
     SewingPlan, Style, SubcontractJob, SubcontractService, Supplier,
 )
-from backend.app.services.commercial_docs import from_distribution
+from backend.app.services.commercial_docs import from_distribution, prepare_primavera, public_document
 from backend.app.services.production_split import distribute
 
 
@@ -91,6 +91,8 @@ class ProductionSplitTest(unittest.TestCase):
         self.assertEqual(document.extra["service_category"], "dyeing")
         self.assertEqual(document.extra["service_name"], "Tingir")
         self.assertEqual(document.extra["subcontract_job_id"], 999)
+        self.assertEqual(document.extra["area"], "dyeing")
+        self.assertEqual(public_document(self.db, document)["area_detail"], "Tinturaria")
         self.assertEqual(document.lines[0]["style_id"], self.style.id)
         self.assertEqual(document.lines[0]["quantity"], 25)
 
@@ -105,11 +107,23 @@ class ProductionSplitTest(unittest.TestCase):
         self.assertEqual(document.extra["department"], "Confeção")
         self.assertEqual(document.extra["department_id"], self.department.id)
         self.assertEqual(document.extra["line_name"], "Linha 1")
+        self.assertEqual(document.extra["area"], "sewing")
         self.assertEqual(document.lines[0]["quantity"], 40)
 
     def test_from_distribution_invalid_destination_raises(self):
         with self.assertRaises(Exception):
             from_distribution(self.db, self.company.id, order_id=self.order.id, quantity=10, destination="shipped")
+
+    def test_prepare_primavera_requires_area_on_movement_documents(self):
+        document = from_distribution(
+            self.db, self.company.id, order_id=self.order.id, quantity=25, destination="subcontract",
+            subcontract_service_id=self.service.id,
+        )
+        self.db.commit()
+        document.extra = {**document.extra, "area": None}
+        self.db.flush()
+        with self.assertRaises(Exception):
+            prepare_primavera(self.db, self.company, document)
 
 
 if __name__ == "__main__":
