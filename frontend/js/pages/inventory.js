@@ -2,7 +2,7 @@ import { get, patch, post } from '../api.js';
 import { options } from '../data.js';
 import { renderEntityTabs } from '../entity.js?v=20260819-9';
 import { badge, date, datetime, esc, humanize, money, number } from '../format.js?v=20260819-5';
-import { loadOrderDossier } from '../production/dossier.js?v=20260822-20';
+import { loadOrderDossier } from '../production/dossier.js?v=20260822-21';
 import { stageLabel } from '../production/cycle.js?v=20260822-20';
 import { state } from '../state.js';
 import { loading, openModal, pageHeader, toast } from '../ui.js?v=20260820-5';

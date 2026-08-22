@@ -1,9 +1,10 @@
 import { options } from '../data.js';
 import { renderEntityTabs } from '../entity.js?v=20260819-9';
 import { badge, date, esc, number, progress } from '../format.js?v=20260819-5';
-import { loadOrderDossier } from '../production/dossier.js?v=20260822-13';
+import { loadOrderDossier } from '../production/dossier.js?v=20260822-21';
+import { stageLabel } from '../production/cycle.js?v=20260822-18';
 import { toast } from '../ui.js?v=20260820-5';
-import { prepareFromSales } from './commercial_docs.js?v=20260820-6';
+import { prepareFromSales } from './commercial_docs.js?v=20260822-30';
 
 function showTrace(container, event) {
   const button = event.target.closest('[data-trace]');
@@ -37,7 +38,7 @@ export async function render(container) {
       {key:'line_id',label:'Linha/célula',type:'select',options:await options('production-lines','name')},{key:'order_no',label:'Número OF',required:true},{key:'quantity',label:'Quantidade',type:'number',required:true},
       {key:'planned_start',label:'Início planeado',type:'date'},{key:'planned_end',label:'Fim planeado',type:'date'},{key:'priority',label:'Prioridade',type:'number',default:3},
       {key:'status',label:'Estado',type:'select',options:['planned','released','in_progress','paused','completed','cancelled'],default:'planned'},{key:'current_stage',label:'Fase atual',default:'planning'},{key:'current_location',label:'Local atual'},
-    ],rowActions:r=>`<button class="btn small primary" data-trace="${r.id}">Rastrear</button>`,onAction:showTrace,columns:[{key:'order_no',label:'OF',render:r=>`<b>${esc(r.order_no)}</b>`},{key:'style_id',label:'Artigo'},{key:'quantity',label:'Quantidade',render:r=>number(r.quantity)},{key:'completed_quantity',label:'Progresso',render:r=>progress(r.quantity?r.completed_quantity/r.quantity*100:0)},{key:'planned_end',label:'Prazo',render:r=>date(r.planned_end)},{key:'current_stage',label:'Fase'},{key:'current_location',label:'Local'},{key:'status',label:'Estado',render:r=>badge(r.status)}]}},
+    ],rowActions:r=>`<button class="btn small primary" data-trace="${r.id}">Rastrear</button>`,onAction:showTrace,columns:[{key:'order_no',label:'OF',render:r=>`<b>${esc(r.order_no)}</b>`},{key:'style_id',label:'Artigo'},{key:'quantity',label:'Quantidade',render:r=>number(r.quantity)},{key:'completed_quantity',label:'Progresso',render:r=>progress(r.quantity?r.completed_quantity/r.quantity*100:0)},{key:'planned_end',label:'Prazo',render:r=>date(r.planned_end)},{key:'current_stage',label:'Fase',render:r=>badge(stageLabel(r.current_stage))},{key:'current_location',label:'Local'},{key:'status',label:'Estado',render:r=>badge(r.status)}]}},
     {label:'Lotes',config:{resource:'batches',title:'Lotes de produção',subtitle:'Rastreio por cor, tamanho, quantidade, código e localização.',singular:'lote',newLabel:'Novo lote',fields:async()=>[
       {key:'production_order_id',label:'Ordem',type:'select',required:true,options:await options('production-orders','order_no')},{key:'batch_no',label:'Número do lote',required:true},{key:'color',label:'Cor'},{key:'size',label:'Tamanho'},
       {key:'quantity',label:'Quantidade',type:'number',required:true},{key:'current_operation_id',label:'Operação atual',type:'select',options:await options('operations','name')},{key:'current_location',label:'Local'},{key:'status',label:'Estado',type:'select',options:['waiting','in_progress','blocked','completed'],default:'waiting'},{key:'barcode',label:'Código de barras'},

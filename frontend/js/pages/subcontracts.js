@@ -1,12 +1,14 @@
-import { crudCreate, crudList, crudUpdate } from '../api.js';
+import { crudCreate, crudList, crudUpdate, get } from '../api.js';
 import { renderEntityPage } from '../entity.js?v=20260819-9';
 import { badge, date, esc, money, number } from '../format.js?v=20260819-9';
+import { loadOrderDossier } from '../production/dossier.js?v=20260822-21';
+import { stageLabel } from '../production/cycle.js?v=20260822-20';
 import { recordModal } from '../quick_create.js';
 import { state } from '../state.js';
 import { pageHeader, toast } from '../ui.js?v=20260820-5';
 
 const JOB_STATUS = {planned:'A enviar', sent:'No fornecedor', partial:'Receção parcial', received:'Recebido', problem:'Incidência', cancelled:'Anulado'};
-const SERVICE = {dyeing:'Tinturaria', printing:'Estamparia', cutting:'Corte', sewing:'Confeção', embroidery:'Bordado', laundry:'Lavandaria', finishing:'Acabamento', transport:'Transporte', other:'Outro'};
+const SERVICE = {dyeing:'Tinturaria', printing:'Estamparia', sewing:'Costura', cutting:'Corte fora', embroidery:'Bordado', laundry:'Lavandaria', finishing:'Acabamento', transport:'Transporte', other:'Outro'};
 const namedOptions = (rows, label) => rows.map(row => ({value:row.id,label:label(row)}));
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const CLOSED = new Set(['received', 'cancelled']);
@@ -81,12 +83,33 @@ export async function render(container) {
     tab = Number(button.dataset.subTab);
     container.querySelectorAll('[data-sub-tab]').forEach(item => item.classList.toggle('active', item === button));
     if (tab === 1) await renderEntityPage(panel, serviceCatalog(options, maps));
-    else drawBoard(panel, jobs, maps, options, () => render(container));
+    else await drawBoard(panel, jobs, maps, options, () => render(container));
   });
-  drawBoard(panel, jobs, maps, options, () => render(container));
+  await drawBoard(panel, jobs, maps, options, () => render(container));
 }
 
-function drawBoard(container, jobs, maps, options, reload) {
+function stockCell(trace) {
+  const rows = (trace && (trace.materials || []).length) ? trace.materials : [];
+  if (!rows.length) return '<small class="muted">Sem explosão de MP nesta OF</small>';
+  return `<div class="stock-cell">${rows.map(row => {
+    const unit = row.unit || '';
+    const others = (row.allocations || []).filter(item => Number(item.reserved_quantity) > 0)
+      .map(item => `${item.order_no}: ${number(item.reserved_quantity)}`).join(', ');
+    return `<span class="table-subline"><b>${esc(row.material_name || row.description || 'Material')}</b> · armazém ${number(row.on_hand_quantity)} ${esc(unit)} · outras OF ${number(row.allocated_other_quantity)} · livre ${number(row.available_quantity)}${others ? ` · ${esc(others)}` : ''}</span>`;
+  }).join('')}</div>`;
+}
+
+async function loadTraces(jobs) {
+  const traces = {};
+  const ids = [...new Set(jobs.map(job => job.production_order_id).filter(Boolean))];
+  await Promise.all(ids.slice(0, 40).map(async id => {
+    try { traces[id] = await get(`/production/orders/${id}/trace`); }
+    catch { traces[id] = null; }
+  }));
+  return traces;
+}
+
+async function drawBoard(container, jobs, maps, options, reload) {
   const today = todayIso();
   const open = jobs.filter(job => !CLOSED.has(job.status));
   const overdue = open.filter(job => job.expected_date && job.expected_date < today && ['sent', 'partial', 'planned'].includes(job.status));
@@ -107,6 +130,7 @@ function drawBoard(container, jobs, maps, options, reload) {
   let pageSize = 50;
   let page = 1;
   let search = '';
+  const traces = await loadTraces(jobs);
   const categories = [...new Set(jobs.map(job => maps.serviceById[job.subcontract_service_id]?.category).filter(Boolean))];
 
   const matches = job => {
@@ -140,7 +164,14 @@ function drawBoard(container, jobs, maps, options, reload) {
     const slice = found.slice((page - 1) * pageSize, page * pageSize);
     const start = found.length ? (page - 1) * pageSize + 1 : 0;
     const end = Math.min(page * pageSize, found.length);
-    container.innerHTML = pageHeader('Controlo de subcontratos', 'O que saiu, quem tem, quando tem de regressar e o que fazer agora.', '<a class="btn" href="#/erp-docs">ERP / guias</a><a class="btn" href="#/tracking">Rasto das OF</a><button class="btn primary" data-new-job>+ Novo envio</button>', 'compact') + `
+    container.innerHTML = pageHeader('Controlo de subcontratos', 'Tinturaria e serviços fora. O stock da OF aparece ao lado — o mesmo lote não é prometido a duas encomendas.', '<a class="btn" href="#/tracking">Controlo da produção</a><a class="btn" href="#/erp-docs">ERP / guias</a><button class="btn primary" data-new-job>+ Novo envio</button>', 'compact') + `
+      <div class="cycle-banner">
+        <div>
+          <b>Ciclo desta fábrica</b>
+          Matérias (alocadas à OF) → tinturaria → corte interno → costura casa ou fora → revista → outros serviços → embalagem → expedição.
+          <small>Isto é o normal. Se esta encomenda tiver de sair da sequência, use a excepção. Corte fora só em casos pontuais.</small>
+        </div>
+      </div>
       <div class="proposal-list-toolbar">
         <div class="proposal-stage-filters">
           <button type="button" data-sub-filter="open" class="${filter==='open'?'active':''}">Fora de casa <b>${number(counts.open)}</b></button>
@@ -158,16 +189,19 @@ function drawBoard(container, jobs, maps, options, reload) {
           <label class="listing-size">Mostrar <select data-page-size><option ${pageSize===25?'selected':''}>25</option><option ${pageSize===50?'selected':''}>50</option><option ${pageSize===100?'selected':''}>100</option></select> registos</label>
           <div class="table-search"><span>⌕</span><input class="filter-input" data-sub-search value="${esc(search)}" placeholder="Procurar guia, OF, fornecedor…"></div>
         </div>
-        <div class="table-wrap listing-table"><table class="data-table"><thead><tr><th>Guia</th><th>OF / artigo</th><th>Processo</th><th>Fornecedor</th><th>Quantidade</th><th>Regresso</th><th>Estado</th><th></th></tr></thead>
+        <div class="table-wrap listing-table"><table class="data-table"><thead><tr><th>Guia</th><th>OF / artigo</th><th>Fase da OF</th><th>Stock MP</th><th>Processo</th><th>Fornecedor</th><th>Quantidade</th><th>Regresso</th><th>Estado</th><th></th></tr></thead>
         <tbody>${slice.length ? slice.map(job => {
         const service = maps.serviceById[job.subcontract_service_id];
         const order = maps.orderById[job.production_order_id];
         const style = order ? maps.styleById[order.style_id] : null;
         const due = dueLabel(job, today);
         const risk = job.status === 'problem' || overdue.includes(job);
+        const trace = traces[job.production_order_id];
         return `<tr class="${risk?'track-risk':''}">
           <td><b>${esc(job.reference)}</b><small class="table-subline">Saída ${date(job.sent_date)}</small></td>
           <td>${order ? `<b>${esc(order.order_no)}</b>` : 'Sem OF'}${style ? `<small class="table-subline">${esc(style.reference)} · ${esc(style.description)}</small>` : ''}</td>
+          <td>${order ? badge(stageLabel(trace?.order?.current_stage || order.current_stage)) : '—'}</td>
+          <td>${job.production_order_id ? stockCell(trace) : '—'}</td>
           <td>${badge(SERVICE[service?.category] || service?.category || 'Outro')}<small class="table-subline">${esc(service?.name || '—')}</small></td>
           <td>${esc(maps.supplierById[job.supplier_id]?.name || '—')}</td>
           <td>${number(job.quantity)} ${esc(job.unit)}${job.accepted_quantity || job.rejected_quantity ? `<small class="table-subline">${number(job.accepted_quantity)} aceites · ${number(job.rejected_quantity)} rejeitadas</small>` : ''}</td>
@@ -175,7 +209,7 @@ function drawBoard(container, jobs, maps, options, reload) {
           <td>${badge(JOB_STATUS[job.status] || job.status)}</td>
           <td class="listing-actions">${jobActions(job)}</td>
         </tr>`;
-      }).join('') : '<tr><td colspan="8"><div class="empty"><strong>Nada neste filtro</strong>Não há trabalhos externos neste estado.</div></td></tr>'}</tbody></table></div>
+      }).join('') : '<tr><td colspan="10"><div class="empty"><strong>Nada neste filtro</strong>Não há trabalhos externos neste estado.</div></td></tr>'}</tbody></table></div>
         <div class="list-pager"><span>${found.length ? `Mostrar ${start} a ${end} de ${found.length} registos` : 'Mostrar 0 registos'}</span><div><button class="btn small" data-list-page="${page-1}" ${page<=1?'disabled':''}>← Anterior</button><button class="btn small" data-list-page="${page+1}" ${page>=pages?'disabled':''}>Seguinte →</button></div></div>
       </section>`;
     container.querySelectorAll('[data-sub-filter]').forEach(button => button.addEventListener('click', () => { filter = button.dataset.subFilter; page = 1; paint(); }));
@@ -196,21 +230,23 @@ function drawBoard(container, jobs, maps, options, reload) {
     container.querySelectorAll('[data-job-send]').forEach(button => button.addEventListener('click', () => act(jobs.find(row => row.id === Number(button.dataset.jobSend)), maps, reload)));
     container.querySelectorAll('[data-job-receive]').forEach(button => button.addEventListener('click', () => receiveJob(jobs.find(row => row.id === Number(button.dataset.jobReceive)), maps, reload)));
     container.querySelectorAll('[data-job-problem]').forEach(button => button.addEventListener('click', () => problemJob(jobs.find(row => row.id === Number(button.dataset.jobProblem)), reload)));
+    container.querySelectorAll('[data-open-of]').forEach(button => button.addEventListener('click', () => loadOrderDossier(Number(button.dataset.openOf))));
   };
   paint();
 }
 
 function jobActions(job) {
+  const ofBtn = job.production_order_id ? `<button class="btn small" data-open-of="${job.production_order_id}">Ver OF</button>` : '';
   if (job.status === 'planned') {
-    return `<button class="btn small primary" data-job-send="${job.id}">Enviar</button><button class="btn small" data-job-edit="${job.id}">Editar</button>`;
+    return `<button class="btn small primary" data-job-send="${job.id}">Enviar</button><button class="btn small" data-job-edit="${job.id}">Editar</button>${ofBtn}`;
   }
   if (['sent', 'partial'].includes(job.status)) {
-    return `<button class="btn small primary" data-job-receive="${job.id}">Receber</button><button class="btn small" data-job-problem="${job.id}">Incidência</button>`;
+    return `<button class="btn small primary" data-job-receive="${job.id}">Receber</button><button class="btn small" data-job-problem="${job.id}">Incidência</button>${ofBtn}`;
   }
   if (job.status === 'problem') {
-    return `<button class="btn small primary" data-job-receive="${job.id}">Receber</button><button class="btn small" data-job-edit="${job.id}">Notas</button>`;
+    return `<button class="btn small primary" data-job-receive="${job.id}">Receber</button><button class="btn small" data-job-edit="${job.id}">Notas</button>${ofBtn}`;
   }
-  return `<button class="btn small" data-job-edit="${job.id}">Ver</button>`;
+  return `<button class="btn small" data-job-edit="${job.id}">Ver</button>${ofBtn}`;
 }
 
 function jobFields(maps, options, job) {
@@ -315,7 +351,7 @@ function serviceCatalog(options, maps) {
     fields:[
       {key:'code',label:'Código',required:true,section:'Identificação'},{key:'name',label:'Serviço',required:true,section:'Identificação'},
       {key:'supplier_id',label:'Fornecedor',type:'select',required:true,options:options.supplier,section:'Identificação'},
-      {key:'category',label:'Tipo',type:'select',options:[{value:'dyeing',label:'Tinturaria'},{value:'printing',label:'Estamparia'},{value:'cutting',label:'Corte'},{value:'sewing',label:'Confeção'},{value:'embroidery',label:'Bordado'},{value:'laundry',label:'Lavandaria'},{value:'finishing',label:'Acabamento'},{value:'transport',label:'Transporte'},{value:'other',label:'Outro'}],default:'other',section:'Condições'},
+      {key:'category',label:'Tipo',type:'select',options:[{value:'dyeing',label:'Tinturaria'},{value:'printing',label:'Estamparia'},{value:'sewing',label:'Costura'},{value:'cutting',label:'Corte (excepção)'},{value:'embroidery',label:'Bordado'},{value:'laundry',label:'Lavandaria'},{value:'finishing',label:'Acabamento'},{value:'transport',label:'Transporte'},{value:'other',label:'Outro'}],default:'other',section:'Condições'},
       {key:'unit',label:'Unidade',required:true,default:'un',section:'Condições'},{key:'unit_cost',label:'Preço acordado',type:'number',required:true,default:0,section:'Condições'},
       {key:'minimum_quantity',label:'Quantidade mínima',type:'number',default:0,section:'Condições'},{key:'lead_time_days',label:'Prazo (dias)',type:'number',default:0,section:'Condições'},
       {key:'quality_score',label:'Qualidade (%)',type:'number',default:100,section:'Controlo'},{key:'active',label:'Estado',type:'checkbox',default:true,help:'Disponível em novas propostas',section:'Controlo'},

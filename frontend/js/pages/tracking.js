@@ -2,7 +2,7 @@ import { crudList, get, post } from '../api.js';
 import { on } from '../events.js?v=20260822-30';
 import { badge, date, esc, number } from '../format.js?v=20260819-9';
 import { readForm, renderForm } from '../forms.js?v=20260822-2';
-import { loadOrderDossier } from '../production/dossier.js?v=20260822-19';
+import { loadOrderDossier } from '../production/dossier.js?v=20260822-21';
 import { state } from '../state.js';
 import { closeModal, openModal, pageHeader, toast } from '../ui.js?v=20260820-5';
 import { startSupplierOrder } from './commercial_docs.js?v=20260822-31';
