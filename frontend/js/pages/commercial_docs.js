@@ -102,6 +102,8 @@ function toastStockAlerts(saved) {
   alerts.forEach(row => toast(row.detail || row.title));
   return true;
 }
+
+function erpStateLabel(row) {
   if (!row.official) return 'Interno · TextileFlow';
   if (row.locked) return 'Bloqueado · enviado ao Primavera';
   if (row.primavera_done || row.primavera_status === 'sent') return 'Finalizado no Primavera';

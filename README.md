@@ -23,6 +23,26 @@ docker compose up --build -d
 
 Altere a palavra-passe e configure `APP_SECRET` antes de qualquer utilização real.
 
+## Teste online
+
+O mais simples **não precisa de Railway nem de Vercel**. O programa já corre no Docker do teu PC.
+
+**Partilhar agora (recomendado)** — um comando, sem contas de cloud:
+
+```powershell
+.\scripts\share.ps1
+```
+
+Aparece um URL `https://….loca.lt`. O PC e esta janela têm de ficar ligados. Fecha a janela para desligar.
+
+**Deixar na internet sem o PC ligado** — [Render](https://dashboard.render.com/select-repo?type=blueprint):
+
+1. Entra com a conta GitHub (a do repositório `textilFlow`).
+2. New → Blueprint → escolhe o repositório.
+3. Apply. O `render.yaml` cria a app e o PostgreSQL.
+
+Fica um endereço `https://textileflow-….onrender.com`. No plano grátis a app adormece após uns minutos sem uso; o primeiro clique demora a acordar. Postgres grátis no Render expira ao fim de 30 dias (serve para testar).
+
 ## Módulos operacionais
 
 - Fichas técnicas adaptativas e versionadas
