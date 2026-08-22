@@ -96,15 +96,14 @@ def dispatch_sales_order(order_id: int, payload: dict, db: Session = Depends(get
     try:
         db.add(shipment)
         order.status = "shipped"
+        lines = db.query(SalesOrderLine).filter_by(sales_order_id=order.id).all()
         for line in lines:
-            if line.production_order_id:
-                production_order = db.get(ProductionOrder, line.production_order_id)
+            for production_order in db.query(ProductionOrder).filter_by(sales_order_line_id=line.id).all():
                 update_order_stage(db, production_order)
         erp = None
         company = db.get(Company, order.company_id)
         if company:
             customer = db.get(Customer, order.customer_id)
-            lines = db.query(SalesOrderLine).filter_by(sales_order_id=order.id).all()
             erp = queue_delivery(company, order=order, shipment=shipment, customer=customer, lines=lines)
         db.commit()
         db.refresh(shipment)

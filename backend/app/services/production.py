@@ -1,12 +1,13 @@
+from collections import defaultdict
 from datetime import date, datetime, time, timezone
 
 from fastapi import HTTPException
 
 from ..models import (
     Employee, Machine, Operation, ProductOperation, ProductionBatch, ProductionEvent,
-    ProductionLine, ProductionOrder, Style, WorkAssignment,
+    ProductionLine, ProductionOrder, SalesOrder, SalesOrderLine, Style, WorkAssignment,
 )
-from .production_stage import ensure_final_quality_checkpoint, update_order_stage
+from .production_stage import dispatch_ready_status, ensure_final_quality_checkpoint, update_order_stage
 
 
 def employee_hourly_rate(employee) -> float:
@@ -32,6 +33,14 @@ def register_output(db, assignment: WorkAssignment, payload, *, occurred_on: dat
     employee = db.get(Employee, assignment.employee_id) if assignment.employee_id else None
     machine = db.get(Machine, assignment.machine_id) if assignment.machine_id else None
     minutes = payload.duration_minutes or 0
+    if assignment.planned_quantity and not getattr(payload, "allow_overage", False):
+        prospective = (assignment.completed_quantity or 0) + (assignment.rejected_quantity or 0) + payload.quantity_good + payload.quantity_rejected
+        if prospective > assignment.planned_quantity + 0.001:
+            raise HTTPException(
+                422,
+                f"Isto ultrapassa a quantidade planeada desta atribuição ({assignment.planned_quantity:.0f} un.). "
+                "Confirme para registar mesmo assim (ex.: retrabalho).",
+            )
     rate = employee_hourly_rate(employee)
     event = ProductionEvent(
         company_id=assignment.company_id,
@@ -63,12 +72,23 @@ def register_output(db, assignment: WorkAssignment, payload, *, occurred_on: dat
         if batch:
             batch.current_operation_id = assignment.operation_id
             batch.current_location = f"Linha {assignment.line_id}" if assignment.line_id else batch.current_location
-            batch.status = "in_progress"
+            batch.completed_quantity = min(batch.quantity or 0, round((batch.completed_quantity or 0) + payload.quantity_good, 2))
+            batch.status = "completed" if batch.quantity and batch.completed_quantity >= batch.quantity * 0.99 else "in_progress"
 
     order = db.get(ProductionOrder, assignment.production_order_id)
     if order:
+        # Agrupa por operacao antes de tirar o minimo: varias atribuicoes da
+        # mesma operacao (ex.: dois operadores no registo diario) tem de somar
+        # a sua producao, nao ser comparadas isoladamente contra o total da OF.
         assignments = db.query(WorkAssignment).filter_by(production_order_id=order.id).all()
-        ratios = [min(1, row.completed_quantity / row.planned_quantity) for row in assignments if row.planned_quantity]
+        by_operation = defaultdict(lambda: [0.0, 0.0])
+        for row in assignments:
+            if not row.planned_quantity:
+                continue
+            entry = by_operation[row.operation_id]
+            entry[0] += row.completed_quantity or 0
+            entry[1] += row.planned_quantity or 0
+        ratios = [min(1, completed / planned) for completed, planned in by_operation.values() if planned]
         progress = min(ratios) if ratios else 0
         order.completed_quantity = round(order.quantity * progress, 2)
         order.status = "completed" if progress >= 1 else "in_progress"
@@ -78,8 +98,22 @@ def register_output(db, assignment: WorkAssignment, payload, *, occurred_on: dat
         if progress >= 1:
             order.actual_end = datetime.now(timezone.utc)
             ensure_final_quality_checkpoint(db, order)
+        if order.sales_order_line_id:
+            sales_line = db.get(SalesOrderLine, order.sales_order_line_id)
+            sales_order = db.get(SalesOrder, sales_line.sales_order_id) if sales_line else None
+            if sales_order and sales_order.status not in {"ready", "shipped", "cancelled"}:
+                if dispatch_ready_status(db, sales_order)["ready"]:
+                    sales_order.status = "ready"
     if machine:
-        machine.status = "running"
+        if assignment.status == "completed":
+            still_active = db.query(WorkAssignment.id).filter(
+                WorkAssignment.machine_id == machine.id,
+                WorkAssignment.status.in_(["queued", "in_progress"]),
+                WorkAssignment.id != assignment.id,
+            ).first()
+            machine.status = "available" if not still_active else "running"
+        else:
+            machine.status = "running"
     db.flush()
     return event
 
@@ -164,6 +198,17 @@ def record_daily_output(db, company_id: int, payload: dict) -> dict:
         operation_id=operation_id,
     ).order_by(WorkAssignment.id.desc()).first()
     if not assignment:
+        # Reparte a quantidade planeada pelo que ainda falta desta operacao,
+        # nao pela quantidade total da OF — senao, com varios operadores na
+        # mesma operacao, cada atribuicao infla o denominador do progresso.
+        same_operation = db.query(WorkAssignment).filter_by(
+            company_id=company_id, production_order_id=order.id, operation_id=operation_id,
+        ).all()
+        already_planned = sum(row.planned_quantity or 0 for row in same_operation)
+        remaining = max(0.0, (order.quantity or 0) - already_planned) or good
+        product_op = db.get(ProductOperation, product_operation_id) if product_operation_id else None
+        operation = db.get(Operation, operation_id)
+        smv = (product_op.smv if product_op else 0) or (operation.standard_time_min if operation else 0) or 0
         assignment = WorkAssignment(
             company_id=company_id,
             production_order_id=order.id,
@@ -171,7 +216,8 @@ def record_daily_output(db, company_id: int, payload: dict) -> dict:
             product_operation_id=product_operation_id,
             employee_id=employee.id,
             line_id=line_id,
-            planned_quantity=order.quantity or good,
+            planned_quantity=remaining,
+            standard_minutes=round(smv * remaining, 2),
             status="in_progress",
         )
         db.add(assignment)
@@ -186,6 +232,7 @@ def record_daily_output(db, company_id: int, payload: dict) -> dict:
         event_type = "output"
         notes = payload.get("notes") or f"Produção do dia {work_date.isoformat()}"
         source = "daily"
+        allow_overage = bool(payload.get("allow_overage"))
     event = register_output(db, assignment, _Payload(), occurred_on=work_date)
     db.flush()
     return {"ok": True, "event_id": event.id, "labor_cost": event.labor_cost, **list_daily_output(db, company_id, work_date)}

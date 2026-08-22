@@ -197,22 +197,24 @@ def dispatch_ready_status(db: Session, sales_order) -> dict:
     lines = db.query(SalesOrderLine).filter_by(sales_order_id=sales_order.id).all()
     missing = []
     for line in lines:
-        order = db.get(ProductionOrder, line.production_order_id) if line.production_order_id else None
-        if not order:
+        # A ligacao e inversa: e a OF que aponta para a linha, nao o contrario.
+        orders = db.query(ProductionOrder).filter_by(sales_order_line_id=line.id).all()
+        if not orders:
             missing.append(f"Linha {line.id}: sem OF associada")
             continue
-        produced = float(order.completed_quantity or 0)
+        produced = sum(float(order.completed_quantity or 0) for order in orders)
         needed = float(line.quantity or 0)
         if produced + 0.001 < needed:
-            missing.append(f"OF {order.order_no}: só produziu {produced} de {needed}")
-        open_jobs = db.query(SubcontractJob).filter_by(production_order_id=order.id).filter(SubcontractJob.status.in_({"planned", "sent", "partial", "in_progress", "problem"})).count()
-        if open_jobs:
-            missing.append(f"OF {order.order_no}: {open_jobs} subcontrato(s) ainda não regressou")
-        inspections = db.query(QualityInspection).filter_by(production_order_id=order.id).all()
-        if inspections:
-            failed = [row for row in inspections if getattr(row, "status", None) in {"rejected", "fail"} or (getattr(row, "rejected_quantity", 0) or 0) > (getattr(row, "accepted_quantity", 0) or 0)]
+            order_names = ", ".join(order.order_no for order in orders)
+            missing.append(f"OF {order_names}: só produziu {produced} de {needed}")
+        for order in orders:
+            open_jobs = db.query(SubcontractJob).filter_by(production_order_id=order.id).filter(SubcontractJob.status.in_({"planned", "sent", "partial", "in_progress", "problem"})).count()
+            if open_jobs:
+                missing.append(f"OF {order.order_no}: {open_jobs} subcontrato(s) ainda não regressou")
+            inspections = db.query(QualityInspection).filter_by(production_order_id=order.id).all()
+            failed = [row for row in inspections if row.result == "failed" or (row.defect_quantity or 0) > (row.inspected_quantity or 0) - (row.defect_quantity or 0)]
             if failed:
-                missing.append(f"OF {order.order_no}: qualidade com rejeições por resolver")
+                missing.append(f"OF {order.order_no}: qualidade com {len(failed)} inspeção/ões reprovada(s)")
     return {"ready": not missing, "reason": "; ".join(missing) if missing else "Pronta para expedição", "missing": missing}
 
 

@@ -165,6 +165,9 @@ def _prepare_subcontract_job(db, instance):
             raise HTTPException(422, "Na receção parcial indique as quantidades aceites ou rejeitadas")
         if handled >= (instance.quantity or 0) > 0:
             instance.status = "received"
+    handled_total = (instance.accepted_quantity or 0) + (instance.rejected_quantity or 0)
+    if handled_total > (instance.quantity or 0) + 0.001:
+        raise HTTPException(422, f"Aceites + rejeitadas ({handled_total:.0f}) não pode ultrapassar a quantidade enviada ({instance.quantity or 0:.0f}).")
     if not (instance.reference or "").strip():
         prefix = date.today().strftime("EXT-%Y%m%d-")
         existing = db.query(SubcontractJob).filter(
