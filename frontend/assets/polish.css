@@ -1,0 +1,174 @@
+/* ==========================================================================
+   Camada final de acabamento visual.
+   O ficheiro carrega por último de propósito: styles.css, experience.css e
+   chrome.css acumularam várias fases de redesign ao longo do tempo, cada
+   uma a redefinir :root, .btn, .card, .sidebar sobre a anterior. Reescrever
+   essas seis camadas à mão arriscava partir algo que hoje funciona só por
+   ordem de carregamento. Em vez disso, esta camada redefine as MESMAS
+   variáveis CSS (--blue, --chrome-*, --r...) e as regras que realmente
+   ficam ativas no ecrã, o que atualiza tudo o que já as usa sem precisar
+   de tocar nas camadas antigas.
+   ========================================================================== */
+
+:root{
+  --ink:#141b2c;
+  --muted:#5b6b82;
+  --line:#e1e6ee;
+  --card:#fff;
+  --blue:#2454d8;
+  --blue2:#16337f;
+  --cyan:#0e94b8;
+  --green:#0b8a5c;
+  --amber:#a8650a;
+  --red:#c22f3c;
+  --violet:#6247c9;
+  --shadow:0 10px 30px rgba(15,23,42,.08);
+
+  --chrome-top:#111827;
+  --chrome-top-2:#1b2740;
+  --chrome-bg:#eef2f8;
+  --chrome-bg-2:#e4e9f3;
+  --chrome-side:#fff;
+  --chrome-pill:#16337f;
+  --chrome-hero:#132047;
+  --chrome-blue:#2454d8;
+  --chrome-blue-2:#16337f;
+
+  --r:14px;
+  --r-lg:20px;
+  --r-sm:10px;
+}
+
+/* ---------- Botões: uma só linguagem, sem pílulas por todo o lado ---------- */
+.btn{
+  border-radius:var(--r-sm)!important;
+  border-color:#d7dce6;
+  font-weight:700;
+  letter-spacing:.01em;
+  transition:transform .12s ease,box-shadow .12s ease,background-color .12s ease,border-color .12s ease;
+}
+.btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(20,30,54,.1)}
+.btn:active{transform:translateY(0);box-shadow:none}
+.btn:focus-visible{outline:2px solid var(--chrome-blue);outline-offset:2px}
+.btn.primary{
+  background:linear-gradient(135deg,var(--chrome-blue),var(--chrome-blue-2))!important;
+  border-color:var(--chrome-blue-2)!important;
+  box-shadow:0 6px 16px rgba(36,84,216,.22)!important;
+}
+.btn.primary:hover{box-shadow:0 10px 22px rgba(36,84,216,.3)!important}
+.btn.success{background:var(--green)!important;border-color:var(--green)!important;color:#fff!important}
+.btn.success:hover{box-shadow:0 8px 18px rgba(11,138,92,.24)!important}
+.btn.danger{color:var(--red)!important;border-color:#f0c7cb!important;background:#fff!important}
+.btn.danger:hover{background:#fdf1f2!important}
+.btn.ghost{background:transparent!important;border-color:transparent!important;box-shadow:none!important}
+.btn.ghost:hover{background:#eef1f7!important;box-shadow:none!important}
+.btn:disabled,.btn:disabled:hover{opacity:.5!important;box-shadow:none!important;transform:none!important}
+.btn.icon.danger{border-radius:8px!important}
+
+#app-shell.saft-shell .quick-action,
+#app-shell.saft-shell .topbar-logout{
+  border-radius:var(--r-sm)!important;
+  font-weight:700;
+}
+#app-shell.saft-shell .quick-action{box-shadow:0 6px 16px rgba(36,84,216,.3)!important}
+#app-shell.saft-shell .topbar-logout:hover{border-color:rgba(255,255,255,.32)}
+
+/* ---------- Sidebar: sem vazio forçado, hierarquia mais clara ---------- */
+#app-shell.saft-shell .sidebar-shortcuts{margin-top:20px}
+#app-shell.saft-shell .sidebar nav a.active{font-weight:700}
+#app-shell.saft-shell .company-card{margin-bottom:16px}
+#app-shell.saft-shell .nav-section{margin-top:18px}
+#app-shell.saft-shell .nav-group{margin-bottom:8px}
+
+/* ---------- Topbar: hero de módulos mais nítido ---------- */
+#app-shell.saft-shell .topbar{background:linear-gradient(180deg,var(--chrome-top),var(--chrome-top-2))}
+#app-shell.saft-shell .module-nav a.active{background:var(--chrome-blue)!important;box-shadow:0 2px 10px rgba(36,84,216,.4)!important}
+
+/* ---------- Cartões, tabelas, hero de página ---------- */
+.card,.metric,.table-wrap,.modal-card,.listing-panel{
+  border:1px solid var(--line)!important;
+  box-shadow:0 3px 14px rgba(15,23,42,.045)!important;
+}
+.card{padding:16px!important;border-radius:var(--r)!important}
+.card-header{margin-bottom:12px!important}
+.metric{padding:15px 16px!important;border-radius:var(--r)!important}
+.metric strong{font-size:25px!important}
+.data-table th{background:#f7f9fc;color:#5b6b82;font-weight:700;letter-spacing:.04em}
+.data-table tbody tr:hover{background:#f6f8fc}
+.listing-panel .data-table th{color:#5b6b82;font-weight:700}
+
+#app-shell.saft-shell .page-head{
+  background:linear-gradient(135deg,var(--chrome-hero) 0%,#1e3a6e 55%,#2a5ba0 100%)!important;
+  padding:14px 18px!important;
+}
+#app-shell.saft-shell .page-head h1{font-size:18px!important;letter-spacing:-.01em}
+#app-shell.saft-shell .page-head p{font-size:12px!important}
+#app-shell.saft-shell .page-head .btn.primary{
+  background:#fff!important;
+  color:var(--chrome-blue-2)!important;
+  border-color:#fff!important;
+  box-shadow:0 4px 14px rgba(0,0,0,.18)!important;
+}
+#app-shell.saft-shell .page-head .btn.primary:hover{box-shadow:0 6px 18px rgba(0,0,0,.24)!important}
+#app-shell.saft-shell .page-head .btn:not(.primary){
+  background:rgba(255,255,255,.14)!important;
+  border-color:rgba(255,255,255,.3)!important;
+  color:#fff!important;
+}
+
+/* ---------- Campos e formulários ---------- */
+.login-card input:focus,.field input:focus,.field select:focus,.field textarea:focus{
+  border-color:var(--chrome-blue);
+  box-shadow:0 0 0 3px rgba(36,84,216,.12);
+}
+.field label{color:#3d4a5c;font-weight:700}
+.form-section{color:var(--chrome-blue)}
+
+/* ---------- Separadores fixos: corrige sobreposição pré-existente ----------
+   .cost-main-tabs tinha top:70px (costing.css), pensado para um topbar de
+   70px que já não existe (chrome.css fixou 50px!important). Como o padding
+   do conteúdo é de 8px, a barra ficava "colada" 62px abaixo da posição
+   natural mesmo sem scroll, tapando o cabeçalho da página por baixo. */
+.cost-main-tabs{top:8px!important}
+
+/* ---------- Distintivos e chips ---------- */
+.badge{font-weight:700;letter-spacing:.02em}
+.tab.active{background:var(--chrome-pill)!important;border-color:var(--chrome-pill)!important}
+
+/* ---------- Calculadora de AQL (qualidade) ---------- */
+.aql-card{margin-bottom:16px}
+.aql-card .form-grid{align-items:end}
+.aql-calc-field{display:flex;align-items:end}
+.aql-result{margin-top:12px;padding:10px 12px;border-radius:var(--r-sm);background:#f4f7fc;border:1px solid var(--line);font-size:12px;color:var(--muted)}
+
+/* ---------- Estados vazios ---------- */
+.empty,.loading{color:var(--muted)}
+
+.cycle-banner{
+  display:flex;gap:14px;align-items:flex-start;margin:0 0 14px;padding:12px 14px;
+  border:1px solid #c9d7f2;background:#eef4ff;border-radius:12px;color:#1a335c;font-size:13px;line-height:1.45;
+}
+.cycle-banner b{display:block;margin-bottom:2px}
+.cycle-banner small{display:block;color:#4a6288;margin-top:4px}
+.stock-cell{max-width:280px;font-size:12px;color:#3d4f6c}
+.stock-cell .table-subline{display:block;margin-top:2px}
+
+.stock-table{table-layout:auto}
+.stock-table th.num,.stock-table td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.stock-table .stock-code{font-weight:700;white-space:nowrap}
+.stock-table .stock-name{white-space:normal;min-width:220px;max-width:420px}
+.stock-table thead .stock-group th{padding:6px 8px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#7a889c;background:#f3f6fa;border-bottom:0}
+.stock-table tfoot td{padding:8px;background:#f4f7fb;border-top:1px solid #d7e0ec;border-bottom:0;font-weight:700;color:#24344d}
+.stock-table tbody tr.is-shortage td{background:#fff8eb}
+.stock-table .listing-actions{text-align:right;white-space:nowrap}
+.stock-item-link{appearance:none;background:none;border:0;padding:0;margin:0;font:inherit;font-weight:700;color:#1d4f91;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:2px}
+.stock-item-link:hover{color:#12386c}
+.stock-item-name{font-weight:500;color:#24344d;text-decoration:none}
+.stock-item-name:hover{color:#1d4f91;text-decoration:underline}
+.modal:has(.item-history) .modal-card{width:min(980px,96vw)}
+.item-history{display:grid;gap:14px}
+.item-history textarea{width:100%;min-height:90px;border:1px solid #d7e0ec;border-radius:8px;padding:8px 10px;font:inherit}
+
+@media(max-width:900px){
+  #app-shell.saft-shell .page-head{padding:12px 14px!important}
+}
