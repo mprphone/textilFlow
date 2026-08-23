@@ -9,6 +9,7 @@ export async function renderEntityPage(container, config) {
   const fieldMap = Object.fromEntries((defaultFields || []).map(field => [field.key, field]));
   const listQuery = [config.query || '', 'limit=2000'].filter(Boolean).join('&');
   let rows = await crudList(config.resource, state.companyId, listQuery);
+  if (config.filterRows) rows = rows.filter(config.filterRows);
   let currentPage = 1;
   let pageSize = 50;
   let filtered = rows;
