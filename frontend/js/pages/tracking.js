@@ -1,7 +1,6 @@
 import { crudList, get, post } from '../api.js';
 import { on } from '../events.js?v=20260822-30';
 import { badge, date, esc, number } from '../format.js?v=20260819-9';
-import { readForm, renderForm } from '../forms.js?v=20260822-2';
 import { loadOrderDossier } from '../production/dossier.js?v=20260822-21';
 import { state } from '../state.js';
 import { closeModal, openModal, pageHeader, toast } from '../ui.js?v=20260820-5';
@@ -200,22 +199,68 @@ function stepBadge(status) {
   return `<span class="badge ${meta.cls}">${esc(meta.label)}</span>`;
 }
 
-function distributeFields(order, row, current, options) {
+const DEST_OPTIONS = [
+  {value: 'internal', title: 'Confeção interna', hint: 'Linha de produção'},
+  {value: 'subcontract', title: 'Serviço externo', hint: 'Tinturaria, estamparia…'},
+  {value: 'shipped', title: 'Expedição', hint: 'Já saiu'},
+];
+
+function selectOptionsHtml(list) {
+  return (list || []).map(item => `<option value="${esc(item.value)}">${esc(item.label)}</option>`).join('');
+}
+
+function distributeFormHtml(order, row, current, options, defaultDestination) {
   const {unassigned, internal} = row;
-  const destinations = [
-    {value: 'internal', label: 'Confeção interna'},
-    {value: 'subcontract', label: 'Serviço externo'},
-    {value: 'shipped', label: 'Expedição'},
-  ];
-  return [
-    {key: 'quantity', label: 'Quantidade', type: 'number', required: true, section: 'Quantidade', help: `Por distribuir ${number(unassigned)} · na confeção ${number(internal)} · total ${number(order.quantity)}${current ? ` · passo recomendado: ${current.label}` : ''}`},
-    {key: 'source', label: 'Sair de', type: 'select', required: true, options: [{value: 'unassigned', label: `Por distribuir (${number(unassigned)})`}, {value: 'internal', label: `Confeção interna (${number(internal)})`}], section: 'Origem'},
-    {key: 'destination', label: 'Enviar para', type: 'select', required: true, options: destinations, section: 'Destino'},
-    {key: 'line_id', label: 'Linha de confeção', type: 'select', options: options.lines, section: 'Destino'},
-    {key: 'subcontract_service_id', label: 'Serviço e fornecedor', type: 'select', options: options.services, section: 'Destino'},
-    {key: 'planned_date', label: 'Data prevista', type: 'date', section: 'Destino', help: 'Opcional — início na confeção interna ou envio ao serviço.'},
-    {key: 'override', label: 'Exceção — avançar mesmo fora da sequência', type: 'checkbox', section: 'Exceção', help: 'Use só quando esta encomenda tiver de sair do ciclo normal.'},
-  ];
+  const sourceChoices = [];
+  if (unassigned > 0) sourceChoices.push({value: 'unassigned', label: `Por distribuir (${number(unassigned)})`});
+  if (internal > 0) sourceChoices.push({value: 'internal', label: `Confeção interna (${number(internal)})`});
+  const defaultSource = unassigned > 0 ? 'unassigned' : 'internal';
+  const sourceField = sourceChoices.length > 1
+    ? `<div class="field"><label>Sair de</label><select name="source">${selectOptionsHtml(sourceChoices)}</select></div>`
+    : `<input type="hidden" name="source" value="${esc(sourceChoices[0]?.value || defaultSource)}">`;
+
+  return `
+    <div class="dist-block">
+      <label for="dist-quantity">Quantidade a distribuir</label>
+      <input id="dist-quantity" name="quantity" type="number" required min="0.01" step="any" value="${esc(unassigned || internal || 0)}">
+      <small class="muted">Por distribuir ${number(unassigned)} · na confeção ${number(internal)} · total ${number(order.quantity)}</small>
+    </div>
+    ${sourceField}
+    <div class="dist-block">
+      <div class="dist-destination-head">
+        <label>Para onde vai</label>
+        ${current ? `<span class="dist-hint">Recomendado: ${esc(current.label)}</span>` : ''}
+      </div>
+      <div class="dest-options" data-dest-options>
+        ${DEST_OPTIONS.map(item => `<button type="button" class="dest-option ${item.value === defaultDestination ? 'active' : ''}" data-dest-value="${item.value}"><b>${esc(item.title)}</b><small>${esc(item.hint)}</small></button>`).join('')}
+      </div>
+      <input type="hidden" name="destination" value="${esc(defaultDestination)}">
+    </div>
+    <div class="field" data-line-field><label>Linha de confeção *</label><select name="line_id"><option value="">Selecionar…</option>${selectOptionsHtml(options.lines)}</select></div>
+    <div class="field" data-service-field><label>Serviço e fornecedor *</label><select name="subcontract_service_id"><option value="">Selecionar…</option>${selectOptionsHtml(options.services)}</select></div>
+    <details class="dist-advanced">
+      <summary>Opções avançadas</summary>
+      <div class="field"><label>Data prevista</label><input name="planned_date" type="date"><small class="muted">Opcional — início na confeção interna ou envio ao serviço.</small></div>
+      <label class="dist-override"><input name="override" type="checkbox"> Exceção — avançar mesmo fora da sequência</label>
+    </details>
+    <p class="muted distribute-outcome" data-distribute-note></p>
+    <div class="form-footer">
+      <button type="button" class="btn" data-close-modal>Cancelar</button>
+      <button type="submit" class="btn primary" data-submit-btn>Distribuir</button>
+    </div>
+  `;
+}
+
+function readDistributeForm(form) {
+  return {
+    quantity: Number(form.elements.quantity.value || 0),
+    source: form.elements.source.value,
+    destination: form.elements.destination.value,
+    line_id: Number(form.elements.line_id.value || 0) || null,
+    subcontract_service_id: Number(form.elements.subcontract_service_id.value || 0) || null,
+    planned_date: form.elements.planned_date.value || null,
+    override: form.elements.override.checked,
+  };
 }
 
 function quantitiesTabHtml(order, row, steps) {
@@ -262,16 +307,12 @@ function datesTabHtml() {
 
 function openDistribute(row, options, reload) {
   if (!row) return;
-  const {order, unassigned, internal} = row;
-  const defaultQty = unassigned || internal || 0;
-  const defaultSource = unassigned ? 'unassigned' : 'internal';
+  const {order} = row;
 
   get(`/production/orders/${order.id}/trace`).then(data => data.services || []).catch(() => []).then(steps => {
     const current = steps.find(step => step.can_distribute && step.kind === 'external') || steps.find(step => step.status === 'ready');
     const sewingLocked = steps.some(step => step.key === 'sewing' && step.locked);
-    const fields = distributeFields(order, row, current, options);
     const defaultDestination = current && current.kind === 'external' && !sewingLocked ? 'subcontract' : 'internal';
-    const values = {quantity: defaultQty, source: defaultSource, destination: defaultDestination};
 
     openModal(`Distribuir ${order.order_no}`, `
       <div class="tabs distribute-tabs">
@@ -280,12 +321,11 @@ function openDistribute(row, options, reload) {
         <button type="button" class="tab" data-tab="dates">Datas</button>
       </div>
       <div data-tab-panel="distribute">
-        ${renderForm(fields, values, {formId: 'distribute-form', submitLabel: 'Distribuir'})}
-        <p class="muted distribute-outcome" data-distribute-note></p>
+        <form id="distribute-form">${distributeFormHtml(order, row, current, options, defaultDestination)}</form>
       </div>
       <div data-tab-panel="quantities" hidden>${quantitiesTabHtml(order, row, steps)}</div>
       <div data-tab-panel="dates" hidden>${datesTabHtml()}</div>
-    `, 'Cada distribuição fica sempre associada a um documento no ERP — nunca é só uma gravação.');
+    `, 'Distribuir cria sempre o documento certo no ERP.');
 
     const body = document.getElementById('modal-body');
     body.querySelectorAll('[data-close-modal]').forEach(button => button.addEventListener('click', closeModal));
@@ -299,7 +339,7 @@ function openDistribute(row, options, reload) {
     const destinationField = form.elements.destination;
     const serviceField = form.elements.subcontract_service_id;
     const lineField = form.elements.line_id;
-    const submitButton = form.querySelector('button[type="submit"]');
+    const submitButton = form.querySelector('[data-submit-btn]');
     const outcomeNote = body.querySelector('[data-distribute-note]');
     const OUTCOME = {
       internal: {label: 'Distribuir e criar documento interno', note: 'Cria a guia de transferência interna para a linha, já com o artigo e a quantidade — fica tudo agrupado no ERP.'},
@@ -307,21 +347,24 @@ function openDistribute(row, options, reload) {
       shipped: {label: 'Registar expedição', note: 'Regista a quantidade já expedida nesta OF. A guia ao cliente faz-se em Expedição.'},
     };
     const updateVisibility = () => {
-      const isInternal = destinationField.value === 'internal';
-      const isSubcontract = destinationField.value === 'subcontract';
-      lineField.closest('.field').hidden = !isInternal;
-      serviceField.closest('.field').hidden = !isSubcontract;
-      const outcome = OUTCOME[destinationField.value] || OUTCOME.internal;
+      const value = destinationField.value;
+      body.querySelectorAll('[data-dest-value]').forEach(button => button.classList.toggle('active', button.dataset.destValue === value));
+      lineField.closest('.field').hidden = value !== 'internal';
+      serviceField.closest('.field').hidden = value !== 'subcontract';
+      const outcome = OUTCOME[value] || OUTCOME.internal;
       if (submitButton) submitButton.textContent = outcome.label;
       if (outcomeNote) outcomeNote.textContent = outcome.note;
     };
-    destinationField.addEventListener('change', updateVisibility);
+    body.querySelectorAll('[data-dest-value]').forEach(button => button.addEventListener('click', () => {
+      destinationField.value = button.dataset.destValue;
+      updateVisibility();
+    }));
     updateVisibility();
 
     form.addEventListener('submit', async event => {
       event.preventDefault();
       try {
-        const payload = readForm(form, fields);
+        const payload = readDistributeForm(form);
         const result = await post(`/production/orders/${order.id}/distribute-and-document`, payload);
         closeModal();
         if (result.document) {
@@ -350,7 +393,7 @@ function openDistribute(row, options, reload) {
     });
 
     body.querySelector('[data-save-tranches]')?.addEventListener('click', async () => {
-      const base = readForm(form, fields);
+      const base = readDistributeForm(form);
       const rows = [...trancheBody().children];
       let stopped = false;
       let anyOk = false;
