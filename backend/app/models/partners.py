@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Date, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
 
 from ..db import Base
 from .base import TimestampMixin
@@ -76,6 +76,32 @@ class Certification(Base, TimestampMixin):
     expiry_date = Column(Date)
     document_path = Column(Text)
     status = Column(String(30), default="valid", nullable=False)
+
+
+class SupplierOccurrence(Base, TimestampMixin):
+    """Histórico de relacionamento: reclamações, atrasos e comunicações."""
+
+    __tablename__ = "supplier_occurrences"
+    id = Column(Integer, primary_key=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=False, index=True)
+    occurred_on = Column(Date, nullable=False)
+    kind = Column(String(40), default="comunicacao", nullable=False, index=True)
+    subject = Column(String(250), nullable=False)
+    description = Column(Text)
+    production_order_id = Column(Integer, ForeignKey("production_orders.id"), index=True)
+    subcontract_job_id = Column(Integer, ForeignKey("subcontract_jobs.id"))
+    subcontract_service_id = Column(Integer, ForeignKey("subcontract_services.id"))
+    purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id"))
+    responsible = Column(String(150))
+    status = Column(String(30), default="aberto", nullable=False, index=True)
+    priority = Column(String(20), default="normal", nullable=False)
+    due_date = Column(Date)
+    extra = Column(JSON, default=dict, nullable=False)
+    __table_args__ = (
+        Index("ix_supplier_occurrences_company_supplier", "company_id", "supplier_id"),
+        Index("ix_supplier_occurrences_company_order", "company_id", "production_order_id"),
+    )
 
 
 class PaymentTerm(Base, TimestampMixin):

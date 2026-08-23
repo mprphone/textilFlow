@@ -172,6 +172,7 @@ export const MODULES = [
     routes:[
       ['tables-customers','Clientes','♧'],
       ['tables-suppliers','Fornecedores','⇄'],
+      ['tables-service-stages','Etapas de produção','◷'],
       ['tables-items','Artigos','▣'],
       ['tables-banks','Bancos','€'],
       ['tables-exchange-rates','Câmbio','€'],

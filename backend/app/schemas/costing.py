@@ -90,10 +90,20 @@ class WizardProposalCreate(CostingModel):
     overheads: list[WizardComponentInput] = Field(default_factory=list)
 
 
+class GradeCell(CostingModel):
+    """Uma célula da grelha cor×tamanho: quantidade (e opcionalmente preço) para uma combinação."""
+
+    color: str | None = Field(default=None, max_length=100)
+    size: str | None = Field(default=None, max_length=30)
+    quantity: float = Field(gt=0)
+    unit_price: float | None = Field(default=None, ge=0)
+
+
 class ProposalReleaseRequest(CostingModel):
     """Dados operacionais necessarios para aceitar e lancar uma proposta."""
 
     quantity: float | None = Field(default=None, gt=0)
+    grade: list[GradeCell] | None = None
     customer_id: int | None = Field(default=None, gt=0)
     order_no: str | None = Field(default=None, max_length=100)
     sales_order_no: str | None = Field(default=None, max_length=100)

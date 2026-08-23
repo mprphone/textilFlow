@@ -4,6 +4,23 @@ from ..db import Base
 from .base import TimestampMixin
 
 
+class ServiceStage(Base, TimestampMixin):
+    """Etapa de produção configurável (corte, confeção, revista, bordado…).
+
+    Lista aberta por empresa — não um enum fixo no código — para se poder
+    acrescentar etapas novas (ex.: passadoria) sem alterar o programa.
+    """
+
+    __tablename__ = "service_stages"
+    id = Column(Integer, primary_key=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    code = Column(String(60), nullable=False)
+    name = Column(String(120), nullable=False)
+    sequence = Column(Integer, default=0, nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
+    __table_args__ = (UniqueConstraint("company_id", "code"),)
+
+
 class SubcontractService(Base, TimestampMixin):
     """Serviço e preço acordado com um fornecedor externo."""
 
@@ -14,6 +31,10 @@ class SubcontractService(Base, TimestampMixin):
     code = Column(String(60), nullable=False)
     name = Column(String(200), nullable=False)
     category = Column(String(60), default="other", nullable=False)
+    production_stage_id = Column(Integer, ForeignKey("service_stages.id"), nullable=True, index=True)
+    execution_type = Column(String(20), default="external", nullable=False)
+    allows_partial_batches = Column(Boolean, default=True, nullable=False)
+    description = Column(Text)
     unit = Column(String(20), default="un", nullable=False)
     unit_cost = Column(Float, default=0, nullable=False)
     minimum_quantity = Column(Float, default=0, nullable=False)

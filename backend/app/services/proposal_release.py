@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 
 from ..models import (
     BOMItem, CostLine, CostSheet, Customer, Material, ProductionLine,
-    ProductionMaterialRequirement, ProductionOrder, ProposalProductionRelease,
-    SalesOrder, SalesOrderLine, StockLot, Style, SubcontractService,
+    ProductionMaterialRequirement, ProductionOrder, ProductionOrderVariant, ProposalProductionRelease,
+    SalesOrder, SalesOrderLine, StockLot, Style, StyleVariant, SubcontractService,
 )
+from .inventory import ensure_item_for_variant, ensure_variant
 from .serialization import model_to_dict
 
 
@@ -514,7 +515,19 @@ def release_sheet_to_production(db: Session, sheet_id: int, payload, user_id: in
         raise ReleaseValidationError("A proposta precisa de linhas de custo validas")
     if float(sheet.selling_price or 0) <= 0:
         raise ReleaseValidationError("A proposta precisa de preco de venda")
-    quantity = float(payload.quantity if payload.quantity is not None else sheet.quantity_basis or 0)
+    grade_cells = list(payload.grade or [])
+    if grade_cells:
+        seen_cells = set()
+        for cell in grade_cells:
+            cell_key = (_normalise(cell.color), _normalise(cell.size))
+            if cell_key in seen_cells:
+                raise ReleaseValidationError("A grelha tem celulas repetidas (mesma cor e tamanho)")
+            seen_cells.add(cell_key)
+        quantity = sum(cell.quantity for cell in grade_cells)
+        if payload.quantity is not None and abs(float(payload.quantity) - quantity) > 1e-6:
+            raise ReleaseValidationError("A quantidade indicada nao bate certo com a soma da grelha")
+    else:
+        quantity = float(payload.quantity if payload.quantity is not None else sheet.quantity_basis or 0)
     if quantity <= 0:
         raise ReleaseValidationError("A quantidade tem de ser superior a zero")
     meta = dict(sheet.custom_data or {})
@@ -536,6 +549,12 @@ def release_sheet_to_production(db: Session, sheet_id: int, payload, user_id: in
             raise ReleaseValidationError("A linha de producao nao pertence a esta empresa")
     if payload.planned_start and payload.planned_end and payload.planned_end < payload.planned_start:
         raise ReleaseValidationError("A data final planeada nao pode ser anterior ao inicio")
+
+    grade_variants = []
+    for cell in grade_cells:
+        variant = ensure_variant(db, style, cell.color, cell.size)
+        ensure_item_for_variant(db, variant, style)
+        grade_variants.append((cell, variant))
 
     now = datetime.now(timezone.utc)
     release = ProposalProductionRelease(
@@ -598,6 +617,16 @@ def release_sheet_to_production(db: Session, sheet_id: int, payload, user_id: in
     )
     db.add(production_order)
     db.flush()
+    if grade_variants:
+        for cell, variant in grade_variants:
+            db.add(ProductionOrderVariant(
+                company_id=sheet.company_id,
+                production_order_id=production_order.id,
+                variant_id=variant.id,
+                quantity=cell.quantity,
+                unit_price=cell.unit_price,
+            ))
+        db.flush()
     release.sales_order_id = sales_order.id
     release.sales_order_line_id = sales_line.id
     release.production_order_id = production_order.id
@@ -658,9 +687,19 @@ def release_view(db: Session, release: ProposalProductionRelease, *, already_rel
     planned_material_total = _round(float(sheet.material_cost or 0) * release.quantity) if sheet else 0.0
     stock_material_total = _round(summary["estimated_material_cost"])
     variance_total = _round(stock_material_total - planned_material_total)
+    grade_rows = db.query(ProductionOrderVariant, StyleVariant).join(
+        StyleVariant, StyleVariant.id == ProductionOrderVariant.variant_id,
+    ).filter(ProductionOrderVariant.production_order_id == production_order.id).all() if production_order else []
     return {
         "release": model_to_dict(release),
         "already_released": already_released,
+        "grade": [
+            {
+                "variant_id": variant.id, "sku": variant.sku, "color": variant.color, "size": variant.size,
+                "quantity": pov.quantity, "unit_price": pov.unit_price,
+            }
+            for pov, variant in grade_rows
+        ],
         "production_order": model_to_dict(production_order) if production_order else None,
         "sales_order": model_to_dict(sales_order) if sales_order else None,
         "requirements": requirements,

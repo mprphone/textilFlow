@@ -7,7 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.db import Base
 from backend.app.models import (
-    Company, CuttingJob, Customer, ProductionOrder, ProductionRouteStep, SalesOrder, SalesOrderLine,
+    Company, CuttingJob, Customer, ProductionLine, ProductionOrder, ProductionRouteStep, SalesOrder, SalesOrderLine,
     Style, SubcontractJob, SubcontractService, Supplier,
 )
 from backend.app.services.order_followup import assert_can_distribute, service_plan
@@ -86,6 +86,26 @@ class ProductionRouteTest(unittest.TestCase):
         self.assertTrue(dyeing["locked"])
         with self.assertRaises(ValueError):
             distribute(self.db, self.order, {"source": "unassigned", "destination": "subcontract", "subcontract_service_id": self.dye.id, "quantity": 20})
+
+    def test_distribute_confection_to_revista_and_onward(self):
+        # 20 pecas na confecao, revista 12 delas e so depois manda as 12 para
+        # expedicao — as outras 8 continuam na confecao interna.
+        line = ProductionLine(company_id=self.company.id, code="L1", name="Linha 1")
+        self.db.add(line)
+        self.db.add(CuttingJob(company_id=self.company.id, production_order_id=self.order.id, planned_pieces=20, good_pieces=20, status="completed"))
+        self.db.flush()
+        distribute(self.db, self.order, {"source": "unassigned", "destination": "internal", "line_id": line.id, "quantity": 20})
+        result = distribute(self.db, self.order, {"source": "internal", "destination": "revista", "quantity": 12})
+        self.assertEqual(result["holdings"]["internal"], 8)
+        self.assertEqual(result["holdings"]["revista"], 12)
+        result = distribute(self.db, self.order, {"source": "revista", "destination": "shipped", "quantity": 12})
+        self.assertEqual(result["holdings"]["revista"], 0)
+        self.assertEqual(result["holdings"]["shipped"], 12)
+        self.assertEqual(result["holdings"]["internal"], 8)
+
+    def test_distribute_revista_over_available_raises(self):
+        with self.assertRaises(ValueError):
+            distribute(self.db, self.order, {"source": "revista", "destination": "shipped", "quantity": 5})
 
 
 if __name__ == "__main__":

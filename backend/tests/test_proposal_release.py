@@ -8,10 +8,10 @@ from sqlalchemy.pool import StaticPool
 from backend.app.db import Base
 from backend.app.models import (
     BOMItem, Company, CostLine, CostSheet, Customer, Material,
-    ProductionMaterialRequirement, ProductionOrder, ProposalProductionRelease,
-    SalesOrder, SalesOrderLine, StockLot, Style, User,
+    ProductionMaterialRequirement, ProductionOrder, ProductionOrderVariant, ProposalProductionRelease,
+    SalesOrder, SalesOrderLine, StockLot, Style, StyleVariant, User,
 )
-from backend.app.schemas import ProposalReleaseRequest, StockMovementRequest
+from backend.app.schemas import GradeCell, ProposalReleaseRequest, StockMovementRequest
 from backend.app.services.costing import recalculate_sheet
 from backend.app.services.inventory import register_movement
 from backend.app.services.proposal_release import (
@@ -271,6 +271,109 @@ class ProposalReleaseTest(unittest.TestCase):
         self.assertEqual(lot.reserved, 5)
         requirement = self.db.query(ProductionMaterialRequirement).filter_by(material_id=self.fabric.id).one()
         self.assertEqual(requirement.reserved_quantity, 12)
+
+    def test_release_with_grade_creates_variants_material_and_grade_rows(self):
+        payload = ProposalReleaseRequest(
+            grade=[
+                GradeCell(color="Preto", size="M", quantity=6, unit_price=13.0),
+                GradeCell(color="Preto", size="L", quantity=4, unit_price=13.0),
+            ],
+            order_no="OF-GRADE-TEST", reserve_stock=True,
+        )
+        release, replayed = release_sheet_to_production(self.db, self.sheet.id, payload, self.user.id)
+        self.assertFalse(replayed)
+        self.db.commit()
+        self.db.refresh(release)
+
+        self.assertEqual(release.quantity, 10)
+        order = self.db.get(ProductionOrder, release.production_order_id)
+        self.assertEqual(order.quantity, 10)
+        variants = {row.sku: row for row in self.db.query(StyleVariant).all()}
+        self.assertEqual(len(variants), 2)
+        self.assertIn("ST-1-PRE-M", variants)
+        self.assertIn("ST-1-PRE-L", variants)
+        materials = self.db.query(Material).filter(Material.code.in_(["ST-1-PRE-M", "ST-1-PRE-L"])).all()
+        self.assertEqual(len(materials), 2)
+        grade_rows = self.db.query(ProductionOrderVariant).filter_by(production_order_id=order.id).all()
+        self.assertEqual(len(grade_rows), 2)
+        self.assertEqual(sum(row.quantity for row in grade_rows), 10)
+
+    def test_release_with_grade_rejects_quantity_mismatch(self):
+        payload = ProposalReleaseRequest(
+            quantity=99,
+            grade=[GradeCell(color="Preto", size="M", quantity=6)],
+            order_no="OF-GRADE-MISMATCH",
+        )
+        with self.assertRaises(ReleaseValidationError):
+            release_sheet_to_production(self.db, self.sheet.id, payload, self.user.id)
+        self.db.rollback()
+        self.assertEqual(self.db.query(ProductionOrder).count(), 0)
+        self.assertEqual(self.db.query(StyleVariant).count(), 0)
+
+    def test_release_with_grade_rejects_duplicate_cells(self):
+        payload = ProposalReleaseRequest(
+            grade=[
+                GradeCell(color="Preto", size="M", quantity=6),
+                GradeCell(color="preto", size=" M ", quantity=4),
+            ],
+            order_no="OF-GRADE-DUP",
+        )
+        with self.assertRaises(ReleaseValidationError):
+            release_sheet_to_production(self.db, self.sheet.id, payload, self.user.id)
+        self.db.rollback()
+        self.assertEqual(self.db.query(ProductionOrder).count(), 0)
+        self.assertEqual(self.db.query(StyleVariant).count(), 0)
+
+    def test_release_reuses_existing_variant_and_material_on_second_release_for_same_cell(self):
+        payload1 = ProposalReleaseRequest(
+            grade=[GradeCell(color="Preto", size="M", quantity=6, unit_price=13.0)],
+            order_no="OF-GRADE-A", reserve_stock=True,
+        )
+        release_sheet_to_production(self.db, self.sheet.id, payload1, self.user.id)
+        self.db.commit()
+
+        sheet2 = CostSheet(
+            company_id=self.company.id, style_id=self.style.id, status="approved",
+            version=2, quantity_basis=8, selling_price=20,
+            custom_data={"customer_id": self.customer.id, "quote_no": "PROP-TEST-2"},
+        )
+        self.db.add(sheet2)
+        self.db.flush()
+        self.db.add_all([
+            CostLine(
+                company_id=self.company.id, cost_sheet_id=sheet2.id, category="material",
+                description="Jersey", quantity=2, unit="kg", unit_cost=5, amount=10,
+                source_type="bom",
+            ),
+            CostLine(
+                company_id=self.company.id, cost_sheet_id=sheet2.id, category="labor",
+                description="Sewing", quantity=4, unit="min", unit_cost=.2, amount=.8,
+                source_type="operation",
+            ),
+        ])
+        self.db.flush()
+        recalculate_sheet(self.db, sheet2)
+        self.db.commit()
+
+        payload2 = ProposalReleaseRequest(
+            grade=[GradeCell(color="Preto", size="M", quantity=8, unit_price=12.2)],
+            order_no="OF-GRADE-B", reserve_stock=True,
+        )
+        release_sheet_to_production(self.db, sheet2.id, payload2, self.user.id)
+        self.db.commit()
+
+        self.assertEqual(self.db.query(StyleVariant).count(), 1)
+        variant = self.db.query(StyleVariant).one()
+        self.assertEqual(self.db.query(Material).filter_by(code=variant.sku).count(), 1)
+
+    def test_release_without_grade_creates_no_grade_rows(self):
+        payload = ProposalReleaseRequest(quantity=10, order_no="OF-NO-GRADE", reserve_stock=True)
+        release, _ = release_sheet_to_production(self.db, self.sheet.id, payload, self.user.id)
+        self.db.commit()
+        self.assertEqual(self.db.query(ProductionOrderVariant).filter_by(
+            production_order_id=release.production_order_id,
+        ).count(), 0)
+        self.assertEqual(self.db.query(StyleVariant).count(), 0)
 
 
 if __name__ == "__main__":

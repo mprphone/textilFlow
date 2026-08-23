@@ -1,11 +1,10 @@
-import { crudCreate, crudList, crudUpdate, get } from '../api.js';
-import { renderEntityPage } from '../entity.js?v=20260819-9';
+import { crudCreate, crudDelete, crudList, crudUpdate, get } from '../api.js';
 import { badge, date, esc, money, number } from '../format.js?v=20260819-9';
 import { loadOrderDossier } from '../production/dossier.js?v=20260822-21';
 import { stageLabel } from '../production/cycle.js?v=20260822-20';
 import { recordModal } from '../quick_create.js';
 import { state } from '../state.js';
-import { pageHeader, toast } from '../ui.js?v=20260820-5';
+import { closeModal, confirmDelete, empty, openModal, pageHeader, toast } from '../ui.js?v=20260820-5';
 
 const JOB_STATUS = {planned:'A enviar', sent:'No fornecedor', partial:'Receção parcial', received:'Recebido', problem:'Incidência', cancelled:'Anulado'};
 const SERVICE = {dyeing:'Tinturaria', printing:'Estamparia', sewing:'Costura', cutting:'Corte fora', embroidery:'Bordado', laundry:'Lavandaria', finishing:'Acabamento', transport:'Transporte', other:'Outro'};
@@ -82,7 +81,7 @@ export async function render(container) {
     if (!button) return;
     tab = Number(button.dataset.subTab);
     container.querySelectorAll('[data-sub-tab]').forEach(item => item.classList.toggle('active', item === button));
-    if (tab === 1) await renderEntityPage(panel, serviceCatalog(options, maps));
+    if (tab === 1) await renderServiceCatalog(panel);
     else await drawBoard(panel, jobs, maps, options, () => render(container));
   });
   await drawBoard(panel, jobs, maps, options, () => render(container));
@@ -344,24 +343,288 @@ function problemJob(job, reload) {
   });
 }
 
-function serviceCatalog(options, maps) {
+const CATEGORY_OPTIONS = [
+  {value:'dyeing',label:'Tinturaria'},{value:'printing',label:'Estamparia'},{value:'sewing',label:'Costura'},{value:'cutting',label:'Corte (excepção)'},
+  {value:'embroidery',label:'Bordado'},{value:'laundry',label:'Lavandaria'},{value:'finishing',label:'Acabamento'},{value:'transport',label:'Transporte'},{value:'other',label:'Outro'},
+];
+
+const EXECUTION_TYPE_OPTIONS = [
+  {value:'external',label:'Externo'},{value:'internal',label:'Interno'},{value:'both',label:'Ambos'},
+];
+const EXECUTION_TYPE_LABEL = Object.fromEntries(EXECUTION_TYPE_OPTIONS.map(item => [item.value, item.label]));
+
+const supplierFields = options => [
+  {key:'code',label:'Código',required:true,section:'Fornecedor'},
+  {key:'supplier_id',label:'Fornecedor',type:'select',required:true,options:options.supplier,section:'Fornecedor'},
+  {key:'unit',label:'Unidade',required:true,default:'un',section:'Condições'},{key:'unit_cost',label:'Preço acordado',type:'number',required:true,default:0,section:'Condições'},
+  {key:'minimum_quantity',label:'Quantidade mínima',type:'number',default:0,section:'Condições'},{key:'lead_time_days',label:'Prazo (dias)',type:'number',default:0,section:'Condições'},
+  {key:'quality_score',label:'Qualidade (%)',type:'number',default:100,section:'Controlo'},{key:'active',label:'Estado',type:'checkbox',default:true,help:'Disponível em novas propostas',section:'Controlo'},
+  {key:'notes',label:'Notas e condições',type:'textarea',full:true,section:'Controlo'},
+];
+
+const generalFields = (stages, extra = {}) => [
+  {key:'name',label:'Serviço',required:true,section:'Identificação'},
+  {key:'category',label:'Tipo',type:'select',options:CATEGORY_OPTIONS,default:'other',section:'Identificação'},
+  {key:'description',label:'Descrição',type:'textarea',full:true,section:'Identificação'},
+  {key:'production_stage_id',label:'Etapa de produção',type:'select',options:stages.map(item => ({value:item.id,label:item.name})),section:'Configuração de produção'},
+  {key:'execution_type',label:'Tipo de execução',type:'select',options:EXECUTION_TYPE_OPTIONS,default:'external',section:'Configuração de produção'},
+  {key:'allows_partial_batches',label:'Permite produção parcial / lotes',type:'checkbox',default:true,help:'Deixa avançar parte da quantidade para a etapa seguinte sem esperar pela OF toda',section:'Configuração de produção'},
+  ...(extra.withFirstSupplier ? supplierFields(extra.options) : []),
+];
+
+function createServiceForm(options, stages, reload) {
+  recordModal({
+    title:'Novo serviço', resource:'subcontract-services',
+    subtitle:'O primeiro fornecedor e preço deste serviço. Mais fornecedores acrescentam-se depois, dentro do serviço — não é preciso conhecer todos já.',
+    values:{unit:'un', unit_cost:0, minimum_quantity:0, lead_time_days:0, quality_score:100, active:true, category:'other', execution_type:'external', allows_partial_batches:true},
+    fields: generalFields(stages, {withFirstSupplier:true, options}),
+    onSaved: reload,
+  });
+}
+
+function addSupplierToService(name, category, options, reload) {
+  recordModal({
+    title:`Adicionar fornecedor a "${name}"`, resource:'subcontract-services',
+    subtitle:'O nome e o tipo ficam os mesmos deste serviço — só falta o fornecedor e as condições dele.',
+    values:{unit:'un', unit_cost:0, minimum_quantity:0, lead_time_days:0, quality_score:100, active:true},
+    fields: supplierFields(options),
+    transform: payload => ({...payload, name, category}),
+    onSaved: reload,
+  });
+}
+
+function editSupplierRow(row, options, reload) {
+  recordModal({
+    title:`Editar fornecedor · ${row.code}`, resource:'subcontract-services', recordId: row.id,
+    subtitle:'Isto muda só este fornecedor. O nome e o tipo do serviço editam-se no ecrã do serviço.',
+    values: row,
+    fields: supplierFields(options),
+    onSaved: reload,
+  });
+}
+
+function supplierRowsTable(groupRows, maps, jobs) {
+  return `<table class="data-table"><thead><tr><th>Código</th><th>Fornecedor</th><th>Preço</th><th>Prazo</th><th>Qualidade</th><th>Última compra</th><th>Estado</th><th></th></tr></thead><tbody>
+    ${groupRows.map(row => {
+      const lastJob = jobs.filter(job => job.subcontract_service_id === row.id).slice().sort((a, b) => String(b.sent_date || '').localeCompare(String(a.sent_date || '')))[0];
+      return `<tr>
+        <td><b>${esc(row.code)}</b></td>
+        <td>${esc(maps.supplierById[row.supplier_id]?.name || '—')}</td>
+        <td>${money(row.unit_cost)} / ${esc(row.unit)}</td>
+        <td>${number(row.lead_time_days)} dias</td>
+        <td>${number(row.quality_score)}%</td>
+        <td>${lastJob ? date(lastJob.sent_date) : '—'}</td>
+        <td>${badge(row.active ? 'ativo' : 'inativo')}</td>
+        <td class="listing-actions"><div class="row-actions">
+          <button type="button" class="btn icon" data-edit-supplier="${row.id}" aria-label="Editar">✎</button>
+          <button type="button" class="btn icon danger" data-remove-supplier="${row.id}" aria-label="Remover">×</button>
+        </div></td>
+      </tr>`;
+    }).join('')}
+  </tbody></table>`;
+}
+
+function computeServiceStats(groupRows, jobs) {
+  const ids = new Set(groupRows.map(row => row.id));
+  const related = jobs.filter(job => ids.has(job.subcontract_service_id)).slice()
+    .sort((a, b) => String(b.sent_date || '').localeCompare(String(a.sent_date || '')));
+  const last = related[0] || null;
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - 1);
+  const cutoffIso = cutoff.toISOString().slice(0, 10);
+  const recentPrices = related.filter(job => (job.sent_date || '') >= cutoffIso && job.unit_cost > 0).map(job => job.unit_cost);
   return {
-    resource:'subcontract-services',title:'Serviços subcontratados',subtitle:'Preços acordados, prazos e fornecedores usados nos envios.',singular:'serviço',newLabel:'Novo serviço',
-    extraActions:'<a class="btn" href="#/partners">Fornecedores</a>',
-    fields:[
-      {key:'code',label:'Código',required:true,section:'Identificação'},{key:'name',label:'Serviço',required:true,section:'Identificação'},
-      {key:'supplier_id',label:'Fornecedor',type:'select',required:true,options:options.supplier,section:'Identificação'},
-      {key:'category',label:'Tipo',type:'select',options:[{value:'dyeing',label:'Tinturaria'},{value:'printing',label:'Estamparia'},{value:'sewing',label:'Costura'},{value:'cutting',label:'Corte (excepção)'},{value:'embroidery',label:'Bordado'},{value:'laundry',label:'Lavandaria'},{value:'finishing',label:'Acabamento'},{value:'transport',label:'Transporte'},{value:'other',label:'Outro'}],default:'other',section:'Condições'},
-      {key:'unit',label:'Unidade',required:true,default:'un',section:'Condições'},{key:'unit_cost',label:'Preço acordado',type:'number',required:true,default:0,section:'Condições'},
-      {key:'minimum_quantity',label:'Quantidade mínima',type:'number',default:0,section:'Condições'},{key:'lead_time_days',label:'Prazo (dias)',type:'number',default:0,section:'Condições'},
-      {key:'quality_score',label:'Qualidade (%)',type:'number',default:100,section:'Controlo'},{key:'active',label:'Estado',type:'checkbox',default:true,help:'Disponível em novas propostas',section:'Controlo'},
-      {key:'notes',label:'Notas e condições',type:'textarea',full:true,section:'Controlo'},
-    ],
-    columns:[
-      {key:'code',label:'Código',render:r=>`<b>${esc(r.code)}</b>`},{key:'name',label:'Serviço'},
-      {key:'supplier_id',label:'Fornecedor',render:r=>esc(maps.supplierById[r.supplier_id]?.name || '—')},{key:'category',label:'Tipo',render:r=>esc(SERVICE[r.category]||r.category)},
-      {key:'unit_cost',label:'Preço',render:r=>`<b>${money(r.unit_cost)} / ${esc(r.unit)}</b>`},{key:'minimum_quantity',label:'Mínimo',render:r=>`${number(r.minimum_quantity)} ${esc(r.unit)}`},
-      {key:'lead_time_days',label:'Prazo',render:r=>`${number(r.lead_time_days)} dias`},{key:'quality_score',label:'Qualidade',render:r=>`${number(r.quality_score)}%`},{key:'active',label:'Estado',render:r=>badge(r.active?'ativo':'inativo')},
-    ],
+    last, related,
+    avg: recentPrices.length ? recentPrices.reduce((sum, value) => sum + value, 0) / recentPrices.length : null,
+    min: recentPrices.length ? Math.min(...recentPrices) : null,
+    max: recentPrices.length ? Math.max(...recentPrices) : null,
   };
+}
+
+function requisitionsTabHtml(stats, maps) {
+  const {related, avg, min, max, last} = stats;
+  const cards = `<div class="qty-summary">
+    <div class="qty-card"><span>Último preço</span><strong>${last ? `${money(last.unit_cost)} / ${esc(last.unit)}` : '—'}</strong>${last ? `<small>${date(last.sent_date)}</small>` : ''}</div>
+    <div class="qty-card"><span>Preço médio (12M)</span><strong>${avg != null ? money(avg) : '—'}</strong></div>
+    <div class="qty-card"><span>Mínimo (12M)</span><strong>${min != null ? money(min) : '—'}</strong></div>
+    <div class="qty-card"><span>Máximo (12M)</span><strong>${max != null ? money(max) : '—'}</strong></div>
+  </div>`;
+  const rows = related.length ? related.map(job => `<tr>
+    <td>${date(job.sent_date)}</td>
+    <td>${esc(maps.supplierById[job.supplier_id]?.name || '—')}</td>
+    <td>${esc(job.reference)}</td>
+    <td>${number(job.quantity)}</td>
+    <td>${esc(job.unit)}</td>
+    <td>${money(job.unit_cost)}</td>
+    <td>${money((job.quantity || 0) * (job.unit_cost || 0))}</td>
+  </tr>`).join('') : `<tr><td colspan="7">${empty('Sem requisições', 'Ainda não há envios registados para este serviço.')}</td></tr>`;
+  return `${cards}<div class="table-wrap"><table class="data-table"><thead><tr><th>Data</th><th>Fornecedor</th><th>Documento</th><th>Quantidade</th><th>Unidade</th><th>Preço unit.</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function lastPriceCardHtml(stats, maps) {
+  if (!stats.last) return `<div class="qty-card"><span>Último preço pago</span><strong>—</strong><small>Ainda sem requisições registadas</small></div>`;
+  const supplierName = maps.supplierById[stats.last.supplier_id]?.name || '—';
+  return `<div class="qty-card"><span>Último preço pago</span><strong>${money(stats.last.unit_cost)} / ${esc(stats.last.unit)}</strong><small>${esc(supplierName)} · ${date(stats.last.sent_date)}</small></div>`;
+}
+
+function openServiceEditor(name, groupRows, maps, options, stages, jobs, reload) {
+  const first = groupRows[0] || {};
+  const category = first.category || 'other';
+  const stage = first.production_stage_id || '';
+  const executionType = first.execution_type || 'external';
+  const allowsPartial = first.allows_partial_batches !== false;
+  const description = first.description || '';
+  const count = groupRows.length;
+  const stats = computeServiceStats(groupRows, jobs);
+
+  openModal(`Serviço · ${name}`, `
+    <div class="tabs service-tabs">
+      <button type="button" class="tab active" data-svc-modal-tab="0">Geral</button>
+      <button type="button" class="tab" data-svc-modal-tab="1">Fornecedores (${count})</button>
+      <button type="button" class="tab" data-svc-modal-tab="2">Últimas requisições (${stats.related.length})</button>
+    </div>
+    <div data-svc-modal-panel="0">
+      <div class="dist-block">
+        <div class="dist-two-fields">
+          <div class="field"><label>Nome do serviço</label><input id="svc-edit-name" value="${esc(name)}"></div>
+          <div class="field"><label>Tipo</label><select id="svc-edit-category">${CATEGORY_OPTIONS.map(item => `<option value="${item.value}" ${item.value === category ? 'selected' : ''}>${esc(item.label)}</option>`).join('')}</select></div>
+        </div>
+        <div class="field"><label>Descrição</label><textarea id="svc-edit-description" rows="2">${esc(description)}</textarea></div>
+      </div>
+      <div class="dist-block">
+        <label>Configuração de produção</label>
+        <div class="dist-two-fields">
+          <div class="field"><label>Etapa de produção</label><select id="svc-edit-stage"><option value="">Selecionar…</option>${stages.map(item => `<option value="${item.id}" ${String(item.id) === String(stage) ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</select></div>
+          <div class="field"><label>Tipo de execução</label><select id="svc-edit-execution">${EXECUTION_TYPE_OPTIONS.map(item => `<option value="${item.value}" ${item.value === executionType ? 'selected' : ''}>${esc(item.label)}</option>`).join('')}</select></div>
+        </div>
+        <label class="dist-override"><input id="svc-edit-partial" type="checkbox" ${allowsPartial ? 'checked' : ''}> Permite produção parcial / lotes</label>
+      </div>
+      <div class="dist-block">
+        <label>Informação resumo</label>
+        <div class="qty-summary">${lastPriceCardHtml(stats, maps)}</div>
+      </div>
+      <div class="form-footer">
+        <button type="button" class="btn danger" data-delete-service>Eliminar serviço</button>
+        <span style="flex:1"></span>
+        <button type="button" class="btn" data-close-modal>Cancelar</button>
+        <button type="button" class="btn primary" data-save-general>Guardar alterações</button>
+      </div>
+    </div>
+    <div data-svc-modal-panel="1" hidden>
+      <div class="dist-block">
+        <div class="dist-destination-head">
+          <label>Fornecedores deste serviço</label>
+          <button type="button" class="btn small" data-add-supplier>+ Fornecedor</button>
+        </div>
+        <p class="muted">Informativo — não impede usar outro fornecedor ao despachar.</p>
+        <div class="table-wrap">${supplierRowsTable(groupRows, maps, jobs)}</div>
+      </div>
+    </div>
+    <div data-svc-modal-panel="2" hidden>
+      ${requisitionsTabHtml(stats, maps)}
+    </div>
+  `, `${count} fornecedor${count === 1 ? '' : 'es'} conhecido${count === 1 ? '' : 's'} para este serviço.`);
+
+  const body = document.getElementById('modal-body');
+  body.querySelectorAll('[data-svc-modal-tab]').forEach(button => button.addEventListener('click', () => {
+    body.querySelectorAll('[data-svc-modal-tab]').forEach(item => item.classList.toggle('active', item === button));
+    body.querySelectorAll('[data-svc-modal-panel]').forEach(panel => { panel.hidden = panel.dataset.svcModalPanel !== button.dataset.svcModalTab; });
+  }));
+  body.querySelector('[data-close-modal]').addEventListener('click', closeModal);
+  body.querySelector('[data-save-general]').addEventListener('click', async () => {
+    const newName = body.querySelector('#svc-edit-name').value.trim();
+    if (!newName) { toast('Indique o nome do serviço', 'error'); return; }
+    const patch = {
+      name: newName,
+      category: body.querySelector('#svc-edit-category').value,
+      description: body.querySelector('#svc-edit-description').value,
+      production_stage_id: Number(body.querySelector('#svc-edit-stage').value || 0) || null,
+      execution_type: body.querySelector('#svc-edit-execution').value,
+      allows_partial_batches: body.querySelector('#svc-edit-partial').checked,
+      company_id: state.companyId,
+    };
+    try {
+      for (const row of groupRows) {
+        await crudUpdate('subcontract-services', row.id, patch);
+      }
+      toast('Serviço atualizado.');
+      closeModal();
+      await reload();
+    } catch (error) { toast(error.message, 'error'); }
+  });
+  body.querySelector('[data-delete-service]').addEventListener('click', async () => {
+    if (!confirmDelete(`o serviço "${name}" e os ${count} fornecedor${count === 1 ? '' : 'es'} associados`)) return;
+    try {
+      for (const row of groupRows) {
+        await crudDelete('subcontract-services', row.id, state.companyId);
+      }
+      toast('Serviço eliminado.');
+      closeModal();
+      await reload();
+    } catch (error) { toast(error.message, 'error'); }
+  });
+  body.querySelector('[data-add-supplier]').addEventListener('click', () => {
+    closeModal();
+    addSupplierToService(name, category, options, reload);
+  });
+  body.querySelectorAll('[data-edit-supplier]').forEach(button => button.addEventListener('click', () => {
+    const row = groupRows.find(item => item.id === Number(button.dataset.editSupplier));
+    if (!row) return;
+    closeModal();
+    editSupplierRow(row, options, reload);
+  }));
+  body.querySelectorAll('[data-remove-supplier]').forEach(button => button.addEventListener('click', async () => {
+    const row = groupRows.find(item => item.id === Number(button.dataset.removeSupplier));
+    if (!row || !confirmDelete(`o fornecedor ${row.code}`)) return;
+    try {
+      await crudDelete('subcontract-services', row.id, state.companyId);
+      toast('Fornecedor removido deste serviço.');
+      closeModal();
+      await reload();
+    } catch (error) { toast(error.message, 'error'); }
+  }));
+}
+
+function groupServices(services) {
+  const groups = new Map();
+  services.forEach(row => { (groups.get(row.name) ?? groups.set(row.name, []).get(row.name)).push(row); });
+  return groups;
+}
+
+function serviceListHtml(groups, stageById) {
+  const names = [...groups.keys()].sort((a, b) => a.localeCompare(b));
+  return `<section class="listing-panel"><div class="table-wrap listing-table"><table class="data-table"><thead><tr><th>Serviço</th><th>Tipo</th><th>Etapa</th><th>Execução</th><th>Fornecedores</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody>
+    ${names.length ? names.map(name => {
+      const rows = groups.get(name);
+      const first = rows[0] || {};
+      const stageName = stageById[first.production_stage_id]?.name;
+      return `<tr><td><b>${esc(name)}</b></td><td>${esc(SERVICE[first.category] || first.category || 'Outro')}</td><td>${stageName ? esc(stageName) : '<span class="muted">—</span>'}</td><td>${esc(EXECUTION_TYPE_LABEL[first.execution_type] || 'Externo')}</td><td>${rows.length}</td>
+        <td class="listing-actions"><div class="row-actions"><button type="button" class="btn icon" data-edit-service="${esc(name)}" aria-label="Editar">✎</button></div></td></tr>`;
+    }).join('') : `<tr><td colspan="6">${empty('Sem serviços', 'Crie o primeiro com o botão + Novo serviço.')}</td></tr>`}
+  </tbody></table></div></section>`;
+}
+
+export async function renderServiceCatalog(container) {
+  const [suppliers, services, stages, jobs] = await Promise.all([
+    crudList('suppliers', state.companyId, 'limit=2000'),
+    crudList('subcontract-services', state.companyId, 'limit=2000'),
+    crudList('service-stages', state.companyId, 'limit=500'),
+    crudList('subcontract-jobs', state.companyId, 'limit=2000'),
+  ]);
+  const maps = {supplierById: Object.fromEntries(suppliers.map(row => [row.id, row]))};
+  const stageById = Object.fromEntries(stages.map(row => [row.id, row]));
+  const options = {supplier: suppliers.filter(row => row.active).map(row => ({value: row.id, label: row.name}))};
+  const activeStages = stages.filter(row => row.active).sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+  const groups = groupServices(services);
+  const reload = () => renderServiceCatalog(container);
+  container.innerHTML = pageHeader(
+    'Serviços subcontratados',
+    'Cada serviço junta o nome/tipo e os fornecedores conhecidos que o fazem, cada um com o seu preço — mas não é preciso usar só estes ao despachar.',
+    '<a class="btn" href="#/partners">Fornecedores</a><a class="btn" href="#/tables-service-stages">Etapas de produção</a><button type="button" class="btn primary" data-new-service>+ Novo serviço</button>',
+  ) + serviceListHtml(groups, stageById);
+  container.querySelector('[data-new-service]')?.addEventListener('click', () => createServiceForm(options, activeStages, reload));
+  container.querySelectorAll('[data-edit-service]').forEach(button => button.addEventListener('click', () => {
+    const name = button.dataset.editService;
+    openServiceEditor(name, groups.get(name) || [], maps, options, activeStages, jobs, reload);
+  }));
 }

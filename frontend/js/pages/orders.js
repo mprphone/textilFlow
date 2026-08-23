@@ -1,10 +1,9 @@
 import { options } from '../data.js';
 import { renderEntityTabs } from '../entity.js?v=20260819-9';
 import { badge, date, esc, number, progress } from '../format.js?v=20260819-5';
+import { renderSalesOrders } from '../orders/sales_order_editor.js?v=20260823-1';
 import { loadOrderDossier } from '../production/dossier.js?v=20260822-21';
 import { stageLabel } from '../production/cycle.js?v=20260822-18';
-import { toast } from '../ui.js?v=20260820-5';
-import { prepareFromSales } from './commercial_docs.js?v=20260822-30';
 
 function showTrace(container, event) {
   const button = event.target.closest('[data-trace]');
@@ -12,22 +11,9 @@ function showTrace(container, event) {
   loadOrderDossier(Number(button.dataset.trace));
 }
 
-async function erpSalesAction(event, rows) {
-  const button = event.target.closest('[data-erp-so]');
-  if (!button) return;
-  try {
-    const saved = await prepareFromSales(Number(button.dataset.id), button.dataset.erpSo);
-    toast(`${saved.doc_no} preparado para o Primavera.`);
-  } catch (error) { toast(error.message, 'error'); }
-}
-
 export async function render(container) {
   await renderEntityTabs(container,[
-    {label:'Encomendas',config:{resource:'sales-orders',title:'Encomendas de cliente',subtitle:'Prazos, PO, estado e valor comercial. Os botões preparam fatura, NC, ND e guia para o Primavera.',singular:'encomenda',newLabel:'Nova encomenda',fields:async()=>[
-      {key:'customer_id',label:'Cliente',type:'select',required:true,options:await options('customers','name')},{key:'order_no',label:'Número interno',required:true},{key:'customer_po',label:'PO cliente'},
-      {key:'order_date',label:'Data',type:'date'},{key:'delivery_date',label:'Entrega',type:'date'},{key:'status',label:'Estado',type:'select',options:['draft','confirmed','in_production','ready','shipped','cancelled'],default:'confirmed'},
-      {key:'currency',label:'Moeda',default:'EUR'},{key:'notes',label:'Notas',type:'textarea',full:true},
-    ],rowActions:r=>`<button class="btn small primary" data-erp-so="sales_invoice" data-id="${r.id}">Fatura</button><button class="btn small" data-erp-so="sales_credit" data-id="${r.id}">NC</button><button class="btn small" data-erp-so="sales_debit" data-id="${r.id}">ND</button><button class="btn small" data-erp-so="sales_delivery" data-id="${r.id}">Guia</button>`,onAction:erpSalesAction,columns:[{key:'order_no',label:'Encomenda',render:r=>`<b>${esc(r.order_no)}</b>`},{key:'customer_po',label:'PO cliente'},{key:'customer_id',label:'Cliente ID'},{key:'order_date',label:'Data',render:r=>date(r.order_date)},{key:'delivery_date',label:'Entrega',render:r=>date(r.delivery_date)},{key:'status',label:'Estado',render:r=>badge(r.status)}]}},
+    {label:'Encomendas',render:renderSalesOrders},
     {label:'Linhas da encomenda',config:{resource:'sales-order-lines',title:'Artigos encomendados',subtitle:'Quantidades, variantes, preço e data por linha.',singular:'linha',newLabel:'Nova linha',fields:async()=>[
       {key:'sales_order_id',label:'Encomenda',type:'select',required:true,options:await options('sales-orders',r=>r.order_no)},{key:'style_id',label:'Artigo',type:'select',required:true,options:await options('styles',r=>`${r.reference} · ${r.description}`)},
       {key:'variant_id',label:'Variante',type:'select',options:await options('style-variants','sku')},{key:'description',label:'Descrição'},{key:'quantity',label:'Quantidade',type:'number',required:true},

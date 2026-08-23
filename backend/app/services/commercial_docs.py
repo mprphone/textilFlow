@@ -236,6 +236,8 @@ def public_document(db: Session, document: CommercialDocument, company: Company 
     # extra["area"] (escolhido no editor ou pré-preenchido por from_distribution()).
     data["area"] = extra.get("area") or extra.get("service_category") or None
     data["area_detail"] = AREA_LABELS.get(data["area"]) or extra.get("service_name") or extra.get("department") or None
+    data["area_from"] = extra.get("area_from") or None
+    data["area_from_detail"] = AREA_LABELS.get(data["area_from"])
     data["unlock_reason"] = extra.get("unlock_reason")
     data["unlocked_by"] = extra.get("unlocked_by")
     data["lock_events"] = extra.get("lock_events") or []
@@ -370,11 +372,9 @@ def create_document(db: Session, company_id: int, payload: dict) -> CommercialDo
         extra["series"] = payload["series"]
     if payload.get("erp_code"):
         extra["erp_code"] = payload["erp_code"]
-    for key in ("due_date", "delivery_date", "your_ref", "warehouse", "commercial_discount", "additional_discount", "vat_pct", "area"):
+    for key in ("due_date", "your_ref", "warehouse", "commercial_discount", "additional_discount", "vat_pct"):
         if payload.get(key) not in (None, ""):
             extra[key] = payload[key]
-    if extra.get("due_date") and not extra.get("delivery_date"):
-        extra["delivery_date"] = extra["due_date"]
     document = CommercialDocument(
         company_id=company_id,
         doc_type=doc_type,
@@ -414,11 +414,9 @@ def update_document(db: Session, company: Company, document: CommercialDocument,
         document.doc_type = payload["doc_type"]
         document.primavera_kind = _meta(payload["doc_type"])["kind"]
     extra.update(identity_for(company, payload.get("doc_type") or document.doc_type, extra))
-    for key in ("due_date", "delivery_date", "your_ref", "warehouse", "commercial_discount", "additional_discount", "vat_pct", "area"):
+    for key in ("due_date", "your_ref", "warehouse", "commercial_discount", "additional_discount", "vat_pct"):
         if key in payload and payload[key] not in (None, ""):
             extra[key] = payload[key]
-    if extra.get("due_date") and not extra.get("delivery_date"):
-        extra["delivery_date"] = extra["due_date"]
     if "notes" in payload:
         extra["observacoes"] = payload.get("notes") or ""
     document.extra = extra
@@ -477,9 +475,13 @@ def from_sales_order(db: Session, company_id: int, order_id: int, doc_type: str 
     })
 
 
+SOURCE_AREA = {"internal": "sewing", "revista": "revista"}
+
+
 def from_distribution(
     db: Session, company_id: int, *, order_id: int, quantity: float, destination: str,
-    line_id: int | None = None, subcontract_service_id: int | None = None, subcontract_job_id: int | None = None,
+    source: str | None = None, line_id: int | None = None,
+    subcontract_service_id: int | None = None, subcontract_job_id: int | None = None,
 ) -> CommercialDocument:
     """Prepara o documento certo a partir de uma distribuição de OF (modal Distribuir).
 
@@ -487,7 +489,9 @@ def from_distribution(
     serviço/categoria gravado em extra (o Primavera só sabe o fornecedor, não
     qual dos vários serviços desse fornecedor). Interno (linha de confeção) ->
     guia de transferência interna, com o departamento da linha gravado em
-    extra (não existe no Primavera de todo).
+    extra (não existe no Primavera de todo). Em qualquer um, a área de origem
+    (extra["area_from"]) vem de onde a distribuição saiu — "unassigned" não
+    tem sítio físico anterior, por isso fica sem origem.
     """
     order = db.get(ProductionOrder, order_id)
     if not order or order.company_id != company_id:
@@ -500,6 +504,7 @@ def from_distribution(
         "quantity": quantity,
         "unit": "un",
     }
+    area_from = SOURCE_AREA.get(source or "")
     if destination == "subcontract":
         service = db.get(SubcontractService, subcontract_service_id) if subcontract_service_id else None
         if not service or service.company_id != company_id:
@@ -515,6 +520,7 @@ def from_distribution(
                 "service_category": service.category,
                 "service_name": service.name,
                 "area": service.category if service.category in AREA_LABELS else "other",
+                "area_from": area_from,
             },
         })
     if destination == "internal":
@@ -536,6 +542,18 @@ def from_distribution(
                 # das áreas conhecidas — fica "sewing" (confeção) como valor de partida
                 # mais comum, mas o campo é editável e obrigatório antes de enviar.
                 "area": "sewing",
+                "area_from": area_from,
+            },
+        })
+    if destination == "revista":
+        return create_document(db, company_id, {
+            "doc_type": "internal_transfer",
+            "notes": f"Distribuído a partir da OF {order.order_no}",
+            "lines": [line_item],
+            "extra": {
+                "production_order_id": order.id,
+                "area": "revista",
+                "area_from": area_from,
             },
         })
     raise HTTPException(422, "Destino inválido para gerar documento")

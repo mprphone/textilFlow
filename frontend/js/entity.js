@@ -41,11 +41,12 @@ export async function renderEntityPage(container, config) {
     const end = Math.min(currentPage * pageSize, data.length);
     return `Mostrar ${start} a ${end} de ${data.length} registos`;
   };
+  const rowHtml = row => `<tr>${config.columns.map(column => `<td>${cell(row, column)}</td>`).join('')}<td class="listing-actions"><div class="row-actions">${config.rowActions ? config.rowActions(row) : ''}${config.readOnly?'':`<button class="btn icon" data-edit="${row.id}" aria-label="Editar">✎</button><button class="btn icon danger" data-delete="${row.id}" aria-label="Eliminar">×</button>`}</div></td></tr>`;
   const draw = data => {
     const pages = Math.max(1, Math.ceil(data.length / pageSize));
     currentPage = Math.min(currentPage, pages);
     const visible = data.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-    body.innerHTML = visible.length ? visible.map(row => `<tr>${config.columns.map(column => `<td>${cell(row, column)}</td>`).join('')}<td class="listing-actions"><div class="row-actions">${config.rowActions ? config.rowActions(row) : ''}${config.readOnly?'':`<button class="btn small" data-edit="${row.id}">Editar</button><button class="btn icon danger" data-delete="${row.id}" aria-label="Eliminar">×</button>`}</div></td></tr>`).join('') : `<tr><td colspan="${config.columns.length + 1}">${empty('Sem resultados', 'Altere a pesquisa ou crie o primeiro registo.')}</td></tr>`;
+    body.innerHTML = visible.length ? visible.map(rowHtml).join('') : `<tr><td colspan="${config.columns.length + 1}">${empty('Sem resultados', 'Altere a pesquisa ou crie o primeiro registo.')}</td></tr>`;
     pager.innerHTML = `<span>${rangeLabel(data)}</span><div><button class="btn small" data-list-page="${currentPage-1}" ${currentPage<=1?'disabled':''}>← Anterior</button><button class="btn small" data-list-page="${currentPage+1}" ${currentPage>=pages?'disabled':''}>Seguinte →</button></div>`;
     pager.querySelectorAll('[data-list-page]').forEach(button=>button.addEventListener('click',()=>{currentPage=Number(button.dataset.listPage);draw(data);}));
   };
@@ -58,7 +59,8 @@ export async function renderEntityPage(container, config) {
 
   const openEditor = async row => {
     const fields = typeof config.fields === 'function' ? await config.fields(row) : defaultFields;
-    openModal(row ? `Editar ${config.singular}` : config.newLabel || `Novo ${config.singular}`, renderForm(fields, row || {}), config.formSubtitle || 'Os campos marcados com * são obrigatórios.');
+    const formSubtitle = (typeof config.formSubtitle === 'function' ? config.formSubtitle(row) : config.formSubtitle) || 'Os campos marcados com * são obrigatórios.';
+    openModal(row ? `Editar ${config.singular}` : config.newLabel || `Novo ${config.singular}`, renderForm(fields, row || {}), formSubtitle);
     bindPasswordToggles(document.getElementById('modal-body'));
     bindPhotoFields(document.getElementById('modal-body'));
     document.querySelector('[data-close-modal]').addEventListener('click', closeModal);
@@ -97,11 +99,12 @@ export async function renderEntityPage(container, config) {
 export async function renderEntityTabs(container, tabs, initial = 0) {
   container.innerHTML = `<div class="tabs">${tabs.map((tab, index) => `<button class="tab ${index === initial ? 'active' : ''}" data-tab="${index}">${esc(tab.label)}</button>`).join('')}</div><div data-tab-panel></div>`;
   const panel = container.querySelector('[data-tab-panel]');
-  await renderEntityPage(panel, tabs[initial].config);
+  const openTab = index => tabs[index].render ? tabs[index].render(panel) : renderEntityPage(panel, tabs[index].config);
+  await openTab(initial);
   container.querySelector('.tabs').addEventListener('click', async event => {
     const button = event.target.closest('[data-tab]');
     if (!button) return;
     container.querySelectorAll('[data-tab]').forEach(item => item.classList.toggle('active', item === button));
-    await renderEntityPage(panel, tabs[Number(button.dataset.tab)].config);
+    await openTab(Number(button.dataset.tab));
   });
 }

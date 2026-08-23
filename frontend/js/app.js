@@ -12,7 +12,6 @@ import * as orders from './pages/orders.js?v=20260822-30';
 import * as floor from './pages/floor.js?v=20260822-30';
 import * as cutting from './pages/cutting.js?v=20260822-30';
 import * as quality from './pages/quality.js?v=20260822-22';
-import { renderRevista, renderEmbalagem } from './pages/finish_areas.js?v=20260822-22';
 import * as inventoryPage from './pages/inventory.js?v=20260822-33';
 import * as people from './pages/people.js?v=20260822-1';
 import * as machines from './pages/machines.js?v=20260822-1';
@@ -58,18 +57,17 @@ const routes={dashboard,planning:tracking,live,styles,samples,costing,orders,con
   laundry:{render:container=>processPlant.render(container,'laundry')},
   embroidery:{render:container=>processPlant.render(container,'embroidery')},
   finishing:{render:container=>processPlant.render(container,'finishing')},
-  revista:{render:container=>renderRevista(container)},
-  embalagem:{render:container=>renderEmbalagem(container)},
   'stock-mp':{render:container=>inventoryPage.render(container,'mp')},
   'stock-wip':{render:container=>inventoryPage.render(container,'wip')},
   'stock-fg':{render:container=>inventoryPage.render(container,'fg')},
   purchases:{render:container=>inventoryPage.render(container,'purchases')},
-  inventory:{render:container=>inventoryPage.render(container,'catalog')},
+  inventory:{render:container=>inventoryPage.render(container,'mp')},
   'settings-users':{render:container=>settings.render(container,4,false)},
   'settings-companies':{render:container=>settings.render(container,6,false)},
   'settings-primavera':{render:container=>settings.render(container,7,false)},
   'tables-customers':{render:container=>tables.render(container,'customers')},
   'tables-suppliers':{render:container=>tables.render(container,'suppliers')},
+  'tables-service-stages':{render:container=>tables.render(container,'service-stages')},
   'tables-items':{render:container=>tables.render(container,'items')},
   'tables-banks':{render:container=>tables.render(container,'banks')},
   'tables-exchange-rates':{render:container=>tables.render(container,'exchange-rates')},
@@ -165,11 +163,11 @@ async function navigate(){
   closeModal();
   let route=(location.hash.replace(/^#\//,'').split(/[/?]/)[0]||'dashboard');
   if(route==='planning')route='tracking';
-  if(route==='inventory'){location.hash='#/tables-items';return;}
   const visibleModules=allowedModules();
   if(!visibleModules.length){renderNavigation(route);content.innerHTML=`<section class="access-empty"><span>◎</span><h1>Sem módulos atribuídos</h1><p>O seu utilizador está ativo, mas ainda não tem módulos visíveis nesta empresa.</p><button class="btn" id="access-logout">Terminar sessão</button></section>`;document.getElementById('access-logout').addEventListener('click',logout);return;}
   const permitted=new Set(visibleModules.flatMap(module=>module.routes.map(item=>item[0])));
   if(permitted.has('erp-docs'))permitted.add('erp-doc');
+  if(permitted.has('inventory')){permitted.add('stock-mp');permitted.add('stock-wip');permitted.add('stock-fg');permitted.add('purchases');}
   if(!permitted.has(route)){route=visibleModules[0].home;if(location.hash!==`#/${route}`){location.hash=`#/${route}`;return;}}
   const module=routes[route]||dashboard;
   renderNavigation(route);

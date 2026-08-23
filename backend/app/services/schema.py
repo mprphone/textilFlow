@@ -38,6 +38,8 @@ COLUMN_MIGRATIONS = (
     ("materials", "item_type", "ALTER TABLE materials ADD COLUMN item_type VARCHAR(20)"),
     ("materials", "primavera_id", "ALTER TABLE materials ADD COLUMN primavera_id VARCHAR(100)"),
     ("materials", "sync_status", "ALTER TABLE materials ADD COLUMN sync_status VARCHAR(30)"),
+    ("materials", "tf_type", "ALTER TABLE materials ADD COLUMN tf_type VARCHAR(20) DEFAULT 'unclassified'"),
+    ("materials", "notes", "ALTER TABLE materials ADD COLUMN notes TEXT"),
     ("employees", "monthly_salary", "ALTER TABLE employees ADD COLUMN monthly_salary FLOAT DEFAULT 0"),
     ("production_lines", "target_pcs_hour", "ALTER TABLE production_lines ADD COLUMN target_pcs_hour FLOAT DEFAULT 0"),
     ("suppliers", "weekly_capacity", "ALTER TABLE suppliers ADD COLUMN weekly_capacity FLOAT DEFAULT 0"),
@@ -51,6 +53,23 @@ COLUMN_MIGRATIONS = (
     ("operations", "machine_cost_per_minute", "ALTER TABLE operations ADD COLUMN machine_cost_per_minute FLOAT DEFAULT 0"),
     ("quality_inspections", "machine_id", "ALTER TABLE quality_inspections ADD COLUMN machine_id INTEGER"),
     ("cost_sheets", "currency", "ALTER TABLE cost_sheets ADD COLUMN currency VARCHAR(3)"),
+    ("subcontract_services", "production_stage_id", "ALTER TABLE subcontract_services ADD COLUMN production_stage_id INTEGER"),
+    ("subcontract_services", "execution_type", "ALTER TABLE subcontract_services ADD COLUMN execution_type VARCHAR(20) DEFAULT 'external'"),
+    ("subcontract_services", "allows_partial_batches", "ALTER TABLE subcontract_services ADD COLUMN allows_partial_batches BOOLEAN DEFAULT 1"),
+    ("subcontract_services", "description", "ALTER TABLE subcontract_services ADD COLUMN description TEXT"),
+)
+
+DEFAULT_SERVICE_STAGES = (
+    ("tinturaria", "Tinturaria", 10),
+    ("corte", "Corte", 20),
+    ("confeccao", "Confeção", 30),
+    ("bordado", "Bordado", 35),
+    ("estamparia", "Estamparia", 36),
+    ("lavandaria", "Lavandaria", 37),
+    ("revista", "Revista", 40),
+    ("acabamento", "Acabamento", 45),
+    ("embalagem", "Embalagem", 50),
+    ("expedicao", "Expedição", 60),
 )
 
 
@@ -148,6 +167,30 @@ def _migrate_subcontract_chain_to_route(connection) -> None:
             existing_types.add((style_id, "sewing"))
 
 
+def _seed_default_service_stages(connection) -> None:
+    """Semeia etapas de produção por omissão, uma vez por empresa.
+
+    Lista aberta e editável (não um enum fixo) — isto só dá um ponto de
+    partida sensato; a empresa pode acrescentar/renomear/desativar depois.
+    """
+    inspector = inspect(connection)
+    if "service_stages" not in inspector.get_table_names() or "companies" not in inspector.get_table_names():
+        return
+    company_ids = [row[0] for row in connection.execute(text("SELECT id FROM companies"))]
+    seeded = {row[0] for row in connection.execute(text("SELECT DISTINCT company_id FROM service_stages"))}
+    for company_id in company_ids:
+        if company_id in seeded:
+            continue
+        for code, name, sequence in DEFAULT_SERVICE_STAGES:
+            connection.execute(
+                text(
+                    "INSERT INTO service_stages (company_id, code, name, sequence, active) "
+                    "VALUES (:company_id, :code, :name, :sequence, :active)"
+                ),
+                {"company_id": company_id, "code": code, "name": name, "sequence": sequence, "active": True},
+            )
+
+
 def ensure_schema() -> None:
     inspector = inspect(engine)
     if "companies" not in inspector.get_table_names():
@@ -165,3 +208,4 @@ def ensure_schema() -> None:
         for table, column, ddl in COLUMN_MIGRATIONS:
             _add_column(connection, table, column, ddl)
         _migrate_subcontract_chain_to_route(connection)
+        _seed_default_service_stages(connection)

@@ -7,6 +7,7 @@ from ...models import (
     Style, StyleRevision, StyleVariant, User,
 )
 from ...services.costing import rebuild_product_cost
+from ...services.inventory import ensure_item_for_variant, ensure_variant, style_overview
 from ...services.serialization import model_to_dict
 from ..deps import current_user, require_module_access
 
@@ -23,15 +24,31 @@ def full_style(style_id: int, db: Session = Depends(get_db), user: User = Depend
     bom = db.query(BOMItem, Material).join(Material, Material.id == BOMItem.material_id).filter(BOMItem.style_id == style_id).all()
     routing = db.query(ProductOperation, Operation).join(Operation, Operation.id == ProductOperation.operation_id).filter(ProductOperation.style_id == style_id).order_by(ProductOperation.sequence).all()
     sheets = db.query(CostSheet).filter_by(style_id=style_id).order_by(CostSheet.version.desc()).all()
+    overview = style_overview(db, style)
     return {
         "style": model_to_dict(style),
         "variants": [model_to_dict(row) for row in db.query(StyleVariant).filter_by(style_id=style_id).all()],
+        "variant_matrix": overview["variant_matrix"],
+        "summary": overview["summary"],
         "bom": [{**model_to_dict(item), "material_code": material.code, "material_name": material.name} for item, material in bom],
         "routing": [{**model_to_dict(item), "operation_code": operation.code, "operation_name": operation.name, "machine_type": operation.machine_type} for item, operation in routing],
         "samples": [model_to_dict(row) for row in db.query(Sample).filter_by(style_id=style_id).order_by(Sample.created_at.desc()).all()],
         "cost_sheets": [model_to_dict(row) for row in sheets],
         "revisions": [model_to_dict(row) for row in db.query(StyleRevision).filter_by(style_id=style_id).order_by(StyleRevision.version.desc()).all()],
     }
+
+
+@router.post("/styles/{style_id}/variants")
+def create_style_variant(style_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    style = db.get(Style, style_id)
+    if not style:
+        raise HTTPException(404, "Artigo não encontrado")
+    require_module_access(db, user, style.company_id, {"design", "commercial"})
+    variant = ensure_variant(db, style, payload.get("color"), payload.get("size"))
+    material = ensure_item_for_variant(db, variant, style)
+    db.commit()
+    db.refresh(variant)
+    return {**model_to_dict(variant), "material": {"id": material.id, "code": material.code, "sync_status": material.sync_status, "barcode": material.barcode}}
 
 
 @router.post("/cost-sheets/{sheet_id}/rebuild")

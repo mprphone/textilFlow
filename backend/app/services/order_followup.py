@@ -131,7 +131,8 @@ def service_plan(db: Session, order: ProductionOrder, jobs: list[SubcontractJob]
             if group not in keys:
                 keys.append(group)
                 labels[group] = line.description or STEP_LABEL[group]
-    if not keys:
+    guessed = not keys
+    if guessed:
         keys = ["dyeing", "printing"]
     if "sewing" not in keys:
         keys.append("sewing")
@@ -149,6 +150,10 @@ def service_plan(db: Session, order: ProductionOrder, jobs: list[SubcontractJob]
         from .production_split import job_out
         out_qty = round(sum(job_out(job) for job in related), 2)
         complete = bool(related) and not open_jobs and all(job.status in {"received", "cancelled"} for job in related)
+        # Etapas adivinhadas por omissao (sem ficha de custo a confirmar que existem)
+        # nao bloqueiam a etapa seguinte enquanto nao houver qualquer pedido feito —
+        # so ha razao para cadear quando algo foi mesmo enviado para essa etapa.
+        unlocks_next = complete or (guessed and key != "sewing" and not related)
         locked = not previous_done
         if locked and kind == "internal" and internal_qty > 0:
             status = "in_progress"
@@ -184,11 +189,11 @@ def service_plan(db: Session, order: ProductionOrder, jobs: list[SubcontractJob]
             "can_distribute": can_go,
         })
         previous_label = label
-        previous_done = complete if kind == "external" else previous_done
+        previous_done = unlocks_next if kind == "external" else previous_done
     return steps
 
 
-def assert_can_distribute(db: Session, order: ProductionOrder, payload: dict) -> None:
+def assert_can_distribute(db: Session, order: ProductionOrder, payload: dict, *, override: bool = False) -> None:
     jobs = db.query(SubcontractJob).filter_by(production_order_id=order.id).all()
     from .production_split import holdings
     stock = holdings(db, order, jobs)
@@ -204,16 +209,16 @@ def assert_can_distribute(db: Session, order: ProductionOrder, payload: dict) ->
         current = next((step for step in steps if step["key"] == category), None)
         if not current:
             raise ValueError("Este serviço não faz parte da sequência desta OF")
-        if current["locked"]:
+        if current["locked"] and not override:
             raise ValueError(current["reason"] or f"{current['label']} está cadeado")
         open_other = next((step for step in steps if step["kind"] == "external" and step["status"] == "in_progress" and step["key"] != category), None)
         if open_other:
             raise ValueError(f"Ainda há {open_other['label']} a decorrer. Só se distribui um serviço de cada vez.")
-        if current["status"] not in {"ready", "in_progress"}:
+        if current["status"] not in {"ready", "in_progress"} and not override:
             raise ValueError(f"{current['label']} não está disponível para distribuição")
     elif destination == "internal":
         sewing = next((step for step in steps if step["key"] == "sewing"), None)
-        if sewing and sewing["locked"]:
+        if sewing and sewing["locked"] and not override:
             raise ValueError(sewing["reason"] or "A confeção está cadeada até os serviços anteriores regressarem")
 
 

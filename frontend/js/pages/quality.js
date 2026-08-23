@@ -6,15 +6,15 @@ import { state } from '../state.js';
 import { toast } from '../ui.js?v=20260820-5';
 
 function aqlCalculatorHtml() {
-  return `<div class="card" style="margin-bottom:16px">
+  return `<div class="card aql-card">
     <div class="card-header"><h2>Calculadora de amostragem AQL</h2><span>Sugestão rápida de amostra e critério de aceitação</span></div>
     <div class="form-grid">
-      <label>Tamanho do lote<input type="number" data-aql-lot value="500" min="1"></label>
-      <label>AQL (%)<input type="number" data-aql-pct value="2.5" step="0.1" min="0"></label>
-      <label>Nível de inspeção<select data-aql-level><option value="I">I (reduzido)</option><option value="II" selected>II (normal)</option><option value="III">III (rigoroso)</option></select></label>
-      <button class="btn primary" data-aql-calc style="align-self:end">Calcular</button>
+      <div class="field"><label>Tamanho do lote</label><input type="number" data-aql-lot value="500" min="1"></div>
+      <div class="field"><label>AQL (%)</label><input type="number" data-aql-pct value="2.5" step="0.1" min="0"></div>
+      <div class="field"><label>Nível de inspeção</label><select data-aql-level><option value="I">I (reduzido)</option><option value="II" selected>II (normal)</option><option value="III">III (rigoroso)</option></select></div>
+      <div class="field aql-calc-field"><button class="btn primary wide" data-aql-calc>Calcular</button></div>
     </div>
-    <div data-aql-result class="muted" style="margin-top:10px">Indique o tamanho do lote e calcule.</div>
+    <div data-aql-result class="aql-result">Indique o tamanho do lote e calcule.</div>
   </div>`;
 }
 

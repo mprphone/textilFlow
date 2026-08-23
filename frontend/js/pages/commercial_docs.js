@@ -77,7 +77,7 @@ export async function render(container) {
       <td><b>${esc(row.erp_code || '')}</b><div class="muted">${esc(row.type_label || '')}</div></td>
       <td>${esc(row.series || '—')}</td>
       <td><b>${esc(row.doc_no)}</b></td>
-      <td>${esc(row.partner_name || '—')}${row.area_detail ? `<div class="muted">${esc(row.area_detail)}</div>` : ''}</td>
+      <td>${esc(row.partner_name || '—')}${row.area_detail ? `<div class="muted">${row.area_from_detail ? `${esc(row.area_from_detail)} → ` : ''}${esc(row.area_detail)}</div>` : ''}</td>
       <td>${date(row.doc_date)}</td>
       <td>${money(row.total)}</td>
       <td>${badge(row.status)}</td>
@@ -208,6 +208,7 @@ function collectEditor(container) {
     your_ref: header.querySelector('[name="your_ref"]')?.value,
     warehouse: header.querySelector('[data-f4-field="warehouse"]')?.value,
     area: header.querySelector('[data-area-field]')?.value,
+    area_from: header.querySelector('[data-area-from-field]')?.value,
     commercial_discount: Number(header.querySelector('[name="commercial_discount"]')?.value || 0),
     additional_discount: Number(header.querySelector('[name="additional_discount"]')?.value || 0),
     notes: header.querySelector('[name="notes"]')?.value,
@@ -432,14 +433,20 @@ export async function renderDocument(container) {
             <div class="pri-ctl pri-ctl-code">${entityField}</div>
             <div class="pri-ctl pri-ctl-grow"><input name="entity_name" value="${esc(partner.name || '')}" readonly class="pri-name"></div>
           </div>
-          ${MOVEMENT_DOC_TYPES.has(doc.doc_type) ? `<div class="pri-row pri-row-notes pri-row-area">
+          ${MOVEMENT_DOC_TYPES.has(doc.doc_type) ? `<div class="pri-row pri-row-two pri-row-area">
+            <label>Área origem</label>
+            <div class="pri-ctl">
+              <select name="area_from" data-area-from-field>
+                <option value="">Não aplicável / direto</option>
+                ${AREA_OPTIONS.map(item => `<option value="${item.value}" ${doc.area_from === item.value ? 'selected' : ''}>${esc(item.label)}</option>`).join('')}
+              </select>
+            </div>
             <label>Área destino *</label>
-            <div class="pri-ctl pri-ctl-grow">
+            <div class="pri-ctl">
               <select name="area" required data-area-field>
                 <option value="">Selecionar…</option>
                 ${AREA_OPTIONS.map(item => `<option value="${item.value}" ${doc.area === item.value ? 'selected' : ''}>${esc(item.label)}</option>`).join('')}
               </select>
-              <small class="muted">Obrigatório — para onde vai a mercadoria (tinturaria, corte, revista…). Só fica registado aqui, o Primavera não guarda esta distinção.</small>
             </div>
           </div>` : ''}
           <div class="pri-row">

@@ -114,6 +114,35 @@ class ProductionSplitTest(unittest.TestCase):
         with self.assertRaises(Exception):
             from_distribution(self.db, self.company.id, order_id=self.order.id, quantity=10, destination="shipped")
 
+    def test_from_distribution_tags_origin_area_from_source(self):
+        document = from_distribution(
+            self.db, self.company.id, order_id=self.order.id, quantity=40, destination="internal",
+            source="revista", line_id=self.line.id,
+        )
+        self.db.commit()
+        self.assertEqual(document.extra["area_from"], "revista")
+        self.assertEqual(public_document(self.db, document)["area_from_detail"], "Revista")
+
+    def test_from_distribution_unassigned_source_has_no_origin_area(self):
+        document = from_distribution(
+            self.db, self.company.id, order_id=self.order.id, quantity=25, destination="subcontract",
+            source="unassigned", subcontract_service_id=self.service.id,
+        )
+        self.db.commit()
+        self.assertIsNone(document.extra["area_from"])
+        self.assertIsNone(public_document(self.db, document)["area_from_detail"])
+
+    def test_from_distribution_revista_creates_internal_transfer(self):
+        document = from_distribution(
+            self.db, self.company.id, order_id=self.order.id, quantity=12, destination="revista",
+            source="internal",
+        )
+        self.db.commit()
+        self.assertEqual(document.doc_type, "internal_transfer")
+        self.assertEqual(document.extra["area"], "revista")
+        self.assertEqual(document.extra["area_from"], "sewing")
+        self.assertEqual(document.lines[0]["quantity"], 12)
+
     def test_prepare_primavera_requires_area_on_movement_documents(self):
         document = from_distribution(
             self.db, self.company.id, order_id=self.order.id, quantity=25, destination="subcontract",

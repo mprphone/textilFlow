@@ -71,6 +71,18 @@ class StyleRevision(Base, TimestampMixin):
     __table_args__ = (UniqueConstraint("style_id", "version"),)
 
 
+TF_TYPE_CHOICES = ("unclassified", "finished", "raw_material", "semi_finished", "accessory", "packaging", "consumable")
+TF_TYPE_LABELS = {
+    "unclassified": "Não classificado",
+    "finished": "Produto acabado",
+    "raw_material": "Matéria-prima",
+    "semi_finished": "Semiacabado",
+    "accessory": "Acessório",
+    "packaging": "Embalagem",
+    "consumable": "Consumível",
+}
+
+
 class Material(Base, TimestampMixin):
     __tablename__ = "materials"
     id = Column(Integer, primary_key=True)
@@ -79,6 +91,7 @@ class Material(Base, TimestampMixin):
     code = Column(String(80), nullable=False)
     name = Column(String(200), nullable=False)
     category = Column(String(80), default="fabric", nullable=False)
+    tf_type = Column(String(20), default="unclassified", nullable=False)
     unit = Column(String(20), default="kg", nullable=False)
     composition = Column(String(200))
     color = Column(String(100))
@@ -98,6 +111,7 @@ class Material(Base, TimestampMixin):
     minimum_stock = Column(Float, default=0, nullable=False)
     lead_time_days = Column(Integer, default=0, nullable=False)
     custom_data = Column(JSON, default=dict, nullable=False)
+    notes = Column(Text)
     active = Column(Boolean, default=True, nullable=False)
     __table_args__ = (UniqueConstraint("company_id", "code"),)
 

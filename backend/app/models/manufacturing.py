@@ -106,6 +106,30 @@ class ProductionMaterialRequirement(Base, TimestampMixin):
     __table_args__ = (UniqueConstraint("production_order_id", "cost_line_id"),)
 
 
+class ProductionOrderVariant(Base, TimestampMixin):
+    """Grelha cor×tamanho de uma OF, gravada no lançamento da proposta."""
+
+    __tablename__ = "production_order_variants"
+    id = Column(Integer, primary_key=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    production_order_id = Column(Integer, ForeignKey("production_orders.id"), nullable=False, index=True)
+    variant_id = Column(Integer, ForeignKey("style_variants.id"), nullable=False, index=True)
+    quantity = Column(Float, default=0, nullable=False)
+    unit_price = Column(Float)
+    __table_args__ = (UniqueConstraint("production_order_id", "variant_id"),)
+
+
+class SequenceCounter(Base, TimestampMixin):
+    """Contador atomico por empresa+chave, usado para numerar documentos (ex.: DIST-.., EXT-..)."""
+
+    __tablename__ = "sequence_counters"
+    id = Column(Integer, primary_key=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    key = Column(String(120), nullable=False)
+    value = Column(Integer, default=0, nullable=False)
+    __table_args__ = (UniqueConstraint("company_id", "key"),)
+
+
 class ProductionBatch(Base, TimestampMixin):
     __tablename__ = "production_batches"
     id = Column(Integer, primary_key=True)

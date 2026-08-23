@@ -218,6 +218,55 @@ def dispatch_ready_status(db: Session, sales_order) -> dict:
     return {"ready": not missing, "reason": "; ".join(missing) if missing else "Pronta para expedição", "missing": missing}
 
 
+def record_revista(db: Session, order: ProductionOrder, payload: dict) -> QualityInspection:
+    """Regista o resultado da inspeção de revista — não move quantidade entre
+    áreas (isso é sempre o /distribute, source=internal/external, destination=revista)."""
+    from .production_split import revista_qty
+    quantity = float(payload.get("quantity") or revista_qty(order) or 0)
+    if quantity <= 0.001:
+        raise ValueError("Indique a quantidade revistada")
+    defect_quantity = float(payload.get("defect_quantity") or 0)
+    result = payload.get("result") or ("failed" if defect_quantity > 0.001 else "passed")
+    inspection = QualityInspection(
+        company_id=order.company_id,
+        production_order_id=order.id,
+        inspection_type="revista",
+        inspected_quantity=quantity,
+        defect_quantity=defect_quantity,
+        defect_code=payload.get("defect_code"),
+        result=result,
+        notes=payload.get("notes"),
+    )
+    db.add(inspection)
+    db.flush()
+    update_order_stage(db, order)
+    return inspection
+
+
+def record_packing(db: Session, order: ProductionOrder, payload: dict) -> dict:
+    """Regista peças embaladas — informativo (para o stock de produto acabado);
+    a saída real da fábrica continua a ser o /distribute para "shipped"."""
+    from .production_split import holdings, revista_qty
+    quantity = float(payload.get("quantity") or 0)
+    if quantity <= 0.001:
+        raise ValueError("Indique a quantidade embalada")
+    available = revista_qty(order)
+    already_packed = float((order.custom_data or {}).get("packed_quantity") or 0)
+    if quantity > max(0.0, available - already_packed) + 0.001:
+        raise ValueError(f"Só há {max(0.0, available - already_packed):.0f} pecas na revista por embalar")
+    data = dict(order.custom_data or {})
+    data["packed_quantity"] = round(already_packed + quantity, 2)
+    order.custom_data = data
+    update_order_stage(db, order)
+    db.flush()
+    stock = holdings(db, order)
+    return {
+        "order_id": order.id,
+        "packed_quantity": data["packed_quantity"],
+        "holdings": {key: stock[key] for key in ("internal", "external", "shipped", "revista", "unassigned", "total")},
+    }
+
+
 def update_order_stage(db: Session, order: ProductionOrder | None) -> str | None:
     if not order:
         return None

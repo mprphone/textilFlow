@@ -164,6 +164,8 @@ def order_cockpit(db: Session, order: ProductionOrder) -> dict:
             "status": plan.status,
             "reference": plan.code,
         })
+    if stock["revista"]:
+        locations.append({"kind": "revista", "label": "Revista", "detail": "Peças revistadas · aguarda destino", "quantity": stock["revista"], "status": "revista"})
     if stock["shipped"]:
         locations.append({"kind": "shipped", "label": "Expedido", "detail": "Já saiu para o cliente", "quantity": stock["shipped"], "status": "shipped"})
     if not any(row["kind"] == "internal" for row in locations) and order.line_id and stock["unassigned"]:
@@ -217,7 +219,7 @@ def order_cockpit(db: Session, order: ProductionOrder) -> dict:
             "commercial_name": commercial_name(db, order, sales, sheet),
             "days_to_delivery": days_left,
         },
-        "holdings": {key: stock[key] for key in ("internal", "external", "shipped", "unassigned", "total")},
+        "holdings": {key: stock[key] for key in ("internal", "external", "shipped", "revista", "unassigned", "total")},
         "locations": locations,
         "materials": materials,
         "goods": [row for row in materials if row.get("cost_group") == "fabric"],

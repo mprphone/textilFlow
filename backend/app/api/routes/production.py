@@ -186,7 +186,10 @@ def complete_revista(order_id: int, payload: dict, db: Session = Depends(get_db)
         raise HTTPException(404, "Ordem de fabrico não encontrada")
     require_role(db, user, order.company_id, {"admin", "manager", "planner", "supervisor", "quality", "operator"})
     require_module_access(db, user, order.company_id, {"quality", "production"})
-    inspection = record_revista(db, order, payload or {})
+    try:
+        inspection = record_revista(db, order, payload or {})
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     db.commit()
     db.refresh(order)
     return {"inspection": model_to_dict(inspection), "current_stage": order.current_stage}
@@ -199,7 +202,10 @@ def pack_production_order(order_id: int, payload: dict, db: Session = Depends(ge
         raise HTTPException(404, "Ordem de fabrico não encontrada")
     require_role(db, user, order.company_id, {"admin", "manager", "planner", "supervisor", "warehouse", "operator"})
     require_module_access(db, user, order.company_id, {"shipping", "production"})
-    result = record_packing(db, order, payload or {})
+    try:
+        result = record_packing(db, order, payload or {})
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     db.commit()
     return result
 
@@ -230,19 +236,19 @@ def compensate_output_event(event_id: int, payload: dict, db: Session = Depends(
 
 @router.get("/{company_id}/stock-board")
 def get_stock_board(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    require_module_access(db, user, company_id, {"inventory", "shipping", "production"})
+    require_module_access(db, user, company_id, {"shipping", "production"})
     return stock_board(db, company_id)
 
 
 @router.get("/{company_id}/materials/{item_key}/history")
 def get_material_history(company_id: int, item_key: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    require_module_access(db, user, company_id, {"inventory", "shipping", "production", "commercial"})
+    require_module_access(db, user, company_id, {"shipping", "production", "commercial"})
     return material_history(db, company_id, item_key)
 
 
 @router.patch("/{company_id}/materials/{item_key}/notes")
 def patch_material_notes(company_id: int, item_key: str, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    require_module_access(db, user, company_id, {"inventory", "commercial"})
+    require_module_access(db, user, company_id, {"commercial", "production", "shipping"})
     material = save_material_notes(db, company_id, item_key, str(payload.get("notes") or ""))
     db.commit()
     db.refresh(material)
@@ -251,7 +257,7 @@ def patch_material_notes(company_id: int, item_key: str, payload: dict, db: Sess
 
 @router.post("/{company_id}/stock-movements", status_code=201)
 def stock_movement(company_id: int, payload: StockMovementRequest, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    require_module_access(db, user, company_id, {"inventory", "production", "shipping"})
+    require_module_access(db, user, company_id, {"production", "shipping"})
     movement = register_movement(db, company_id=company_id, user_id=user.id, payload=payload)
     db.commit()
     db.refresh(movement)

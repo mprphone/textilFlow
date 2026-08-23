@@ -1,7 +1,11 @@
-import { get, post } from '../api.js';
+import { crudList, get, post } from '../api.js';
 import { badge, date, datetime, esc, number } from '../format.js?v=20260819-9';
 import { recordModal } from '../quick_create.js';
+import { state } from '../state.js';
 import { openModal, toast } from '../ui.js?v=20260820-5';
+
+const SOURCE_LABEL = { unassigned: 'Por distribuir', internal: 'Confeção interna', revista: 'Revista' };
+const DESTINATION_LABEL = { internal: 'Confeção interna', subcontract: 'Serviço externo', revista: 'Revista', shipped: 'Expedido' };
 
 const MAT_STATE = {
   delivered_to_floor: 'Entregue à linha',
@@ -41,20 +45,10 @@ function prazoLabel(order) {
   return `${date(order.delivery_date)} · faltam ${number(days)} dias`;
 }
 
-function allocationNote(row) {
-  const others = (row.allocations || []).filter(item =>
-    Number(item.production_order_id) !== Number(row.production_order_id) && Number(item.reserved_quantity) > 0
-  );
-  if (!others.length) return '';
-  return `<div class="table-subline">${others.map(item => `${esc(item.order_no)}: ${number(item.reserved_quantity)} ${esc(row.unit || '')}`).join(' · ')}</div>`;
-}
-
 function materialTable(rows, empty) {
   const body = (rows || []).map(row => `<tr>
-    <td><b>${esc(row.material_code || '—')}</b><div class="table-subline">${esc(row.material_name || row.description || '')}</div>${allocationNote(row)}</td>
+    <td><b>${esc(row.material_code || '—')}</b><div class="table-subline">${esc(row.material_name || row.description || '')}</div></td>
     <td>${number(row.required_quantity)} ${esc(row.unit || '')}</td>
-    <td>${number(row.on_hand_quantity)}</td>
-    <td>${number(row.allocated_other_quantity)}</td>
     <td>${number(row.available_quantity)}</td>
     <td>${number(row.reserved_quantity)}</td>
     <td>${number(row.ordered_quantity)}</td>
@@ -63,8 +57,8 @@ function materialTable(rows, empty) {
     <td>${badge(MAT_STATE[row.state] || row.state)}</td>
   </tr>`).join('');
   return `<div class="table-wrap"><table class="data-table"><thead><tr>
-    <th>Artigo</th><th>Necessário</th><th>Em armazém</th><th>Alocado outras OF</th><th>Livre</th><th>Reservado nesta OF</th><th>Encomendado</th><th>Recebido</th><th>A encomendar</th><th>Estado</th>
-  </tr></thead><tbody>${rowsOrEmpty(body, 10, empty)}</tbody></table></div>`;
+    <th>Artigo</th><th>Necessário</th><th>Em stock</th><th>Reservado</th><th>Encomendado</th><th>Recebido</th><th>A encomendar</th><th>Estado</th>
+  </tr></thead><tbody>${rowsOrEmpty(body, 8, empty)}</tbody></table></div>`;
 }
 
 export function dossierHtml(data) {
@@ -80,7 +74,7 @@ export function dossierHtml(data) {
   const alerts = data.alerts || [];
   const fabricPurchases = data.fabric_purchases || [];
   const cutting = data.cutting || [];
-  const distributed = (holdings.internal || 0) + (holdings.external || 0) + (holdings.shipped || 0);
+  const distributed = (holdings.internal || 0) + (holdings.external || 0) + (holdings.revista || 0) + (holdings.shipped || 0);
   const article = [order.reference, order.description].filter(Boolean).join(' · ') || '—';
   const locationCards = locations.length
     ? locations.map(loc => `<span class="track-split ${esc(loc.kind)}"><b>${esc(loc.label)}</b><small>${number(loc.quantity)} un. · ${esc(loc.detail || '')}</small></span>`).join('')
@@ -127,45 +121,53 @@ export function dossierHtml(data) {
 
   return `<div class="order-dossier">
     <p class="dossier-meta">${esc(article)}${order.customer_name ? ` · ${esc(order.customer_name)}` : ''}${order.sales_order_no ? ` · Enc. ${esc(order.sales_order_no)}` : ''}</p>
-    <div class="tabs dossier-tabs">
-      <button type="button" class="tab active" data-tab="summary">Resumo</button>
-      <button type="button" class="tab" data-tab="production">Produção</button>
-      <button type="button" class="tab" data-tab="distribution">Distribuição</button>
-      <button type="button" class="tab" data-tab="shipping">Expedição</button>
+    <div class="dossier-distribute-toggle">
+      <button type="button" class="btn primary" data-toggle-distribute>⇄ Distribuir</button>
     </div>
-
-    <div data-tab-panel="summary">
-      <div class="dossier-kpis">
-        <div><span>Prazo de entrega</span><strong>${prazoLabel(order)}</strong></div>
-        <div><span>Comercial responsável</span><strong>${esc(order.commercial_name || '—')}</strong></div>
-        <div><span>Encomendado</span><strong>${number(order.quantity)}</strong></div>
-        <div><span>Produzido</span><strong>${number(order.completed_quantity)}</strong></div>
-        <div><span>Por distribuir</span><strong>${number(holdings.unassigned)}</strong></div>
-      </div>
-      <div class="dossier-kpis dossier-kpis-secondary">
-        <div><span>Distribuído</span><strong>${number(distributed)}</strong></div>
-        <div><span>Na confeção</span><strong>${number(holdings.internal)}</strong></div>
-        <div><span>Em subcontrato</span><strong>${number(holdings.external)}</strong></div>
-        <div><span>Entregue / expedido</span><strong>${number(holdings.shipped)}</strong></div>
-      </div>
-      ${alertBox}
+    <div data-distribute-panel hidden></div>
+    <div class="dossier-kpis">
+      <div><span>Prazo de entrega</span><strong>${prazoLabel(order)}</strong></div>
+      <div><span>Comercial responsável</span><strong>${esc(order.commercial_name || '—')}</strong></div>
+      <div><span>Encomendado</span><strong>${number(order.quantity)}</strong></div>
+      <div><span>Produzido</span><strong>${number(order.completed_quantity)}</strong></div>
+      <div><span>Por distribuir</span><strong>${number(holdings.unassigned)}</strong></div>
     </div>
-
-    <div data-tab-panel="production" hidden>
+    <div class="dossier-kpis dossier-kpis-secondary">
+      <div><span>Distribuído</span><strong>${number(distributed)}</strong></div>
+      <div><span>Na confeção</span><strong>${number(holdings.internal)}</strong></div>
+      <div><span>Em subcontrato</span><strong>${number(holdings.external)}</strong></div>
+      <div><span>Entregue / expedido</span><strong>${number(holdings.shipped)}</strong></div>
+    </div>
+    ${alertBox}
+    <section class="dossier-block">
+      <h3>Onde está agora</h3>
+      <div class="track-splits dossier-places">${locationCards}</div>
+    </section>
+    <section class="dossier-block">
+      <h3>Sequência de produção <small>um passo de cada vez · os seguintes ficam cadeados</small></h3>
+      ${serviceRail}
+    </section>
+    <section class="dossier-block">
+      <h3>Mercadorias</h3>
+      ${fabricPurchases.length ? `<p class="muted">Encomenda de malha: ${fabricPurchases.map(row => `${row.order_no} (${row.status})`).join(' · ')}</p>` : ''}
+      ${materialTable(goods, 'Sem malhas/tecidos nesta OF.')}
+      ${cutting.length ? `<p class="muted">Malha enviada ao corte: ${cutting.map(row => `${number(row.actual_fabric || 0)} (plano ${number(row.planned_fabric || 0)})`).join(' · ')}</p>` : ''}
+      ${(order.custom_data?.fabric_issue_docs || []).length ? `<p class="muted">Documentos de saída: ${(order.custom_data.fabric_issue_docs || []).map(row => row.doc_no).join(' · ')}</p>` : ''}
+    </section>
+    <section class="dossier-block">
+      <h3>Acessórios</h3>
+      ${materialTable(accessories, 'Sem acessórios, linhas ou embalagem nesta OF.')}
+    </section>
+    <section class="dossier-block">
+      <h3>Envios externos</h3>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>Guia</th><th>Fornecedor</th><th>Serviço</th><th>Qtd. fora</th><th>Estado</th><th>Regresso</th></tr></thead>
+      <tbody>${rowsOrEmpty(jobRows, 6, 'Nada fora de casa neste momento.')}</tbody></table></div>
+    </section>
+    <div class="dossier-grid">
       <section class="dossier-block">
-        <h3>Ciclo desta encomenda <small>recomendado — pode sair do normal com uma excepção</small></h3>
-        ${serviceRail}
-      </section>
-      <section class="dossier-block">
-        <h3>Mercadorias</h3>
-        ${fabricPurchases.length ? `<p class="muted">Encomenda de malha: ${fabricPurchases.map(row => `${row.order_no} (${row.status})`).join(' · ')}</p>` : ''}
-        ${materialTable(goods, 'Sem malhas/tecidos nesta OF.')}
-        ${cutting.length ? `<p class="muted">Malha enviada ao corte: ${cutting.map(row => `${number(row.actual_fabric || 0)} (plano ${number(row.planned_fabric || 0)})`).join(' · ')}</p>` : ''}
-        ${(order.custom_data?.fabric_issue_docs || []).length ? `<p class="muted">Documentos de saída: ${(order.custom_data.fabric_issue_docs || []).map(row => row.doc_no).join(' · ')}</p>` : ''}
-      </section>
-      <section class="dossier-block">
-        <h3>Acessórios</h3>
-        ${materialTable(accessories, 'Sem acessórios, linhas ou embalagem nesta OF.')}
+        <h3>Expedições</h3>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Documento</th><th>Qtd.</th><th>Estado</th><th>Data</th></tr></thead>
+        <tbody>${rowsOrEmpty(shipRows, 4, 'Ainda sem expedição.')}</tbody></table></div>
       </section>
       <section class="dossier-block">
         <h3>Últimos eventos</h3>
@@ -173,30 +175,69 @@ export function dossierHtml(data) {
         <tbody>${rowsOrEmpty(eventRows, 5, 'Ainda sem registos de chão de fábrica.')}</tbody></table></div>
       </section>
     </div>
-
-    <div data-tab-panel="distribution" hidden>
-      <section class="dossier-block">
-        <h3>Onde está agora</h3>
-        <div class="track-splits dossier-places">${locationCards}</div>
-      </section>
-      <section class="dossier-block">
-        <h3>Envios externos</h3>
-        <div class="table-wrap"><table class="data-table"><thead><tr><th>Guia</th><th>Fornecedor</th><th>Serviço</th><th>Qtd. fora</th><th>Estado</th><th>Regresso</th></tr></thead>
-        <tbody>${rowsOrEmpty(jobRows, 6, 'Nada fora de casa neste momento.')}</tbody></table></div>
-      </section>
-    </div>
-
-    <div data-tab-panel="shipping" hidden>
-      <section class="dossier-block">
-        <h3>Expedições</h3>
-        <div class="table-wrap"><table class="data-table"><thead><tr><th>Documento</th><th>Qtd.</th><th>Estado</th><th>Data</th></tr></thead>
-        <tbody>${rowsOrEmpty(shipRows, 4, 'Ainda sem expedição.')}</tbody></table></div>
-      </section>
-    </div>
   </div>`;
 }
 
-export function openOrderDossier(data) {
+function distributeFormHtml(holdings, lines, services) {
+  const sources = ['unassigned', 'internal', 'revista'].filter(key => (holdings[key] || 0) > 0.001);
+  if (!sources.length) sources.push('unassigned');
+  return `<form class="dossier-distribute-form" data-distribute-form>
+    <div class="form-grid">
+      <label>Origem<select name="source">${sources.map(key => `<option value="${key}">${esc(SOURCE_LABEL[key])} · ${number(holdings[key])} disponíveis</option>`).join('')}</select></label>
+      <label>Destino<select name="destination">${Object.entries(DESTINATION_LABEL).map(([key, label]) => `<option value="${key}">${esc(label)}</option>`).join('')}</select></label>
+      <label>Quantidade<input type="number" name="quantity" min="1" step="1" required></label>
+      <label data-distribute-line>Linha de confeção<select name="line_id"><option value="">Selecionar…</option>${lines.map(row => `<option value="${row.id}">${esc(row.name)}</option>`).join('')}</select></label>
+      <label data-distribute-service hidden>Serviço / fornecedor<select name="subcontract_service_id"><option value="">Selecionar…</option>${services.map(row => `<option value="${row.id}">${esc(row.code)} · ${esc(row.name)}</option>`).join('')}</select></label>
+      <label>Data planeada<input type="date" name="planned_date"></label>
+    </div>
+    <div class="form-footer">
+      <button type="button" class="btn" data-cancel-distribute>Cancelar</button>
+      <button type="submit" class="btn primary">Confirmar distribuição</button>
+    </div>
+  </form>`;
+}
+
+function bindDistributeForm(container, orderId, lines, services) {
+  const panel = container.querySelector('[data-distribute-panel]');
+  container.querySelector('[data-toggle-distribute]')?.addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+  });
+  const form = panel.querySelector('[data-distribute-form]');
+  if (!form) return;
+  const destinationField = form.querySelector('select[name="destination"]');
+  const lineField = form.querySelector('[data-distribute-line]');
+  const serviceField = form.querySelector('[data-distribute-service]');
+  const syncFields = () => {
+    lineField.hidden = destinationField.value !== 'internal';
+    serviceField.hidden = destinationField.value !== 'subcontract';
+  };
+  syncFields();
+  destinationField.addEventListener('change', syncFields);
+  panel.querySelector('[data-cancel-distribute]').addEventListener('click', () => { panel.hidden = true; });
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+    try {
+      const payload = {
+        source: form.source.value,
+        destination: destinationField.value,
+        quantity: Number(form.quantity.value),
+        planned_date: form.planned_date.value || null,
+      };
+      if (destinationField.value === 'internal') payload.line_id = form.line_id.value ? Number(form.line_id.value) : null;
+      if (destinationField.value === 'subcontract') payload.subcontract_service_id = form.subcontract_service_id.value ? Number(form.subcontract_service_id.value) : null;
+      const result = await post(`/production/orders/${orderId}/distribute-and-document`, payload);
+      toast(result.document ? `Distribuído. Documento ${result.document.doc_no} criado.` : 'Distribuído.');
+      await loadOrderDossier(orderId);
+    } catch (error) {
+      submit.disabled = false;
+      toast(error.message, 'error');
+    }
+  });
+}
+
+export function openOrderDossier(data, lines = [], services = []) {
   const order = data.order || {};
   const subtitle = [
     order.customer_name,
@@ -206,6 +247,11 @@ export function openOrderDossier(data) {
   ].filter(Boolean).join(' · ') || 'Produzido, distribuído, entregue, locais e matérias-primas.';
   openModal(`OF ${order.order_no || ''}`.trim(), dossierHtml(data), subtitle);
   const body = document.getElementById('modal-body');
+  const distributePanel = body.querySelector('[data-distribute-panel]');
+  if (distributePanel) {
+    distributePanel.innerHTML = distributeFormHtml(data.holdings || {}, lines, services);
+    bindDistributeForm(body, order.id, lines, services);
+  }
   body.querySelectorAll('.dossier-tabs [data-tab]').forEach(button => button.addEventListener('click', () => {
     body.querySelectorAll('.dossier-tabs [data-tab]').forEach(item => item.classList.toggle('active', item === button));
     body.querySelectorAll('[data-tab-panel]').forEach(panel => { panel.hidden = panel.dataset.tabPanel !== button.dataset.tab; });
@@ -236,7 +282,12 @@ export function openOrderDossier(data) {
 export async function loadOrderDossier(orderId) {
   openModal('Ordem de fabrico', '<div class="loading">A carregar o dossier da OF…</div>', 'Produzido, distribuído, entregue e materiais.');
   try {
-    openOrderDossier(await get(`/production/orders/${orderId}/trace`));
+    const [data, lines, services] = await Promise.all([
+      get(`/production/orders/${orderId}/trace`),
+      crudList('production-lines', state.companyId).catch(() => []),
+      crudList('subcontract-services', state.companyId).catch(() => []),
+    ]);
+    openOrderDossier(data, lines, services);
   } catch (error) {
     toast(error.message, 'error');
   }

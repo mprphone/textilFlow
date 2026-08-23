@@ -2,6 +2,7 @@ import { crudList, get, post, put } from '../api.js';
 import { date, esc, finiteNumber, money, number, preciseMoney } from '../format.js?v=20260819-8';
 import { state } from '../state.js';
 import { closeModal, openModal, pageHeader, setHeading, toast } from '../ui.js?v=20260820-5';
+import { renderReleaseOrder } from './release_order.js?v=20260823-1';
 import { numericValue, statusText, todayIso, valueOf } from './shared.js';
 import { renderProposalWizard } from './wizard.js?v=20260819-10';
 
@@ -437,13 +438,13 @@ function acceptModal(container, sheet, beforeAccept, afterAccept) {
     try {
       if (beforeAccept) await beforeAccept();
       await post(`/costing/sheets/${sheet.id}/approve`, {});
-      closeModal(); toast('Proposta aceite. Já pode lançá-la em produção.');
+      closeModal(); toast('Proposta aceite. Defina agora as quantidades por cor e tamanho.');
       await afterAccept();
     } catch (error) { button.disabled = false; button.textContent = 'Aceitar proposta →'; toast(error.message, 'error'); }
   });
 }
 
-function releaseRequirements(preview, lines, quantity, hasCustomer = false) {
+export function releaseRequirements(preview, lines, quantity, hasCustomer = false) {
   const requirements = preview.requirements || preview.consumptions || [];
   const summary = preview.stock_summary || stockSummaryFrom({stock_summary:{}}, requirements);
   summary.quantity = quantity;
@@ -455,73 +456,6 @@ function releaseRequirements(preview, lines, quantity, hasCustomer = false) {
       <div><span>Tempo de produção</span><b>${number(laborMinutes / 60)} h</b><small>${number(laborMinutes)} minutos</small></div>
       <div><span>Subcontratos</span><b>${number(subcontractLines.length)}</b><small>${money(subcontractLines.reduce((sum, row) => sum + finiteNumber(row.amount), 0))}</small></div>
     </div>${stockPanel(requirements, summary, {variance:preview.cost_variance})}`;
-}
-
-async function releaseModal(container, detail, afterRelease) {
-  const {sheet, lines} = detail;
-  const [productionLines, customers] = await Promise.all([
-    crudList('production-lines', state.companyId).catch(() => []),
-    crudList('customers', state.companyId),
-  ]);
-  const idempotencyKey = globalThis.crypto?.randomUUID?.() || `cost-${sheet.id}-${Date.now()}`;
-  const defaultOrder = `OF-${new Date().getFullYear()}-${String(sheet.id).padStart(5, '0')}`;
-  openModal('Lançar em produção', `<form id="cost-release-form" class="cost-release-form">
-    <div class="release-sheet"><span>⚡</span><div><b>${esc(sheet.style_reference)} · ${esc(sheet.style_description)}</b><small>${esc(sheet.quote_no)} · ${esc(sheet.customer_name === '—' ? 'Sem cliente' : sheet.customer_name)}</small></div><label>Quantidade encomendada<input name="quantity" type="number" min="1" step="1" value="${finiteNumber(sheet.quantity_basis, 1)}" required></label></div>
-    <div class="release-fields">
-      <label>N.º ordem de fabrico<input name="order_no" value="${defaultOrder}" required></label>
-      <label>Cliente *<select name="customer_id" required ${sheet.customer_id ? 'disabled' : ''}><option value="">Selecionar…</option>${customers.map(row => `<option value="${row.id}" ${String(row.id) === String(sheet.customer_id) ? 'selected' : ''}>${esc(row.name)}</option>`).join('')}</select>${sheet.customer_id ? '<small>Cliente congelado na aceitação</small>' : ''}</label>
-      <label>Linha / célula<select name="line_id"><option value="">Planear depois</option>${productionLines.map(row => `<option value="${row.id}">${esc(row.name)}</option>`).join('')}</select></label>
-      <label>Início previsto<input name="planned_start" type="date" value="${todayIso()}"></label>
-      <label>Entrega prevista<input name="planned_end" type="date"></label>
-      <label>Prioridade<select name="priority"><option value="1">1 · Urgente</option><option value="2">2 · Alta</option><option value="3" selected>3 · Normal</option><option value="4">4 · Baixa</option></select></label>
-      <label class="reserve-choice"><input name="reserve_stock" type="checkbox" checked><span><b>Reservar stock disponível</b><small>As faltas ficam na lista de necessidades.</small></span></label>
-    </div>
-    <div data-release-preview><div class="loading">A calcular consumos e disponibilidade…</div></div>
-    <footer><button type="button" class="btn" data-cancel-release>Cancelar</button><button type="submit" class="btn primary">⚡ Confirmar, criar OF e consumos</button></footer>
-  </form>`, 'A ordem e a lista de necessidades são criadas numa única operação.');
-  const form = document.getElementById('cost-release-form');
-  const previewRoot = form.querySelector('[data-release-preview]');
-  let timer;
-  let previewSequence = 0;
-  const loadPreview = async () => {
-    const sequence = ++previewSequence;
-    const quantity = Math.max(1, Number(form.quantity.value || 1));
-    previewRoot.innerHTML = '<div class="loading">A recalcular necessidades…</div>';
-    try {
-      const preview = await get(`/costing/sheets/${sheet.id}/production-preview?quantity=${encodeURIComponent(quantity)}`);
-      if (sequence !== previewSequence) return;
-      previewRoot.innerHTML = releaseRequirements(preview, lines, quantity, Boolean(form.customer_id.value));
-    } catch (error) {
-      if (sequence !== previewSequence) return;
-      previewRoot.innerHTML = `<div class="cost-preview-error"><b>Não foi possível calcular.</b><span>${esc(error.message)}</span></div>`;
-    }
-  };
-  form.quantity.addEventListener('input', () => { previewSequence++; clearTimeout(timer); timer = setTimeout(loadPreview, 250); });
-  form.customer_id.addEventListener('change', loadPreview);
-  form.querySelector('[data-cancel-release]').addEventListener('click', closeModal);
-  form.addEventListener('submit', async event => {
-    event.preventDefault();
-    const submit = form.querySelector('[type="submit"]');
-    submit.disabled = true; submit.textContent = 'A criar ordem e necessidades…';
-    try {
-      const result = await post(`/costing/sheets/${sheet.id}/release`, {
-        quantity:Number(form.quantity.value),
-        order_no:form.order_no.value.trim(),
-        line_id:form.line_id.value ? Number(form.line_id.value) : null,
-        planned_start:form.planned_start.value || null,
-        planned_end:form.planned_end.value || null,
-        priority:Number(form.priority.value),
-        customer_id:Number(form.customer_id.value),
-        delivery_date:form.planned_end.value || null,
-        reserve_stock:form.reserve_stock.checked,
-        idempotency_key:idempotencyKey,
-      });
-      closeModal();
-      toast(result.already_released ? 'Esta proposta já estava ligada à produção.' : `Ordem ${result.production_order?.order_no || ''} criada. ${(result.fabric_purchase_orders || []).length ? 'Encomenda de malha: ' + result.fabric_purchase_orders.map(row => row.order_no).join(', ') + '.' : 'Malha coberta por stock.'}`);
-      await afterRelease();
-    } catch (error) { submit.disabled = false; submit.textContent = '⚡ Confirmar, criar OF e consumos'; toast(error.message, 'error'); }
-  });
-  await loadPreview();
 }
 
 async function openProductionOrder(orderId) {
@@ -772,12 +706,12 @@ export async function renderProposalDetail(container, sheetId) {
       try { await saveProposal(editor, sheet.id); toast('Ficha guardada com os custos confirmados.'); await renderProposalDetail(container, sheet.id); }
       catch (error) { toast(error.message, 'error'); }
     });
-    const openAccept = () => acceptModal(container, sheet, () => saveProposal(editor, sheet.id), () => renderProposalDetail(container, sheet.id));
+    const openAccept = () => acceptModal(container, sheet, () => saveProposal(editor, sheet.id), () => renderReleaseOrder(container, sheet.id, () => renderProposalDetail(container, sheet.id)));
     container.querySelector('[data-accept-detail]')?.addEventListener('click', openAccept);
     container.querySelector('[data-accept-proposal]')?.addEventListener('click', openAccept);
   }
   const openRelease = async () => {
-    try { await releaseModal(container, detail, () => renderProposalDetail(container, sheet.id)); }
+    try { await renderReleaseOrder(container, sheet.id, () => renderProposalDetail(container, sheet.id)); }
     catch (error) { toast(error.message, 'error'); }
   };
   container.querySelector('[data-release-detail]')?.addEventListener('click', openRelease);
@@ -795,15 +729,15 @@ function bindListActions(container, refresh) {
     if (filter) { await renderProposals(container, filter.dataset.overviewFilter); return; }
     const accept = event.target.closest('[data-accept-proposal]');
     if (accept) {
-      const detail = await get(`/costing/sheets/${accept.dataset.acceptProposal}`);
-      acceptModal(container, detail.sheet, null, refresh);
+      const sheetId = Number(accept.dataset.acceptProposal);
+      const detail = await get(`/costing/sheets/${sheetId}`);
+      acceptModal(container, detail.sheet, null, () => renderReleaseOrder(container, sheetId, refresh));
       return;
     }
     const release = event.target.closest('[data-release-proposal]');
     if (release) {
       try {
-        const detail = await get(`/costing/sheets/${release.dataset.releaseProposal}`);
-        await releaseModal(container, detail, refresh);
+        await renderReleaseOrder(container, Number(release.dataset.releaseProposal), refresh);
       } catch (error) { toast(error.message, 'error'); }
       return;
     }

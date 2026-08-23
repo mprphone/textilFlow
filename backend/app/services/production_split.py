@@ -22,6 +22,25 @@ def shipped_qty(order: ProductionOrder) -> float:
     return float((order.custom_data or {}).get("shipped_quantity") or 0)
 
 
+def revista_qty(order: ProductionOrder) -> float:
+    return float((order.custom_data or {}).get("revista_quantity") or 0)
+
+
+def _add_revista(order: ProductionOrder, quantity: float) -> None:
+    data = dict(order.custom_data or {})
+    data["revista_quantity"] = round(revista_qty(order) + quantity, 2)
+    order.custom_data = data
+
+
+def _reduce_revista(order: ProductionOrder, quantity: float) -> None:
+    current = revista_qty(order)
+    if quantity > current + 0.001:
+        raise ValueError(f"Só há {current:.0f} na revista")
+    data = dict(order.custom_data or {})
+    data["revista_quantity"] = round(current - quantity, 2)
+    order.custom_data = data
+
+
 def internal_plans(db: Session, order: ProductionOrder) -> list[SewingPlan]:
     return [
         plan for plan in db.query(SewingPlan).filter_by(production_order_id=order.id, company_id=order.company_id).all()
@@ -38,12 +57,14 @@ def holdings(db: Session, order: ProductionOrder, jobs: list[SubcontractJob] | N
     external = sum(job_out(job) for job in jobs)
     internal = sum(plan.quantity or 0 for plan in plans)
     shipped = shipped_qty(order)
+    revista = revista_qty(order)
     total = order.quantity or 0
-    unassigned = max(0, total - internal - external - shipped)
+    unassigned = max(0, total - internal - external - shipped - revista)
     return {
         "internal": internal,
         "external": external,
         "shipped": shipped,
+        "revista": revista,
         "unassigned": unassigned,
         "total": total,
         "plans": plans,
@@ -173,9 +194,9 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
     destination = payload.get("destination")
     if source == destination:
         raise ValueError("A origem e o destino não podem ser iguais")
-    if destination not in {"internal", "subcontract", "shipped"}:
+    if destination not in {"internal", "subcontract", "shipped", "revista"}:
         raise ValueError("Destino inválido")
-    if source not in {"unassigned", "internal"}:
+    if source not in {"unassigned", "internal", "revista"}:
         raise ValueError("Origem inválida")
     # Bloqueia a OF durante toda a operacao de leitura+validacao+escrita, para
     # dois pedidos de distribuicao concorrentes nao passarem ambos a mesma
@@ -185,7 +206,7 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
     planned_date_raw = payload.get("planned_date")
     planned_date = date.fromisoformat(str(planned_date_raw)[:10]) if planned_date_raw else None
     from .order_followup import assert_can_distribute
-    assert_can_distribute(db, order, payload)
+    assert_can_distribute(db, order, payload, override=override)
 
     stock = holdings(db, order)
     if source == "unassigned" and quantity > stock["unassigned"] + 0.001:
@@ -194,6 +215,8 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
         if quantity > stock["internal"] + 0.001:
             raise ValueError(f"Só há {stock['internal']:.0f} na confeção interna")
         _reduce_internal(stock["plans"], quantity)
+    if source == "revista":
+        _reduce_revista(order, quantity)
 
     subcontract_job_id = None
     if destination == "internal":
@@ -207,6 +230,9 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
             raise ValueError("Escolha o serviço e o fornecedor")
         job = _add_subcontract(db, order, service_id, quantity, override=override, planned_date=planned_date)
         subcontract_job_id = job.id
+    elif destination == "revista":
+        _add_revista(order, quantity)
+        update_order_stage(db, order)
     else:
         # `completed_quantity` representa produção real (peças confecionadas) e só
         # é escrito por register_output/register de eventos — aqui só se regista o
@@ -217,7 +243,6 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
         order.custom_data = data
         produced = order.completed_quantity or 0
         target = order.quantity or 0
-        from .production_stage import update_order_stage
         update_order_stage(db, order)
         if produced >= target * 0.99 > 0 and stock["external"] <= 0 and new_shipped >= target - 0.001:
             order.status = "completed"
@@ -227,6 +252,6 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
     stock = holdings(db, order)
     return {
         "order_id": order.id,
-        "holdings": {key: stock[key] for key in ("internal", "external", "shipped", "unassigned", "total")},
+        "holdings": {key: stock[key] for key in ("internal", "external", "shipped", "revista", "unassigned", "total")},
         "subcontract_job_id": subcontract_job_id,
     }

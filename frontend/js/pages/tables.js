@@ -3,6 +3,16 @@ import { renderEntityPage } from '../entity.js?v=20260819-9';
 import { badge, esc, money } from '../format.js?v=20260821-22';
 import { state } from '../state.js';
 import { toast } from '../ui.js?v=20260821-19';
+import { openSupplierDossier } from './supplier_dossier.js?v=20260823-3';
+import { render as renderItems } from './items.js?v=20260823-1';
+
+const supplierFicheActions = {
+  rowActions: row => `<button class="btn icon" type="button" data-supplier-ficha="${row.id}" title="Abrir ficha completa">👁</button>`,
+  onAction: event => {
+    const button = event.target.closest('[data-supplier-ficha]');
+    if (button) openSupplierDossier(Number(button.dataset.supplierFicha));
+  },
+};
 
 const address = [
   { key:'address', label:'Morada', type:'textarea', full:true },
@@ -38,6 +48,7 @@ function configs() {
       ],
     },
     suppliers: {
+      ...supplierFicheActions,
       resource:'suppliers', title:'Fornecedores', subtitle:'Tabela Base/Suppliers do Primavera. '+syncHint(),
       singular:'fornecedor', newLabel:'Novo fornecedor', extraActions:'<button class="btn" type="button" data-sync-pri="suppliers">Puxar do Primavera</button>',
       formSubtitle: syncHint(),
@@ -52,26 +63,6 @@ function configs() {
       columns:[
         {key:'code', label:'Fornecedor', render:r=>`<b>${esc(r.code)}</b>`}, {key:'name', label:'Nome'},
         {key:'tax_id', label:'NIF'}, {key:'city', label:'Localidade'}, {key:'iban', label:'IBAN'},
-        {key:'sync_status', label:'Primavera', render:r=>badge(r.sync_status || 'local')},
-        {key:'active', label:'Estado', render:r=>badge(r.active?'activo':'inactivo')},
-      ],
-    },
-    items: {
-      resource:'materials', title:'Artigos', subtitle:'Tabela Base/Items do Primavera. '+syncHint(),
-      singular:'artigo', newLabel:'Novo artigo', extraActions:'<button class="btn" type="button" data-sync-pri="items">Puxar do Primavera</button>',
-      formSubtitle: syncHint(),
-      fields:[
-        {key:'code', label:'Código', required:true}, {key:'name', label:'Descrição', required:true},
-        {key:'unit', label:'Unidade', default:'UN'}, {key:'barcode', label:'Cód. barras'},
-        {key:'family', label:'Família'}, {key:'subfamily', label:'Subfamília'}, {key:'brand', label:'Marca'},
-        {key:'vat_code', label:'IVA', default:'23'}, {key:'warehouse', label:'Armazém'},
-        {key:'item_type', label:'Tipo artigo', default:'M'}, {key:'unit_cost', label:'Custo médio', type:'number'},
-        {key:'active', label:'Activo', type:'checkbox', default:true},
-      ],
-      columns:[
-        {key:'code', label:'Artigo', render:r=>`<b>${esc(r.code)}</b>`}, {key:'name', label:'Descrição'},
-        {key:'unit', label:'Un.'}, {key:'family', label:'Família'}, {key:'vat_code', label:'IVA'},
-        {key:'unit_cost', label:'Custo', render:r=>money(r.unit_cost)},
         {key:'sync_status', label:'Primavera', render:r=>badge(r.sync_status || 'local')},
         {key:'active', label:'Estado', render:r=>badge(r.active?'activo':'inactivo')},
       ],
@@ -108,10 +99,24 @@ function configs() {
         {key:'active', label:'Estado', render:r=>badge(r.active?'activo':'inactivo')},
       ],
     },
+    'service-stages': {
+      resource:'service-stages', title:'Etapas de produção', subtitle:'Fases do circuito (corte, confeção, revista, bordado…) usadas para classificar os serviços subcontratados. Lista aberta — acrescente as que precisar.',
+      singular:'etapa', newLabel:'Nova etapa',
+      fields:[
+        {key:'code', label:'Código', required:true}, {key:'name', label:'Nome', required:true},
+        {key:'sequence', label:'Ordem', type:'number', default:0, help:'Posição no circuito — menor número corre primeiro.'},
+        {key:'active', label:'Estado', type:'checkbox', default:true, help:'Disponível para escolher em serviços'},
+      ],
+      columns:[
+        {key:'code', label:'Código', render:r=>`<b>${esc(r.code)}</b>`}, {key:'name', label:'Nome'},
+        {key:'sequence', label:'Ordem'}, {key:'active', label:'Estado', render:r=>badge(r.active?'ativo':'inativo')},
+      ],
+    },
   };
 }
 
 export async function render(container, table = 'customers') {
+  if (table === 'items') { await renderItems(container); return; }
   const config = configs()[table] || configs().customers;
   await renderEntityPage(container, config);
   container.querySelectorAll('[data-sync-pri]').forEach(button => {
