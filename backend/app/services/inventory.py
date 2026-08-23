@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from ..models import (
-    CommercialDocument, Company, InventoryMovement, ItemAlias, Material, ProductionMaterialRequirement,
+    BOMItem, CommercialDocument, Company, InventoryMovement, ItemAlias, Material, ProductionMaterialRequirement,
     ProductionOrder, ProductionOrderVariant, PurchaseOrder, PurchaseOrderLine, StockLot, Style, StyleVariant,
     Supplier,
 )
@@ -404,10 +404,29 @@ def material_history(db: Session, company_id: int, item_key: str) -> dict:
             "location": lot.location, "quantity": lot.quantity, "unit_cost": lot.unit_cost,
         })
 
+    used_in = [
+        {
+            "style_id": style.id, "style_reference": style.reference, "style_description": style.description,
+            "quantity": item.quantity, "unit": item.unit, "waste_pct": item.waste_pct,
+        }
+        for item, style in (
+            db.query(BOMItem, Style)
+            .join(Style, Style.id == BOMItem.style_id)
+            .filter(BOMItem.material_id == material.id)
+            .all()
+        )
+    ]
+
     return {
         "material": {
-            "id": material.id, "code": material.code, "name": material.name, "unit": material.unit,
-            "composition": material.composition, "warehouse": material.warehouse, "notes": material.notes or "",
+            "id": material.id, "code": material.code, "name": material.name, "tf_type": material.tf_type,
+            "unit": material.unit, "barcode": material.barcode, "composition": material.composition,
+            "color": material.color, "width_m": material.width_m, "gsm": material.gsm,
+            "family": material.family, "subfamily": material.subfamily, "brand": material.brand,
+            "vat_code": material.vat_code, "warehouse": material.warehouse, "item_type": material.item_type,
+            "unit_cost": material.unit_cost, "lead_time_days": material.lead_time_days,
+            "notes": material.notes or "", "active": material.active,
+            "sync_status": material.sync_status, "primavera_id": material.primavera_id,
         },
         "summary": {
             "last_price": last_price, "average_price": average_price,
@@ -416,6 +435,7 @@ def material_history(db: Session, company_id: int, item_key: str) -> dict:
         },
         "suppliers": list(suppliers_by_id.values()), "purchases": purchases[:20], "prices": prices,
         "documents": documents, "lots": lot_rows, "movements": movement_rows, "aliases": aliases,
+        "used_in": used_in,
     }
 
 

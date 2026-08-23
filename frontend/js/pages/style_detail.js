@@ -1,6 +1,7 @@
-import { get, post, crudDelete } from '../api.js';
+import { get, post, crudDelete, crudUpdate } from '../api.js';
 import { options } from '../data.js';
 import { badge, date, esc, money, number } from '../format.js?v=20260822-1';
+import { dynamicFields, fieldsCard, fieldsMarkup, mergeCustomData, readForm } from '../forms.js?v=20260824-1';
 import { recordModal } from '../quick_create.js';
 import { state } from '../state.js';
 import { confirmDelete, pageHeader, toast } from '../ui.js?v=20260822-1';
@@ -26,17 +27,20 @@ function colorSwatch(name) {
 }
 
 export async function renderStyleDetail(container, styleId, back, activeTab = 'general') {
-  const [data, configuration, route, chainServices] = await Promise.all([
+  const [data, configuration, route, chainServices, articleTypeOptions, customerOptions] = await Promise.all([
     get(`/products/styles/${styleId}/full`),
     get(`/configuration/${state.companyId}/style`),
-    get(`/crud/styles/${styleId}/production-route`).catch(() => []),
+    get(`/crud/styles/${styleId}/production-route?company_id=${state.companyId}`).catch(() => []),
     get(`/crud/subcontract-services?company_id=${state.companyId}`).catch(() => []),
+    options('article-types', 'name'),
+    options('customers', 'name'),
   ]);
   data.production_route = (route && route.length) ? route : [
     { sequence: 10, step_type: 'cutting', is_required: true, notes: '' },
     { sequence: 20, step_type: 'sewing', is_required: true, notes: '' },
   ];
   data.chain_services = chainServices || [];
+  const meta = { configuration, articleTypeOptions, customerOptions };
   const style = data.style;
   const tabs = [
     ['general', 'Geral'], ['variants', 'Variantes'], ['technical', 'Ficha Técnica'], ['bom', 'BOM / Componentes'],
@@ -55,11 +59,11 @@ export async function renderStyleDetail(container, styleId, back, activeTab = 'g
       </div>
     </div>
     <div class="tabs" style="margin-top:14px">${tabs.map(([key,label])=>`<button class="tab ${key===activeTab?'active':''}" data-detail-tab="${key}">${label}</button>`).join('')}</div>
-    <div data-detail-content>${renderTab(activeTab, data, configuration)}</div>`;
+    <div data-detail-content>${renderTab(activeTab, data, meta)}</div>`;
   container.querySelector('[data-back]').addEventListener('click', back);
   container.querySelector('[data-print-style]')?.addEventListener('click', () => window.print());
   container.querySelectorAll('[data-detail-tab]').forEach(button=>button.addEventListener('click',()=>renderStyleDetail(container,styleId,back,button.dataset.detailTab)));
-  await bindActions(container, data, styleId, back, activeTab);
+  await bindActions(container, data, styleId, back, activeTab, meta);
 }
 
 function statTile(icon, label, value, hint) {
@@ -93,36 +97,76 @@ function variantMatrixHtml(data, styleId) {
   </div>`;
 }
 
-function generalTabHtml(data) {
+const LIFECYCLE_OPTIONS = ['development', 'approved', 'production', 'inactive'];
+const STAGE_OPTIONS = ['novo','proposta_cliente','ficha_tecnica','desenvolvimento_malha','modelagem','corte','confecao','finalizacao','envio_cliente','resposta_cliente','retificacoes','conceito','proto','fitting','size_set','pps','aprovado','produção','arquivado'];
+
+function ensureOption(list, current) {
+  return current && !list.includes(current) ? [current, ...list] : list;
+}
+
+function styleFieldGroups(style, meta) {
+  const core = [
+    { key: 'description', label: 'Descrição', required: true },
+    { key: 'article_type_id', label: 'Tipo de artigo', type: 'select', options: meta.articleTypeOptions },
+    { key: 'customer_id', label: 'Cliente', type: 'select', options: meta.customerOptions },
+    { key: 'collection', label: 'Coleção / Época' },
+    { key: 'base_unit', label: 'Unidade', default: 'un' },
+  ];
+  const lifecycle = [
+    { key: 'lifecycle_status', label: 'Estado', type: 'select', options: ensureOption(LIFECYCLE_OPTIONS, style.lifecycle_status), default: 'development' },
+    { key: 'workflow_stage', label: 'Etapa', type: 'select', options: ensureOption(STAGE_OPTIONS, style.workflow_stage), default: 'novo' },
+  ];
+  const construction = [
+    { key: 'fabric', label: 'Malha base' }, { key: 'composition', label: 'Composição' },
+    { key: 'gsm', label: 'Gramagem (g/m²)', type: 'number' }, { key: 'color', label: 'Cor base' },
+    { key: 'size_range', label: 'Gama de tamanhos' },
+  ];
+  const image = [{ key: 'image_url', label: 'Imagem (URL)', type: 'url', full: true }];
+  const bySection = new Map();
+  for (const field of dynamicFields(meta.configuration.fields, style.custom_data || {})) {
+    const title = field.section || 'Outros campos';
+    if (!bySection.has(title)) bySection.set(title, []);
+    bySection.get(title).push({ ...field, section: undefined });
+  }
+  const dynamicGroups = [...bySection.entries()].map(([title, fields]) => ({ title, fields }));
+  return {
+    core, lifecycle, construction, image, dynamicGroups,
+    allFields: [...core, ...lifecycle, ...construction, ...image, ...dynamicGroups.flatMap(group => group.fields)],
+  };
+}
+
+function generalTabHtml(data, meta) {
   const style = data.style;
   const summary = data.summary || {};
   const colors = (data.variant_matrix?.colors || []);
-  return `<div class="style-general-grid">
-    <div class="card"><div class="card-header"><h2>Informação principal</h2></div>
-      <div class="custom-fields">${[
-        ['Código (Primavera)', style.reference], ['Descrição', style.description],
-        ['Coleção / Época', style.collection], ['Referência cliente', style.custom_data?.customer_reference],
-        ['Código de barras (base)', style.custom_data?.barcode], ['IVA', style.custom_data?.vat_code ? `${style.custom_data.vat_code}%` : null],
-        ['Criado em', date(style.created_at)], ['Última atualização', date(style.updated_at)],
-        ['Unidade base', style.base_unit], ['Família', style.custom_data?.family],
-        ['Subfamília', style.custom_data?.subfamily], ['Marca', style.custom_data?.brand],
-      ].map(([label,value])=>`<div class="custom-field"><small>${label}</small><strong>${esc(value||'—')}</strong></div>`).join('')}</div>
-    </div>
-    <div class="card"><div class="card-header"><h2>Resumo rápido</h2></div>
-      <div class="style-stats-grid">
-        ${statTile('📦', 'Stock disponível (total)', `${number(summary.stock_available)} un`)}
-        ${statTile('📈', 'Em produção / OF', `${number(summary.in_production_qty)} un`, `${number(summary.in_production_orders)} ordens de fabrico`)}
-        ${statTile('€', 'Custo médio atual', money(summary.avg_cost))}
-        ${statTile('🛒', 'Última compra', summary.last_purchase_price ? money(summary.last_purchase_price) : '—', summary.last_purchase_date ? `Data: ${date(summary.last_purchase_date)}` : '')}
-        ${statTile('📅', 'Última movimentação', summary.last_movement_date ? date(summary.last_movement_date) : '—')}
-        ${statTile('🏭', 'Fornecedores ativos', number(summary.active_suppliers), 'Para este artigo')}
+  const { core, lifecycle, construction, image, dynamicGroups } = styleFieldGroups(style, meta);
+  return `<form data-style-form>
+    <div class="style-general-grid">
+      ${fieldsCard('Identificação', core, style)}
+      <div class="card"><div class="card-header"><h2>Resumo rápido</h2></div>
+        <div class="style-stats-grid">
+          ${statTile('📦', 'Stock disponível (total)', `${number(summary.stock_available)} un`)}
+          ${statTile('📈', 'Em produção / OF', `${number(summary.in_production_qty)} un`, `${number(summary.in_production_orders)} ordens de fabrico`)}
+          ${statTile('€', 'Custo médio atual', money(summary.avg_cost))}
+          ${statTile('🛒', 'Última compra', summary.last_purchase_price ? money(summary.last_purchase_price) : '—', summary.last_purchase_date ? `Data: ${date(summary.last_purchase_date)}` : '')}
+          ${statTile('📅', 'Última movimentação', summary.last_movement_date ? date(summary.last_movement_date) : '—')}
+          ${statTile('🏭', 'Fornecedores ativos', number(summary.active_suppliers), 'Para este artigo')}
+        </div>
+      </div>
+      <div class="card"><div class="card-header"><h2>Imagem e cores</h2></div>
+        <div class="form-grid">${fieldsMarkup(image, style)}</div>
+        <div class="style-image-preview">${style.image_url ? `<img src="${esc(style.image_url)}" alt="">` : '<span class="style-image-placeholder">◈</span>'}</div>
+        <div class="style-color-swatches">${colors.map(color => `<span class="style-color-chip" title="${esc(color)}"><i style="background:${colorSwatch(color)}"></i>${esc(color)}</span>`).join('')}</div>
       </div>
     </div>
-    <div class="card"><div class="card-header"><h2>Imagem e cores</h2></div>
-      <div class="style-image-preview">${style.image_url ? `<img src="${esc(style.image_url)}" alt="">` : '<span class="style-image-placeholder">◈</span>'}</div>
-      <div class="style-color-swatches">${colors.map(color => `<span class="style-color-chip" title="${esc(color)}"><i style="background:${colorSwatch(color)}"></i>${esc(color)}</span>`).join('')}</div>
+    ${fieldsCard('Ciclo de vida', lifecycle, style)}
+    ${fieldsCard('Malha e construção', construction, style)}
+    ${dynamicGroups.map(group => fieldsCard(group.title, group.fields, {})).join('')}
+    <div class="card style-save-bar">
+      <div><strong>Atualizar dados do artigo</strong><p class="muted">As alterações aplicam-se de imediato à ficha e às listagens.</p></div>
+      <button type="submit" class="btn primary">Guardar alterações</button>
     </div>
-  </div>
+  </form>
   ${variantMatrixHtml(data)}`;
 }
 
@@ -159,11 +203,11 @@ function stockTabHtml(data) {
   )}</div>`;
 }
 
-function renderTab(tab, data, configuration) {
+function renderTab(tab, data, meta) {
   const style = data.style;
-  if (tab === 'general') return generalTabHtml(data);
+  if (tab === 'general') return generalTabHtml(data, meta);
   if (tab === 'variants') return variantMatrixHtml(data);
-  if (tab === 'technical') return technicalTabHtml(style, configuration);
+  if (tab === 'technical') return technicalTabHtml(style, meta.configuration);
   if (tab === 'purchasing') return purchasingTabHtml(data);
   if (tab === 'stock') return stockTabHtml(data);
   if (tab === 'bom') return `<div class="card"><div class="card-header"><h2>Bill of Materials</h2><button class="btn primary" data-add-bom>+ Material</button></div>${rowsTable(['Material','Quantidade','Unidade','Desperdício','Custo unit.','Custo'],data.bom.map(row=>`<tr><td><b>${esc(row.material_code)}</b><br><small>${esc(row.material_name)}</small></td><td>${number(row.quantity)}</td><td>${esc(row.unit)}</td><td>${number(row.waste_pct)}%</td><td>${money(row.unit_cost)}</td><td>${money(row.quantity*(1+row.waste_pct/100)*row.unit_cost)}</td><td><button class="btn small danger" data-delete-resource="bom-items" data-delete-id="${row.id}">Eliminar</button></td></tr>`))}</div>`;
@@ -191,8 +235,19 @@ function renderChainList(chain, services) {
   }));
 }
 
-async function bindActions(container, data, styleId, back, activeTab) {
+async function bindActions(container, data, styleId, back, activeTab, meta) {
   const refresh=()=>renderStyleDetail(container,styleId,back,activeTab);
+  container.querySelector('[data-style-form]')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const { allFields } = styleFieldGroups(data.style, meta);
+    try {
+      let payload = readForm(event.currentTarget, allFields);
+      payload = mergeCustomData(payload, data.style.custom_data);
+      await crudUpdate('styles', styleId, payload);
+      toast('Artigo atualizado.');
+      refresh();
+    } catch (error) { toast(error.message, 'error'); }
+  });
   container.querySelector('[data-add-bom]')?.addEventListener('click',async()=>recordModal({title:'Adicionar material à ficha',resource:'bom-items',values:{style_id:styleId},fields:[{key:'material_id',label:'Material',type:'select',required:true,options:await options('materials',r=>`${r.code} · ${r.name}`)},{key:'quantity',label:'Quantidade',type:'number',required:true},{key:'unit',label:'Unidade',required:true,default:'kg'},{key:'waste_pct',label:'Desperdício (%)',type:'number',default:0},{key:'unit_cost',label:'Custo unitário',type:'number',default:0},{key:'notes',label:'Notas',type:'textarea',full:true},{key:'style_id',label:'Artigo',type:'hidden'}],onSaved:refresh}));
   container.querySelector('[data-add-operation]')?.addEventListener('click',async()=>recordModal({title:'Adicionar operação à gama',resource:'product-operations',values:{style_id:styleId},fields:[{key:'operation_id',label:'Operação',type:'select',required:true,options:await options('operations',r=>`${r.code} · ${r.name}`)},{key:'sequence',label:'Sequência',type:'number',default:10},{key:'smv',label:'SMV (min)',type:'number',default:0},{key:'target_units_hour',label:'Objetivo/h',type:'number',default:0},{key:'skill_level',label:'Nível',type:'select',options:['basic','standard','advanced'],default:'standard'},{key:'quality_checkpoint',label:'Checkpoint qualidade',type:'checkbox'},{key:'style_id',label:'Artigo',type:'hidden'}],onSaved:refresh}));
   container.querySelectorAll('[data-add-variant-cell]').forEach(button => button.addEventListener('click', () => {
@@ -239,7 +294,7 @@ async function bindActions(container, data, styleId, back, activeTab) {
         });
       });
       try {
-        await post(`/crud/styles/${styleId}/production-route`, payload);
+        await post(`/crud/styles/${styleId}/production-route?company_id=${state.companyId}`, payload);
         toast('Sequência de produção guardada');
         refresh();
       } catch (error) { toast(error.message, 'error'); }

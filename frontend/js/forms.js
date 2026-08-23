@@ -71,9 +71,9 @@ export function bindPhotoFields(root = document) {
   });
 }
 
-export function renderForm(fields, values = {}, { submitLabel = 'Guardar', formId = 'record-form', formClass = 'form-grid' } = {}) {
+export function fieldsMarkup(fields, values = {}) {
   let section = null;
-  const content = fields.map(field => {
+  return fields.map(field => {
     const value = values[field.key] ?? field.default ?? '';
     const sectionHeader = field.section && field.section !== section ? `<div class="form-section">${esc(field.section)}</div>` : '';
     if (field.section) section = field.section;
@@ -113,6 +113,15 @@ export function renderForm(fields, values = {}, { submitLabel = 'Guardar', formI
     }
     return `${sectionHeader}<div class="field ${spanClass}"><label>${esc(field.label)}${field.required ? ' *' : ''}${input}</label>${field.help && field.type !== 'checkbox' ? `<small class="muted">${esc(field.help)}</small>` : ''}</div>`;
   }).join('');
+}
+
+export function fieldsCard(title, fields, values = {}, hint = '') {
+  if (!fields.length) return '';
+  return `<div class="card"><div class="card-header"><h2>${esc(title)}</h2>${hint ? `<span>${esc(hint)}</span>` : ''}</div><div class="form-grid">${fieldsMarkup(fields, values)}</div></div>`;
+}
+
+export function renderForm(fields, values = {}, { submitLabel = 'Guardar', formId = 'record-form', formClass = 'form-grid' } = {}) {
+  const content = fieldsMarkup(fields, values);
   return `<form id="${formId}" class="${esc(formClass)}">${content}<div class="form-footer"><button type="button" class="btn" data-close-modal>Cancelar</button><button type="submit" class="btn primary">${esc(submitLabel)}</button></div></form>`;
 }
 
