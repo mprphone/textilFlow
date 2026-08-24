@@ -1,6 +1,6 @@
 import { post } from './api.js?v=20260822-16';
 import { clearSession, setCompany, setSession, state } from './state.js';
-import { closeModal, loading, toast } from './ui.js?v=20260824-41';
+import { loading, resetTransientUi, toast } from './ui.js?v=20260824-42';
 import { recordModal } from './quick_create.js?v=20260821-19';
 import { initExperience } from './experience.js?v=20260824-41';
 import * as dashboard from './pages/dashboard.js?v=20260822-10';
@@ -167,7 +167,7 @@ function showApp(){
 }
 
 async function navigate(){
-  closeModal();
+  resetTransientUi();
   let route=(location.hash.replace(/^#\//,'').split(/[/?]/)[0]||'dashboard');
   if(route==='planning')route='tracking';
   const visibleModules=allowedModules();
@@ -213,7 +213,7 @@ let appStarted=false;
 export async function bootApp(){
   if(!appStarted){
     appStarted=true;
-    closeModal();
+    resetTransientUi();
     initExperience({canNavigate:canNavigateTo});
     document.getElementById('logout-button').addEventListener('click',logout);
     document.getElementById('menu-toggle').addEventListener('click',()=>document.querySelector('.sidebar').classList.toggle('open'));

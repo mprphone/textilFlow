@@ -57,6 +57,13 @@
 }
 
 /* Modal e formulários: um único objeto visual, sem caixas desconexas. */
+.modal.hidden,.modal[hidden],.modal[aria-hidden="true"]{
+  display:none!important;
+  visibility:hidden!important;
+  opacity:0!important;
+  pointer-events:none!important;
+  background:transparent!important;
+}
 .modal{
   padding:24px;
   background:rgba(15,27,46,.58);

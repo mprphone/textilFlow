@@ -6,6 +6,21 @@ const modalSubtitle = document.getElementById('modal-subtitle');
 const modalBody = document.getElementById('modal-body');
 let previousFocus = null;
 
+function syncModalVisibility() {
+  const isOpen = modal.getAttribute('aria-hidden') === 'false' && !modal.classList.contains('hidden');
+  modal.hidden = !isOpen;
+  if (isOpen) modal.style.removeProperty('display');
+  else {
+    modal.style.setProperty('display', 'none');
+    document.body.classList.remove('modal-open');
+  }
+}
+
+new MutationObserver(syncModalVisibility).observe(modal, {
+  attributes: true,
+  attributeFilter: ['class', 'aria-hidden'],
+});
+
 export function setHeading(title, subtitle = '') {
   document.getElementById('page-title').textContent = title;
   document.getElementById('page-subtitle').textContent = subtitle;
@@ -22,8 +37,11 @@ export function openModal(title, body, subtitle = '') {
   modalTitle.textContent = title;
   modalSubtitle.textContent = subtitle;
   modalBody.innerHTML = body;
+  modal.hidden = false;
+  modal.style.removeProperty('display');
   modal.setAttribute('aria-hidden', 'false');
   modal.classList.remove('hidden');
+  syncModalVisibility();
   document.body.classList.add('modal-open');
   requestAnimationFrame(() => modal.querySelector('input:not(:disabled),select:not(:disabled),textarea:not(:disabled),button:not(:disabled),a[href]')?.focus());
 }
@@ -31,6 +49,8 @@ export function openModal(title, body, subtitle = '') {
 export function closeModal() {
   modal.classList.add('hidden');
   modal.setAttribute('aria-hidden', 'true');
+  modal.hidden = true;
+  modal.style.setProperty('display', 'none');
   document.body.classList.remove('modal-open');
   modal.querySelector('.modal-card')?.classList.remove('supplier-ficha-card');
   modalTitle.textContent = '';
@@ -40,6 +60,15 @@ export function closeModal() {
   previousFocus = null;
   const statusSlot = document.getElementById('modal-status-slot');
   if (statusSlot) statusSlot.innerHTML = '';
+}
+
+export function resetTransientUi() {
+  closeModal();
+  document.querySelectorAll('.design-overlay').forEach(layer => layer.remove());
+  document.querySelectorAll('.pri-lookup-layer').forEach(layer => {
+    layer.classList.add('hidden');
+    layer.setAttribute('aria-hidden', 'true');
+  });
 }
 
 export function toast(message, type = 'success') {
@@ -76,4 +105,7 @@ document.addEventListener('keydown', event => {
 });
 
 // Evita que o navegador restaure uma camada modal antiga e bloqueie a aplicação.
-closeModal();
+resetTransientUi();
+window.addEventListener('pageshow', event => {
+  if (event.persisted || modal.getAttribute('aria-hidden') !== 'false') resetTransientUi();
+});
