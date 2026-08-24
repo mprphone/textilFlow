@@ -18,6 +18,7 @@ export function pageHeader(title, subtitle, actions = '', extraClass = '') {
 
 export function openModal(title, body, subtitle = '') {
   previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  modal.querySelector('.modal-card')?.classList.remove('supplier-ficha-card');
   modalTitle.textContent = title;
   modalSubtitle.textContent = subtitle;
   modalBody.innerHTML = body;
@@ -31,6 +32,7 @@ export function closeModal() {
   modal.classList.add('hidden');
   modal.setAttribute('aria-hidden', 'true');
   document.body.classList.remove('modal-open');
+  modal.querySelector('.modal-card')?.classList.remove('supplier-ficha-card');
   modalTitle.textContent = '';
   modalSubtitle.textContent = '';
   modalBody.innerHTML = '';

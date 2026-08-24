@@ -361,7 +361,7 @@ function chipMarkup(row, day) {
     <span>${esc(row.client)}</span>
     <em>${esc(dueLabel(row))}</em>
     <em>${number(ofPct)}% desta OF · ${isCut() ? 'mesa' : 'linha'} ${number(load)}%</em>
-    <i data-remove-day="${row.id}" data-day="${day}" title="Tirar este dia">×</i>
+    <i data-icon="delete" data-remove-day="${row.id}" data-day="${day}" role="button" aria-label="Retirar deste dia" title="Retirar deste dia"></i>
   </button>`;
 }
 

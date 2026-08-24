@@ -34,7 +34,7 @@ function gradeTableMarkup(gradeState) {
   if (!rows.length || !sizes.length) return '';
   return `<thead><tr>
       <th>Cor</th><th>Preço unitário</th>
-      ${sizes.map(size => `<th>${esc(size)}<button type="button" class="grade-remove-size" data-remove-size="${esc(size)}" aria-label="Remover tamanho ${esc(size)}">×</button></th>`).join('')}
+      ${sizes.map(size => `<th>${esc(size)}<button type="button" class="grade-remove-size" data-icon="delete" data-remove-size="${esc(size)}" aria-label="Remover tamanho ${esc(size)}" title="Remover tamanho ${esc(size)}"></button></th>`).join('')}
       <th>Total</th><th></th>
     </tr></thead>
     <tbody>${rows.map(row => `
@@ -43,7 +43,7 @@ function gradeTableMarkup(gradeState) {
         <td><div class="grade-price-cell"><input type="number" min="0" step="0.01" data-price-input data-row="${row.id}" value="${row.price || ''}" placeholder="0,00"><span>EUR</span></div></td>
         ${sizes.map(size => `<td><input type="number" min="0" step="1" data-qty-input data-row="${row.id}" data-size="${esc(size)}" value="${row.qty[size] || ''}" placeholder="0"></td>`).join('')}
         <td class="grade-row-total" data-row-total="${row.id}">0</td>
-        <td><button type="button" class="btn icon danger" data-remove-color="${row.id}" aria-label="Remover cor">🗑</button></td>
+        <td><button type="button" class="btn icon danger" data-icon="delete" data-remove-color="${row.id}" aria-label="Remover cor" title="Remover cor"></button></td>
       </tr>`).join('')}</tbody>
     <tfoot><tr><td>Total por tamanho</td><td></td>${sizes.map(() => '<td data-col-total>0</td>').join('')}<td data-grand-total>0</td><td></td></tr></tfoot>`;
 }
@@ -68,7 +68,7 @@ function requirementsHtml(data) {
 }
 
 function articleBlockHtml(block, styles) {
-  return `<section class="card" data-article-block data-block-id="${block.id}">
+  return `<section class="card release-order-card release-order-article-card" data-article-block data-block-id="${block.id}">
     <div class="card-header">
       <h2 class="release-order-article-title"><span class="step-badge">${block.index}</span>
         <select data-style-select>
@@ -77,20 +77,20 @@ function articleBlockHtml(block, styles) {
         </select>
       </h2>
       <div class="actions">
-        <button type="button" class="btn small" data-calc-requirements>📐 Necessidade de material</button>
-        ${block.removable ? '<button type="button" class="btn small danger" data-remove-article>Remover artigo</button>' : ''}
+        <button type="button" class="btn icon" data-icon="document" data-calc-requirements aria-label="Calcular necessidade de material" title="Calcular necessidade de material"></button>
+        ${block.removable ? '<button type="button" class="btn icon danger" data-icon="delete" data-remove-article aria-label="Remover artigo" title="Remover artigo"></button>' : ''}
       </div>
     </div>
     <div class="grade-add-row">
       <div class="grade-add-group">
-        <span class="grade-add-icon">🎨</span>
+        <span class="grade-add-icon" data-icon="palette" aria-hidden="true"></span>
         <input type="text" data-new-color placeholder="Nova cor (ex.: Preto)">
-        <button type="button" class="grade-add-btn" data-add-color aria-label="Adicionar cor" title="Adicionar cor">+</button>
+        <button type="button" class="grade-add-btn" data-icon="add" data-add-color aria-label="Adicionar cor" title="Adicionar cor"></button>
       </div>
       <div class="grade-add-group">
-        <span class="grade-add-icon">📏</span>
+        <span class="grade-add-icon" data-icon="ruler" aria-hidden="true"></span>
         <input type="text" data-new-size placeholder="Novo tamanho (ex.: 3XL)">
-        <button type="button" class="grade-add-btn" data-add-size aria-label="Adicionar tamanho" title="Adicionar tamanho">+</button>
+        <button type="button" class="grade-add-btn" data-icon="add" data-add-size aria-label="Adicionar tamanho" title="Adicionar tamanho"></button>
       </div>
     </div>
     <div class="table-wrap grade-table-wrap"><table class="data-table grade-table-full" data-grade-table></table></div>
@@ -178,7 +178,7 @@ export async function renderSalesOrders(panel) {
         <td>${date(row.delivery_date)}</td>
         <td><span class="badge blue">${esc(STATUS_LABELS[row.status] || row.status)}</span></td>
         <td class="listing-actions"><div class="row-actions">
-          ${['draft','confirmed'].includes(row.status) && row.custom_data?.source !== 'accepted_cost_proposal' ? `<button class="btn icon" type="button" data-edit-order="${row.id}" aria-label="Editar">✎</button><button class="btn small primary" type="button" data-release-order="${row.id}">Libertar</button><button class="btn icon danger" type="button" data-delete-order="${row.id}" aria-label="Eliminar">×</button>` : ''}
+          ${['draft','confirmed'].includes(row.status) && row.custom_data?.source !== 'accepted_cost_proposal' ? `<button class="btn icon" type="button" data-icon="edit" data-edit-order="${row.id}" aria-label="Editar" title="Editar"></button><button class="btn icon primary" type="button" data-icon="check" data-release-order="${row.id}" aria-label="Libertar para produção" title="Libertar para produção"></button><button class="btn icon danger" type="button" data-icon="delete" data-delete-order="${row.id}" aria-label="Eliminar" title="Eliminar"></button>` : ''}
         </div></td>
       </tr>`).join('') : `<tr><td colspan="7">${empty('Sem encomendas', 'Crie a primeira encomenda de cliente.')}</td></tr>`}</tbody></table></div></section>`;
 
@@ -246,7 +246,7 @@ export async function renderSalesOrderEditor(panel, orderId) {
 
   panel.innerHTML = `<div class="release-order-page">
     <header class="release-order-header">
-      <button type="button" class="btn icon" data-back-order aria-label="Voltar">←</button>
+      <button type="button" class="btn icon" data-icon="back" data-back-order aria-label="Voltar" title="Voltar"></button>
       <div><h2>${orderId ? `Editar encomenda ${esc(order.order_no)}` : 'Nova encomenda'}</h2><p>Dados da encomenda e grade cor × tamanho por artigo</p></div>
       <div class="release-order-actions">
         <button type="button" class="btn" data-cancel-order>Cancelar</button>
@@ -257,19 +257,19 @@ export async function renderSalesOrderEditor(panel, orderId) {
     <section class="card release-order-card">
       <div class="card-header"><h2>Dados principais</h2></div>
       <div class="release-order-fields">
-        <label>Cliente *<select name="customer_id" required>${customers.map(row => `<option value="${row.id}" ${String(row.id) === String(order.customer_id) ? 'selected' : ''}>${esc(row.name)}</option>`).join('')}</select></label>
-        <label>Número interno<input name="order_no" value="${esc(order.order_no || '')}" readonly></label>
-        <label>PO cliente<input name="customer_po" value="${esc(order.customer_po || '')}" placeholder="Referência da encomenda do cliente"></label>
-        <label>Data<input type="date" name="order_date" value="${order.order_date || ''}"></label>
-        <label>Entrega<input type="date" name="delivery_date" value="${order.delivery_date || ''}"></label>
-        <label>Estado<select name="status">${Object.entries(EDITABLE_STATUS_LABELS).map(([value, label]) => `<option value="${value}" ${value === order.status ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></label>
-        <label>Moeda<input name="currency" value="${esc(order.currency || 'EUR')}"></label>
+        <label class="field-customer">Cliente *<select name="customer_id" required>${customers.map(row => `<option value="${row.id}" ${String(row.id) === String(order.customer_id) ? 'selected' : ''}>${esc(row.name)}</option>`).join('')}</select></label>
+        <label class="field-order-no">Número interno<input name="order_no" value="${esc(order.order_no || '')}" readonly></label>
+        <label class="field-customer-po">PO cliente<input name="customer_po" value="${esc(order.customer_po || '')}" placeholder="Referência da encomenda do cliente"></label>
+        <label class="field-order-date">Data<input type="date" name="order_date" value="${order.order_date || ''}"></label>
+        <label class="field-delivery-date">Entrega<input type="date" name="delivery_date" value="${order.delivery_date || ''}"></label>
+        <label class="field-status">Estado<select name="status">${Object.entries(EDITABLE_STATUS_LABELS).map(([value, label]) => `<option value="${value}" ${value === order.status ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></label>
+        <label class="field-currency">Moeda<input name="currency" value="${esc(order.currency || 'EUR')}"></label>
         <label class="full">Notas<textarea name="notes">${esc(order.notes || '')}</textarea></label>
       </div>
     </section>
 
     <div data-articles-list></div>
-    <button type="button" class="btn" data-add-article>+ Adicionar artigo</button>
+    <button type="button" class="btn release-order-add-article" data-add-article><span data-icon="add" aria-hidden="true"></span>Adicionar artigo</button>
 
     <aside class="card release-order-summary-card">
       <h3>Resumo da encomenda</h3>
@@ -278,10 +278,6 @@ export async function renderSalesOrderEditor(panel, orderId) {
       <div class="total"><span>Valor total</span><b data-summary-value>0,00 €</b></div>
     </aside>
 
-    <footer class="release-order-footer">
-      <button type="button" class="btn" data-cancel-order>Cancelar</button>
-      <button type="button" class="btn primary" data-submit-order>${orderId ? 'Guardar encomenda' : 'Criar encomenda'}</button>
-    </footer>
   </div>`;
 
   const root = panel.querySelector('.release-order-page');

@@ -1,13 +1,13 @@
 import { post } from '../api.js';
-import { renderEntityPage } from '../entity.js?v=20260819-9';
+import { renderEntityPage } from '../entity.js?v=20260824-41';
 import { badge, esc, money } from '../format.js?v=20260821-22';
 import { state } from '../state.js';
 import { toast } from '../ui.js?v=20260821-19';
-import { openSupplierDossier } from './supplier_dossier.js?v=20260823-3';
-import { render as renderItems } from './items.js?v=20260823-1';
+import { openSupplierDossier } from './supplier_dossier.js?v=20260824-41';
+import { render as renderItems } from './items.js?v=20260824-41';
 
 const supplierFicheActions = {
-  rowActions: row => `<button class="btn icon" type="button" data-supplier-ficha="${row.id}" title="Abrir ficha completa">👁</button>`,
+  rowActions: row => `<button class="btn icon" type="button" data-icon="eye" data-supplier-ficha="${row.id}" aria-label="Abrir ficha completa" title="Abrir ficha completa"></button>`,
   onAction: event => {
     const button = event.target.closest('[data-supplier-ficha]');
     if (button) openSupplierDossier(Number(button.dataset.supplierFicha));

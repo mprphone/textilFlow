@@ -2,9 +2,9 @@ import { crudList, get, post, put } from '../api.js';
 import { date, esc, finiteNumber, money, number, preciseMoney } from '../format.js?v=20260819-8';
 import { state } from '../state.js';
 import { closeModal, openModal, pageHeader, setHeading, toast } from '../ui.js?v=20260820-5';
-import { renderReleaseOrder } from './release_order.js?v=20260823-1';
+import { renderReleaseOrder } from './release_order.js?v=20260824-41';
 import { numericValue, statusText, todayIso, valueOf } from './shared.js';
-import { renderProposalWizard } from './wizard.js?v=20260819-10';
+import { renderProposalWizard } from './wizard.js?v=20260824-41';
 
 const COST_GROUPS = [
   {key:'fabric', label:'Malhas / tecidos', short:'Malhas', icon:'▧', tone:'mint', category:'material', source:'manual_fabric'},
@@ -289,7 +289,7 @@ function editorLine(line = {}, locked = false, requirement = null) {
     <td><input data-line="unit_cost" type="number" min="0" step="any" value="${finiteNumber(line.unit_cost)}" ${locked ? 'disabled' : ''}></td>
     <td data-line-total>${preciseMoney(safeAmount(line))}</td>
     <td>${origin}</td>
-    ${locked ? '<td></td>' : '<td><button class="btn small danger" type="button" data-remove-line aria-label="Remover custo">×</button></td>'}
+    ${locked ? '<td></td>' : '<td><button class="btn icon danger" type="button" data-icon="delete" data-remove-line aria-label="Remover custo" title="Remover custo"></button></td>'}
   </tr>`;
 }
 

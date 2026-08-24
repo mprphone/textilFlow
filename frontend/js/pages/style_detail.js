@@ -233,7 +233,7 @@ function renderChainList(chain, services) {
     <td>${isSub ? esc((services || []).find(s => s.id === step.subcontract_service_id)?.category || '—') : '—'}</td>
     <td><input type="checkbox" data-chain-required ${step.is_required ? 'checked' : ''}></td>
     <td><input type="text" data-chain-notes value="${esc(step.notes || '')}" style="width:100%"></td>
-    <td><button class="btn small danger" data-chain-remove="${idx}">×</button></td>
+    <td><button class="btn icon danger" data-icon="delete" data-chain-remove="${idx}" aria-label="Remover etapa" title="Remover etapa"></button></td>
   </tr>`;
   }));
 }

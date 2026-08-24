@@ -3,8 +3,8 @@ import { esc, money, number } from '../format.js?v=20260819-6';
 import { state as appState } from '../state.js';
 import { pageHeader, toast } from '../ui.js?v=20260820-5';
 import { recordModal } from '../quick_create.js';
-import { articleTypeCards, componentEditor, customCostRows, productionRows, stepper, subcontractRows, totals } from './wizard_components.js?v=20260819-10';
-import { filterCatalog, materialCatalogTable, operationCatalogTable, subcontractCatalogTable } from './wizard_catalogs.js?v=20260819-9';
+import { articleTypeCards, componentEditor, customCostRows, productionRows, stepper, subcontractRows, totals } from './wizard_components.js?v=20260824-41';
+import { filterCatalog, materialCatalogTable, operationCatalogTable, subcontractCatalogTable } from './wizard_catalogs.js?v=20260824-41';
 
 
 function blankState() {

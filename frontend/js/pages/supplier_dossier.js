@@ -1,8 +1,8 @@
 import { get, patch, post, remove } from '../api.js?v=20260822-16';
-import { bindPhotoFields, readForm, renderForm } from '../forms.js?v=20260822-2';
+import { bindPhotoFields, readForm, renderForm } from '../forms.js?v=20260824-41';
 import { badge, date, esc, money, number, percent } from '../format.js?v=20260821-22';
 import { state } from '../state.js';
-import { loading, openModal, toast } from '../ui.js?v=20260823-3';
+import { loading, openModal, toast } from '../ui.js?v=20260824-41';
 
 const TABS = [
   {id: 'geral', label: 'Geral'},

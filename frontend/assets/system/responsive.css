@@ -1,3 +1,197 @@
+/* Geometria final: superfícies 16 px, controlos 10 px e cápsulas apenas para estados. */
+:where(.card,.metric,.listing-panel,.ops-panel-card,.dashboard-card,.release-order-card){
+  border-radius:var(--radius-surface)!important;
+}
+:where(input:not([type="checkbox"]):not([type="radio"]),select,textarea,.btn,.icon-button,.table-search){
+  border-radius:var(--radius-control)!important;
+}
+:where(.btn.icon,.icon-button){width:40px;min-width:40px;height:40px;min-height:40px;padding:0}
+:where(.badge,.tag,.status-pill,.nav-pill){border-radius:var(--radius-pill)!important}
+
+/* Listagens: barra, tabela e paginação formam uma única superfície. */
+.listing-panel{
+  overflow:hidden;
+  border:1px solid var(--color-border)!important;
+  background:var(--color-surface);
+  box-shadow:var(--shadow-sm)!important;
+}
+.listing-panel .listing-bar{
+  min-height:56px;
+  padding:10px 14px;
+  border:0;
+  border-bottom:1px solid var(--color-border);
+  background:var(--color-surface);
+}
+.listing-panel>.table-wrap,.listing-panel .table-wrap{
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+}
+.listing-panel .data-table th{height:42px;padding:10px 12px;background:var(--color-surface-soft)}
+.listing-panel .data-table td{height:48px;padding:8px 12px}
+.listing-panel .list-pager{
+  display:grid;
+  grid-template-columns:1fr auto;
+  min-height:52px;
+  padding:10px 14px;
+  border:0;
+  border-top:1px solid var(--color-border);
+  background:var(--color-surface);
+}
+.listing-panel .list-pager>div:last-child{justify-content:flex-end}
+.table-action-header,.table-action-cell{width:154px!important;min-width:154px!important;text-align:left!important}
+.table-action-cell .row-actions,.listing-actions .row-actions,.table-actions{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:8px!important;
+  white-space:nowrap;
+}
+.table-action-cell .btn.icon,.listing-actions .btn.icon,.table-actions .btn.icon{
+  width:40px!important;
+  min-width:40px!important;
+  height:40px!important;
+  min-height:40px!important;
+  padding:0!important;
+  border-radius:var(--radius-control)!important;
+}
+
+/* Modal e formulários: um único objeto visual, sem caixas desconexas. */
+.modal{
+  padding:24px;
+  background:rgba(15,27,46,.58);
+  backdrop-filter:blur(8px);
+}
+body .modal-card{
+  overflow:hidden;
+  width:min(1080px,calc(100vw - 48px));
+  max-height:calc(100dvh - 48px);
+  border:1px solid rgba(255,255,255,.7)!important;
+  border-radius:var(--radius-dialog)!important;
+  background:var(--color-surface);
+  box-shadow:0 30px 90px rgba(10,24,48,.3)!important;
+}
+body .modal-card>header{
+  min-height:68px;
+  padding:16px 24px;
+  border-bottom:1px solid var(--color-border);
+  background:rgba(255,255,255,.97);
+}
+body .modal-card>header .icon-button,
+body .modal-card>header>.btn.icon{
+  width:40px;
+  min-width:40px;
+  height:40px;
+  padding:0;
+  background:var(--color-surface-soft);
+}
+body .modal-body{
+  padding:24px;
+  background:#f8fafc;
+}
+body .modal-body .form-grid{gap:16px}
+body .modal-body .field{display:flex;min-width:0;flex-direction:column;gap:6px;margin:0}
+body .modal-body .field>label,
+body .modal-body label.field{color:#53647a;font-size:12px;font-weight:750}
+body .modal-body .field>label{display:flex;flex-direction:column;gap:6px;margin:0}
+body .modal-body .checkbox-control{display:flex;align-items:center;gap:9px;min-height:44px;color:var(--color-ink);font-weight:650}
+body .modal-body .checkbox-control input{width:18px;height:18px;margin:0;accent-color:var(--color-primary)}
+body .modal-body .field input:not([type="checkbox"]):not([type="radio"]),
+body .modal-body .field select,
+body .modal-body .field textarea{
+  width:100%;
+  min-height:44px;
+  margin:0;
+  padding:10px 12px;
+  border:1px solid var(--color-border-strong);
+  background:#fff;
+}
+body .modal-body .field textarea{min-height:96px;resize:vertical}
+body .modal-body .form-section{margin:4px 0 0;padding:12px 0 7px;color:#516fae}
+body .modal-body .form-footer{
+  position:sticky;
+  bottom:-24px;
+  z-index:2;
+  margin:8px -24px -24px;
+  padding:16px 24px;
+  border-top:1px solid var(--color-border);
+  background:rgba(255,255,255,.98);
+  box-shadow:0 -8px 24px rgba(23,36,58,.04);
+}
+
+/* Editor de encomenda: leitura em blocos, alinhamento e hierarquia previsíveis. */
+.release-order-page{gap:14px;max-width:1320px}
+.release-order-header{
+  display:grid;
+  grid-template-columns:40px minmax(0,1fr) auto;
+  gap:12px;
+  padding:12px 14px;
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-surface);
+  background:rgba(255,255,255,.94);
+  box-shadow:var(--shadow-sm);
+}
+.release-order-header h2{font-size:20px;letter-spacing:-.02em}
+.release-order-header p{font-size:12px}
+.release-order-actions{justify-content:flex-end}
+.release-order-card{padding:20px 22px;border:1px solid var(--color-border)!important;box-shadow:var(--shadow-sm)!important}
+.release-order-card>.card-header{margin:0 0 16px;padding:0 0 14px;border-bottom:1px solid var(--color-border)}
+.release-order-fields{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px}
+.release-order-fields label{grid-column:span 3;margin:0!important}
+.release-order-fields .field-customer{grid-column:span 5}
+.release-order-fields .field-order-no{grid-column:span 3}
+.release-order-fields .field-customer-po{grid-column:span 4}
+.release-order-fields label.full{grid-column:1/-1}
+.release-order-fields input,.release-order-fields select,.release-order-fields textarea{
+  width:100%;
+  min-height:44px;
+  margin-top:6px;
+  padding:10px 12px;
+  border:1px solid var(--color-border-strong);
+  background:#fff;
+  color:var(--color-ink);
+  font:inherit;
+}
+.release-order-fields textarea{min-height:96px;resize:vertical}
+.release-order-article-card{padding:0;overflow:hidden}
+.release-order-article-card>.card-header{padding:14px 18px;margin:0;background:var(--color-surface-soft)}
+.release-order-article-card>.grade-add-row{padding:14px 18px 0;margin:0}
+.release-order-article-card>.grade-table-wrap{margin:14px 18px 0;border:1px solid var(--color-border);border-radius:var(--radius-md)!important;box-shadow:none}
+.release-order-article-card>.release-order-grade-summary{margin:0;padding:12px 18px;border-top:1px solid var(--color-border);background:var(--color-surface-soft)}
+.release-order-article-card>[data-requirements]{padding:0 18px 16px}
+.grade-add-group{min-height:44px;border-radius:var(--radius-control)}
+.release-order-add-article{
+  justify-content:flex-start;
+  width:100%;
+  min-height:52px;
+  padding:12px 18px;
+  border:1px dashed #9bb0d4;
+  background:#f7faff;
+  color:#3156b8;
+  font-weight:800;
+}
+.release-order-add-article:hover{border-color:var(--color-primary);background:var(--color-primary-soft)}
+.release-order-summary-card{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+  padding:18px;
+  border:1px solid var(--color-border)!important;
+  background:#fff;
+}
+.release-order-summary-card h3{grid-column:1/-1;margin:0 0 2px}
+.release-order-summary-card>div{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:4px;
+  padding:12px 14px;
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-md);
+  background:var(--color-surface-soft);
+}
+.release-order-summary-card div.total{margin:0;padding:12px 14px;border:1px solid #c7d5fa;background:var(--color-primary-soft)}
+
 /* Breakpoints oficiais: 480, 768, 1024 e 1440 px. */
 @media(max-width:1440px){
   .page-content{max-width:100%;padding-inline:var(--space-5)}
@@ -8,6 +202,9 @@
   .state-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .page-content{padding:var(--space-4)}
   .data-table th,.data-table td{padding:11px 12px}
+  .release-order-fields{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .release-order-fields label,.release-order-fields .field-customer,.release-order-fields .field-order-no,.release-order-fields .field-customer-po{grid-column:span 3}
+  .release-order-fields label.full{grid-column:1/-1}
 }
 @media(max-width:768px){
   :root{--control-desktop:var(--control-touch)}
@@ -29,12 +226,21 @@
   .data-table[data-mobile="cards"] td:last-child{border-bottom:0}
   .data-table[data-mobile="cards"] td[data-mobile-full="true"]{display:block;grid-column:1/-1;text-align:center}
   .data-table[data-mobile="cards"] td[data-mobile-full="true"]::before{content:none}
-  .data-table[data-mobile="cards"] .row-actions,.data-table[data-mobile="cards"] .listing-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:var(--space-2)}
-  .modal{align-items:flex-end;padding:0}
-  .modal-card{width:100%;max-height:94dvh;border-radius:var(--radius-lg) var(--radius-lg) 0 0}
-  .modal-body{padding:var(--space-4)}
+  .data-table[data-mobile="cards"] .row-actions{display:flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:var(--space-2)}
+  .data-table[data-mobile="cards"] .table-action-cell{display:grid;width:auto;min-width:0}
+  .data-table[data-mobile="cards"] .table-action-cell .row-actions{grid-column:2}
+  .modal{align-items:flex-end;padding:8px}
+  body .modal-card{width:100%;max-height:calc(100dvh - 16px);border-radius:var(--radius-lg)!important}
+  body .modal-body{padding:var(--space-4)}
+  body .modal-body .form-footer{bottom:calc(-1 * var(--space-4));margin:8px calc(-1 * var(--space-4)) calc(-1 * var(--space-4));padding:14px var(--space-4)}
   .toast-stack{right:var(--space-3);bottom:var(--space-3);left:var(--space-3)}
   .toast{width:100%;min-width:0}
+  .release-order-header{grid-template-columns:40px minmax(0,1fr)}
+  .release-order-actions{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .release-order-fields{grid-template-columns:1fr}
+  .release-order-fields label,.release-order-fields .field-customer,.release-order-fields .field-order-no,.release-order-fields .field-customer-po,.release-order-fields label.full{grid-column:1}
+  .release-order-summary-card{grid-template-columns:1fr}
+  .release-order-summary-card h3{grid-column:1}
 }
 @media(max-width:480px){
   .page-content{padding:var(--space-3)}
@@ -43,5 +249,6 @@
   .data-table[data-mobile="cards"] tr{grid-template-columns:1fr}
   .data-table[data-mobile="cards"] td{display:block}
   .data-table[data-mobile="cards"] td::before{display:block;margin-bottom:3px}
+  .data-table[data-mobile="cards"] .table-action-cell .row-actions{margin-top:6px}
   .module-nav a span{display:none!important}
 }

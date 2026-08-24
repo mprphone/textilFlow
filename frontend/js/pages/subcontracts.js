@@ -209,7 +209,7 @@ async function drawBoard(container, jobs, maps, options, reload) {
           <td class="listing-actions">${jobActions(job)}</td>
         </tr>`;
       }).join('') : '<tr><td colspan="10"><div class="empty"><strong>Nada neste filtro</strong>Não há trabalhos externos neste estado.</div></td></tr>'}</tbody></table></div>
-        <div class="list-pager"><span>${found.length ? `Mostrar ${start} a ${end} de ${found.length} registos` : 'Mostrar 0 registos'}</span><div><button class="btn small" data-list-page="${page-1}" ${page<=1?'disabled':''}>← Anterior</button><button class="btn small" data-list-page="${page+1}" ${page>=pages?'disabled':''}>Seguinte →</button></div></div>
+        <div class="list-pager"><span>${found.length ? `Mostrar ${start} a ${end} de ${found.length} registos` : 'Mostrar 0 registos'}</span><div><button class="btn icon" type="button" data-icon="back" data-list-page="${page-1}" aria-label="Página anterior" title="Página anterior" ${page<=1?'disabled':''}></button><button class="btn icon" type="button" data-icon="forward" data-list-page="${page+1}" aria-label="Página seguinte" title="Página seguinte" ${page>=pages?'disabled':''}></button></div></div>
       </section>`;
     container.querySelectorAll('[data-sub-filter]').forEach(button => button.addEventListener('click', () => { filter = button.dataset.subFilter; page = 1; paint(); }));
     container.querySelectorAll('[data-sub-cat]').forEach(button => button.addEventListener('click', () => { category = button.dataset.subCat; page = 1; paint(); }));
@@ -417,7 +417,7 @@ function supplierRowsTable(groupRows, maps, jobs) {
         <td>${badge(row.active ? 'ativo' : 'inativo')}</td>
         <td class="listing-actions"><div class="row-actions">
           <button type="button" class="btn icon" data-edit-supplier="${row.id}" aria-label="Editar">✎</button>
-          <button type="button" class="btn icon danger" data-remove-supplier="${row.id}" aria-label="Remover">×</button>
+          <button type="button" class="btn icon danger" data-icon="delete" data-remove-supplier="${row.id}" aria-label="Remover" title="Remover"></button>
         </div></td>
       </tr>`;
     }).join('')}

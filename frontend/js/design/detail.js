@@ -79,7 +79,7 @@ function markup(item, team) {
         <h2>${esc(item.title === item.code ? item.title : `${item.code} — ${item.title}`)}</h2>
       </div>
       <span class="design-status tone-${badge.tone}">${esc(badge.label)}</span>
-      <button class="icon-button" type="button" data-close-dev>×</button>
+      <button class="icon-button" type="button" data-icon="close" data-close-dev aria-label="Fechar" title="Fechar"></button>
     </header>
     <div class="design-drawer-body">
       <div class="design-drawer-main">
@@ -108,7 +108,7 @@ function markup(item, team) {
         ${item.suggestions?.length ? `<section class="design-hints">${item.suggestions.map(text => `<p>${esc(text)}</p>`).join('')}</section>` : ''}
         <details class="design-block" open>
           <summary>Equipa e funções <span>${(item.assignees || []).length}</span></summary>
-          <div class="design-chips">${(item.assignees || []).map(person => `<span>${esc(person.name)} · ${esc(ROLE_NAMES[person.role] || person.role)} <button type="button" data-remove-assignee="${person.id}">×</button></span>`).join('') || '<em>Sem equipa estruturada.</em>'}
+          <div class="design-chips">${(item.assignees || []).map(person => `<span>${esc(person.name)} · ${esc(ROLE_NAMES[person.role] || person.role)} <button type="button" class="btn icon danger" data-icon="delete" data-remove-assignee="${person.id}" aria-label="Remover pessoa" title="Remover pessoa"></button></span>`).join('') || '<em>Sem equipa estruturada.</em>'}
           </div>
           <div class="design-add">
             <select data-assignee-user><option value="">Adicionar pessoa…</option>${team.map(user => `<option value="${user.id}">${esc(user.name)}</option>`).join('')}</select>
@@ -122,7 +122,7 @@ function markup(item, team) {
           ${(item.tasks || []).map(task => `<div class="design-task ${task.status === 'done' ? 'is-done' : ''}">
             <div><b>${esc(TASK_KINDS[task.kind] || task.kind)}</b><small>${esc(task.note || 'Sem nota')}${task.responsible_name ? ` · ${esc(task.responsible_name)}` : ''}</small></div>
             <select data-task-status="${task.id}">${Object.entries(TASK_STATUSES).map(([id, label]) => `<option value="${id}" ${task.status === id ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
-            <button type="button" class="btn small danger" data-remove-task="${task.id}">✕</button>
+            <button type="button" class="btn icon danger" data-icon="delete" data-remove-task="${task.id}" aria-label="Remover tarefa" title="Remover tarefa"></button>
           </div>`).join('') || '<p class="muted">Sem pendências paralelas.</p>'}
           <div class="design-add">
             <select data-task-kind>${Object.entries(TASK_KINDS).map(([id, label]) => `<option value="${id}">${esc(label)}</option>`).join('')}</select>

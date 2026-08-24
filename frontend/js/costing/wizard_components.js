@@ -23,7 +23,7 @@ export function selectedComponentRows(items, kind) {
     <td><input data-component="unit_cost" type="number" min="0" step="any" value="${item.unit_cost}"></td>
     <td data-component-total>${money(item.quantity * (1 + (item.waste_pct || 0) / 100) * item.unit_cost)}</td>
     <td><input data-component="color" value="${esc(item.color || '')}" placeholder="Cor"></td>
-    <td><button type="button" class="btn small danger" data-remove-${kind}="${index}">×</button></td>
+    <td><button type="button" class="btn icon danger" data-icon="delete" data-remove-${kind}="${index}" aria-label="Remover" title="Remover"></button></td>
   </tr>`).join('') : `<tr><td colspan="8"><div class="empty"><strong>Nenhum componente selecionado</strong>Clique em + na tabela da esquerda.</div></td></tr>`;
 }
 
@@ -32,7 +32,7 @@ export function componentEditor(items, kind, title) {
 }
 
 export function productionRows(items) {
-  return items.length ? items.map((item, index) => `<tr data-operation-row="${index}"><td><b>${esc(item.description)}</b></td><td><input data-operation-field="quantity" type="number" min="0" step="any" value="${item.quantity}"></td><td><input data-operation-field="unit_cost" type="number" min="0" step="any" value="${item.unit_cost}"></td><td data-operation-total>${money(item.quantity * item.unit_cost)}</td><td><button type="button" class="btn small danger" data-remove-operation="${index}">×</button></td></tr>`).join('') : '<tr><td colspan="5"><div class="empty"><strong>Sem operações</strong>Escolha as operações necessárias.</div></td></tr>';
+  return items.length ? items.map((item, index) => `<tr data-operation-row="${index}"><td><b>${esc(item.description)}</b></td><td><input data-operation-field="quantity" type="number" min="0" step="any" value="${item.quantity}"></td><td><input data-operation-field="unit_cost" type="number" min="0" step="any" value="${item.unit_cost}"></td><td data-operation-total>${money(item.quantity * item.unit_cost)}</td><td><button type="button" class="btn icon danger" data-icon="delete" data-remove-operation="${index}" aria-label="Remover operação" title="Remover operação"></button></td></tr>`).join('') : '<tr><td colspan="5"><div class="empty"><strong>Sem operações</strong>Escolha as operações necessárias.</div></td></tr>';
 }
 
 export function subcontractRows(items) {
@@ -43,12 +43,12 @@ export function subcontractRows(items) {
     <td><input data-service-field="unit_cost" type="number" min="0" step="any" value="${item.unit_cost}"></td>
     <td>${number(item.lead_time_days || 0)} dias</td>
     <td data-service-total>${money(item.quantity * item.unit_cost)}</td>
-    <td><button type="button" class="btn small danger" data-remove-service="${index}">×</button></td>
+    <td><button type="button" class="btn icon danger" data-icon="delete" data-remove-service="${index}" aria-label="Remover serviço" title="Remover serviço"></button></td>
   </tr>`).join('') : '<tr><td colspan="7"><div class="empty"><strong>Sem subcontratos</strong>Escolha um serviço da tabela acima.</div></td></tr>';
 }
 
 export function customCostRows(items, kind) {
-  return items.length ? items.map((item, index) => `<tr data-custom-row="${index}"><td><input data-custom="description" value="${esc(item.description)}" placeholder="Descrição"></td><td><input data-custom="quantity" type="number" min="0" step="any" value="${item.quantity}"></td><td><input data-custom="unit" value="${esc(item.unit)}"></td><td><input data-custom="unit_cost" type="number" min="0" step="any" value="${item.unit_cost}"></td><td data-custom-total>${money(item.quantity * item.unit_cost)}</td><td><button type="button" class="btn small danger" data-remove-${kind}="${index}">×</button></td></tr>`).join('') : '<tr><td colspan="6"><div class="empty"><strong>Sem custos adicionais</strong>Adicione apenas se forem aplicáveis.</div></td></tr>';
+  return items.length ? items.map((item, index) => `<tr data-custom-row="${index}"><td><input data-custom="description" value="${esc(item.description)}" placeholder="Descrição"></td><td><input data-custom="quantity" type="number" min="0" step="any" value="${item.quantity}"></td><td><input data-custom="unit" value="${esc(item.unit)}"></td><td><input data-custom="unit_cost" type="number" min="0" step="any" value="${item.unit_cost}"></td><td data-custom-total>${money(item.quantity * item.unit_cost)}</td><td><button type="button" class="btn icon danger" data-icon="delete" data-remove-${kind}="${index}" aria-label="Remover custo" title="Remover custo"></button></td></tr>`).join('') : '<tr><td colspan="6"><div class="empty"><strong>Sem custos adicionais</strong>Adicione apenas se forem aplicáveis.</div></td></tr>';
 }
 
 export function totals(state) {

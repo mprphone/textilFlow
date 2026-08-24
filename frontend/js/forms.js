@@ -1,5 +1,5 @@
 import { esc, humanize } from './format.js?v=20260819-5';
-import { toast } from './ui.js?v=20260821-19';
+import { toast } from './ui.js?v=20260824-41';
 
 const MAX_PHOTOS = 6;
 const MAX_PHOTO_BYTES = 1.5 * 1024 * 1024;
@@ -40,7 +40,7 @@ export function bindPhotoFields(root = document) {
     const getPhotos = () => { try { return JSON.parse(hidden.value || '[]'); } catch { return []; } };
     const renderThumbs = () => {
       const photos = getPhotos();
-      thumbs.innerHTML = photos.map((src, index) => `<span class="photo-thumb"><img src="${esc(src)}" alt="Fotografia ${index + 1}"><button type="button" data-remove-photo="${index}" aria-label="Remover fotografia ${index + 1}">×</button></span>`).join('');
+      thumbs.innerHTML = photos.map((src, index) => `<span class="photo-thumb"><img src="${esc(src)}" alt="Fotografia ${index + 1}"><button type="button" class="btn icon danger" data-icon="delete" data-remove-photo="${index}" aria-label="Remover fotografia ${index + 1}" title="Remover fotografia"></button></span>`).join('');
       thumbs.querySelectorAll('[data-remove-photo]').forEach(button => button.addEventListener('click', () => {
         const photos = getPhotos();
         photos.splice(Number(button.dataset.removePhoto), 1);
@@ -97,7 +97,7 @@ export function fieldsMarkup(fields, values = {}) {
         ? `<details class="advanced-data"><summary>Dados avançados — abrir apenas se necessário</summary><textarea name="${field.key}" ${required}>${esc(shown)}</textarea><small>Esta área é normalmente gerida pelo sistema.</small></details>`
         : `<textarea name="${field.key}" rows="${field.rows || 2}" ${required} placeholder="${esc(field.placeholder || '')}">${esc(shown)}</textarea>`;
     } else if (field.type === 'checkbox') {
-      input = `<input name="${field.key}" type="checkbox" ${value ? 'checked' : ''}><span>${esc(field.help || 'Ativo')}</span>`;
+      input = `<span class="checkbox-control"><input name="${field.key}" type="checkbox" ${value ? 'checked' : ''}><span>${esc(field.help || 'Ativo')}</span></span>`;
     } else if (field.type === 'password') {
       input = `<span class="pw-wrap"><input name="${field.key}" type="password" value="${esc(value)}" ${required} ${title} placeholder="${esc(field.placeholder || '')}" autocomplete="new-password"><button type="button" class="pw-toggle" aria-label="Mostrar senha" title="Mostrar ou ocultar">${EYE_OPEN}</button></span>`;
     } else if (field.type === 'money') {

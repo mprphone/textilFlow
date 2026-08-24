@@ -17,7 +17,7 @@ function pageRows(rows, page) {
 }
 
 function pager(kind, page, pages, total) {
-  return `<div class="catalog-pager"><span>${number(total)} registos · página ${page} de ${pages}</span><div><button type="button" class="btn small" data-catalog-kind="${kind}" data-catalog-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>← Anterior</button><button type="button" class="btn small" data-catalog-kind="${kind}" data-catalog-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>Seguinte →</button></div></div>`;
+  return `<div class="catalog-pager"><span>${number(total)} registos · página ${page} de ${pages}</span><div><button type="button" class="btn icon" data-icon="back" data-catalog-kind="${kind}" data-catalog-page="${page - 1}" aria-label="Página anterior" title="Página anterior" ${page <= 1 ? 'disabled' : ''}></button><button type="button" class="btn icon" data-icon="forward" data-catalog-kind="${kind}" data-catalog-page="${page + 1}" aria-label="Página seguinte" title="Página seguinte" ${page >= pages ? 'disabled' : ''}></button></div></div>`;
 }
 
 export function materialCatalogTable(rows, selectedIds, kind, page) {

@@ -43,7 +43,7 @@ export async function openCreateRequest(onCreated) {
             <input data-model-cover="${index}" placeholder="URL da fotografia" value="${esc(model.cover_url)}">
           </div>
         </div>
-        ${models.length > 1 ? `<button type="button" class="btn small danger" data-remove-model="${index}">✕</button>` : ''}
+        ${models.length > 1 ? `<button type="button" class="btn icon danger" data-icon="delete" data-remove-model="${index}" aria-label="Remover modelo" title="Remover modelo"></button>` : ''}
       </article>`).join('');
   }
 

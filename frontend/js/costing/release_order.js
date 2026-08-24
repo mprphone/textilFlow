@@ -29,7 +29,7 @@ function gradeTableMarkup(gradeState) {
   if (!rows.length || !sizes.length) return '';
   return `<thead><tr>
       <th>Cor</th><th>Preço unitário</th>
-      ${sizes.map(size => `<th>${esc(size)}<button type="button" class="grade-remove-size" data-remove-size="${esc(size)}" aria-label="Remover tamanho ${esc(size)}">×</button></th>`).join('')}
+      ${sizes.map(size => `<th>${esc(size)}<button type="button" class="grade-remove-size btn icon danger" data-icon="delete" data-remove-size="${esc(size)}" aria-label="Remover tamanho ${esc(size)}" title="Remover tamanho"></button></th>`).join('')}
       <th>Total</th><th></th>
     </tr></thead>
     <tbody>${rows.map(row => `
@@ -38,7 +38,7 @@ function gradeTableMarkup(gradeState) {
         <td><div class="grade-price-cell"><input type="number" min="0" step="0.01" data-price-input data-row="${row.id}" value="${row.price || ''}" placeholder="0,00"><span>EUR</span></div></td>
         ${sizes.map(size => `<td><input type="number" min="0" step="1" data-qty-input data-row="${row.id}" data-size="${esc(size)}" value="${row.qty[size] || ''}" placeholder="0"></td>`).join('')}
         <td class="grade-row-total" data-row-total="${row.id}">0</td>
-        <td><button type="button" class="btn icon danger" data-remove-color="${row.id}" aria-label="Remover cor">🗑</button></td>
+        <td><button type="button" class="btn icon danger" data-icon="delete" data-remove-color="${row.id}" aria-label="Remover cor" title="Remover cor"></button></td>
       </tr>`).join('')}</tbody>
     <tfoot><tr><td>Total por tamanho</td><td></td>${sizes.map(() => '<td data-col-total>0</td>').join('')}<td data-grand-total>0</td><td></td></tr></tfoot>`;
 }

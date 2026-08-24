@@ -1,6 +1,6 @@
 import { render as renderStylesPage } from './styles.js';
 import { renderMaterialDetail } from './material_detail.js';
-import { renderEntityPage } from '../entity.js?v=20260823-1';
+import { renderEntityPage } from '../entity.js?v=20260824-41';
 import { badge, esc, money } from '../format.js?v=20260821-22';
 import { post } from '../api.js';
 import { state } from '../state.js';
@@ -29,7 +29,7 @@ function materialsConfig(activeType, panel) {
     extraActions: '<button class="btn" type="button" data-sync-pri="items">Puxar do Primavera</button>',
     query: activeType !== 'all' ? `tf_type=${activeType}` : '',
     filterRows: row => !isShadow(row),
-    rowActions: row => `<button class="btn small primary" data-open-material="${row.id}">Abrir ficha</button>`,
+    rowActions: row => `<button class="btn icon primary" type="button" data-icon="eye" data-open-material="${row.id}" aria-label="Abrir ficha" title="Abrir ficha"></button>`,
     onAction: (event, rows) => {
       const button = event.target.closest('[data-open-material]');
       if (!button) return;

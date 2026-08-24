@@ -2,7 +2,7 @@ import { get, post, put } from '../api.js';
 import { emit } from '../events.js?v=20260822-30';
 import { options } from '../data.js';
 import { badge, date, esc, money, number } from '../format.js?v=20260819-5';
-import { CIVA, f4Field, openF4 } from '../primavera_lookup.js?v=20260821-10';
+import { CIVA, f4Field, openF4 } from '../primavera_lookup.js?v=20260824-41';
 import { recordModal } from '../quick_create.js?v=20260820-5';
 import { state } from '../state.js';
 import { pageHeader, setHeading, toast } from '../ui.js?v=20260820-5';

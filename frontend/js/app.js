@@ -1,39 +1,39 @@
 import { post } from './api.js?v=20260822-16';
 import { clearSession, setCompany, setSession, state } from './state.js';
-import { closeModal, loading, toast } from './ui.js?v=20260821-19';
+import { closeModal, loading, toast } from './ui.js?v=20260824-41';
 import { recordModal } from './quick_create.js?v=20260821-19';
-import { initExperience } from './experience.js?v=20260824-40';
+import { initExperience } from './experience.js?v=20260824-41';
 import * as dashboard from './pages/dashboard.js?v=20260822-10';
 import * as live from './pages/live.js?v=20260819-7';
-import * as styles from './pages/styles.js?v=20260822-15';
+import * as styles from './pages/styles.js?v=20260824-41';
 import * as samples from './pages/samples.js?v=20260822-30';
-import * as costing from './pages/costing.js?v=20260824-2';
-import * as orders from './pages/orders.js?v=20260824-2';
+import * as costing from './pages/costing.js?v=20260824-41';
+import * as orders from './pages/orders.js?v=20260824-41';
 import * as floor from './pages/floor.js?v=20260822-30';
-import * as cutting from './pages/cutting.js?v=20260822-30';
+import * as cutting from './pages/cutting.js?v=20260824-41';
 import * as quality from './pages/quality.js?v=20260824-1';
 import * as inventoryPage from './pages/inventory.js?v=20260824-3';
 import * as people from './pages/people.js?v=20260822-1';
-import * as machines from './pages/machines.js?v=20260822-1';
+import * as machines from './pages/machines.js?v=20260824-41';
 import * as operations from './pages/operations.js?v=20260822-1';
 import * as overheads from './pages/overheads.js?v=20260819-8';
-import * as confection from './pages/confection.js?v=20260822-30';
+import * as confection from './pages/confection.js?v=20260824-41';
 import * as processPlant from './pages/process.js?v=20260820-1';
 import * as tracking from './pages/tracking.js?v=20260824-1';
 import * as controlTower from './pages/control_tower.js?v=20260824-2';
 import * as operationsControl from './pages/operations_control.js?v=20260824-40';
-import * as subcontracts from './pages/subcontracts.js?v=20260822-20';
+import * as subcontracts from './pages/subcontracts.js?v=20260824-41';
 import * as reports from './pages/reports.js?v=20260819-7';
-import * as partners from './pages/partners.js?v=20260821-6';
-import * as tables from './pages/tables.js?v=20260822-29';
+import * as partners from './pages/partners.js?v=20260824-41';
+import * as tables from './pages/tables.js?v=20260824-41';
 import * as shipping from './pages/shipping.js?v=20260824-2';
-import * as commercialDocs from './pages/commercial_docs.js?v=20260822-33';
+import * as commercialDocs from './pages/commercial_docs.js?v=20260824-41';
 import * as erpOrders from './pages/erp_orders.js?v=20260824-1';
 import * as settings from './pages/settings.js?v=20260822-27';
 import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260824-2';
 
 async function renderDesign(container, view) {
-  const { render } = await import('./pages/design.js?v=20260822-16');
+  const { render } = await import('./pages/design.js?v=20260824-41');
   return render(container, view);
 }
 

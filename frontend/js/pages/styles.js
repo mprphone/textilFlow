@@ -1,8 +1,8 @@
 import { options } from '../data.js';
-import { renderEntityPage } from '../entity.js?v=20260819-9';
+import { renderEntityPage } from '../entity.js?v=20260824-41';
 import { badge, esc, number } from '../format.js?v=20260819-5';
 import { mergeCustomData } from '../forms.js?v=20260824-1';
-import { renderStyleDetail } from './style_detail.js';
+import { renderStyleDetail } from './style_detail.js?v=20260824-41';
 
 async function styleFields() {
   return [
@@ -22,7 +22,7 @@ export async function render(container) {
       ? 'Edição rápida do essencial. Materiais, ciclo de vida, medidas e variantes editam-se na ficha completa ("Abrir ficha").'
       : 'Crie o artigo com o essencial — o resto preenche-se depois na ficha completa.',
     transform:(payload,row)=>mergeCustomData(payload,row?.custom_data),
-    rowActions:row=>`<button class="btn small primary" data-open-style="${row.id}">Abrir ficha</button>`,
+    rowActions:row=>`<button class="btn icon primary" type="button" data-icon="eye" data-open-style="${row.id}" aria-label="Abrir ficha" title="Abrir ficha"></button>`,
     onAction:event=>{const button=event.target.closest('[data-open-style]');if(button)renderStyleDetail(container,Number(button.dataset.openStyle),()=>render(container));},
     columns:[
       {key:'reference',label:'Referência',render:r=>`<b>${esc(r.reference)}</b>`},{key:'description',label:'Artigo'},

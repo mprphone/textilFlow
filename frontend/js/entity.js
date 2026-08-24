@@ -1,8 +1,8 @@
 import { crudCreate, crudDelete, crudList, crudUpdate } from './api.js';
 import { esc, humanize } from './format.js?v=20260819-5';
-import { bindPasswordToggles, bindPhotoFields, readForm, renderForm } from './forms.js?v=20260822-2';
+import { bindPasswordToggles, bindPhotoFields, readForm, renderForm } from './forms.js?v=20260824-41';
 import { state } from './state.js';
-import { closeModal, confirmDelete, empty, openModal, pageHeader, toast } from './ui.js?v=20260820-5';
+import { closeModal, confirmDelete, empty, openModal, pageHeader, toast } from './ui.js?v=20260824-41';
 
 export async function renderEntityPage(container, config) {
   const defaultFields = typeof config.fields === 'function' ? await config.fields(null) : config.fields;
@@ -42,13 +42,13 @@ export async function renderEntityPage(container, config) {
     const end = Math.min(currentPage * pageSize, data.length);
     return `Mostrar ${start} a ${end} de ${data.length} registos`;
   };
-  const rowHtml = row => `<tr>${config.columns.map(column => `<td>${cell(row, column)}</td>`).join('')}<td class="listing-actions"><div class="row-actions">${config.rowActions ? config.rowActions(row) : ''}${config.readOnly?'':`<button class="btn icon" data-edit="${row.id}" aria-label="Editar">✎</button><button class="btn icon danger" data-delete="${row.id}" aria-label="Eliminar">×</button>`}</div></td></tr>`;
+  const rowHtml = row => `<tr>${config.columns.map(column => `<td>${cell(row, column)}</td>`).join('')}<td class="listing-actions"><div class="row-actions">${config.rowActions ? config.rowActions(row) : ''}${config.readOnly?'':`<button class="btn icon" type="button" data-icon="edit" data-edit="${row.id}" aria-label="Editar" title="Editar"></button><button class="btn icon danger" type="button" data-icon="delete" data-delete="${row.id}" aria-label="Eliminar" title="Eliminar"></button>`}</div></td></tr>`;
   const draw = data => {
     const pages = Math.max(1, Math.ceil(data.length / pageSize));
     currentPage = Math.min(currentPage, pages);
     const visible = data.slice((currentPage - 1) * pageSize, currentPage * pageSize);
     body.innerHTML = visible.length ? visible.map(rowHtml).join('') : `<tr><td colspan="${config.columns.length + 1}">${empty('Sem resultados', 'Altere a pesquisa ou crie o primeiro registo.')}</td></tr>`;
-    pager.innerHTML = `<span>${rangeLabel(data)}</span><div><button class="btn small" data-list-page="${currentPage-1}" ${currentPage<=1?'disabled':''}>← Anterior</button><button class="btn small" data-list-page="${currentPage+1}" ${currentPage>=pages?'disabled':''}>Seguinte →</button></div>`;
+    pager.innerHTML = `<span>${rangeLabel(data)}</span><div><button class="btn icon" type="button" data-icon="back" data-list-page="${currentPage-1}" aria-label="Página anterior" title="Página anterior" ${currentPage<=1?'disabled':''}></button><button class="btn icon" type="button" data-icon="forward" data-list-page="${currentPage+1}" aria-label="Página seguinte" title="Página seguinte" ${currentPage>=pages?'disabled':''}></button></div>`;
     pager.querySelectorAll('[data-list-page]').forEach(button=>button.addEventListener('click',()=>{currentPage=Number(button.dataset.listPage);draw(data);}));
   };
   draw(filtered);

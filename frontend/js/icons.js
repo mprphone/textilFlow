@@ -3,10 +3,20 @@ const paths={
   close:'<path d="m6 6 12 12M18 6 6 18"/>',
   add:'<path d="M12 5v14M5 12h14"/>',
   search:'<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/>',
+  eye:'<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/>',
   check:'<path d="m5 12 4 4L19 6"/>',
   warning:'<path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v4M12 17h.01"/>',
   edit:'<path d="m4 16-.8 4 4-.8L18 8.4 15.6 6 4 16Z"/><path d="m14.5 7.1 2.4 2.4"/>',
   delete:'<path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/>',
+  save:'<path d="M5 3h12l3 3v15H4V3h1Z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/>',
+  tag:'<path d="M3 4v7l9 9 8-8-9-9H4a1 1 0 0 0-1 1Z"/><circle cx="8" cy="8" r="1.4"/>',
+  inbox:'<path d="M4 4h16v14H4V4Z"/><path d="M4 14h5l2 3h2l2-3h5"/>',
+  print:'<path d="M7 8V3h10v5M7 17H4V9h16v8h-3M7 14h10v7H7v-7Z"/><path d="M17 11h.01"/>',
+  copy:'<rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2"/>',
+  more:'<circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/>',
+  route:'<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h2a3 3 0 0 0 3-3V9a3 3 0 0 1 3-3"/>',
+  palette:'<path d="M12 3a9 9 0 1 0 0 18h1.5a2 2 0 0 0 0-4H12a2 2 0 0 1 0-4h4a5 5 0 0 0 5-5c0-3-4-5-9-5Z"/><circle cx="7.5" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="10" cy="6.5" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="7" r="1" fill="currentColor" stroke="none"/>',
+  ruler:'<path d="m4 16 12-12 4 4L8 20H4v-4Z"/><path d="m13 7 4 4M10 10l2 2M7 13l2 2"/>',
   back:'<path d="m15 18-6-6 6-6"/>',
   forward:'<path d="m9 18 6-6-6-6"/>',
   home:'<path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10M9 20v-6h6v6"/>',
@@ -30,7 +40,7 @@ const paths={
 };
 
 const aliases={
-  '☰':'menu','×':'close','✕':'close','✖':'close','＋':'add','+':'add','⌕':'search','🔍':'search','✓':'check','✔':'check','!':'warning','⚠':'warning','✎':'edit','←':'back','→':'forward','⌂':'home','◫':'home','▤':'document','▥':'chart','▦':'grid','▣':'box','▶':'production','●':'production','✂':'scissors','⚙':'settings','♙':'user','⇄':'swap','↔':'swap','⇥':'swap','◷':'clock','⌾':'circle','◉':'circle','◎':'circle','◇':'layers','◈':'layers','✦':'layers','✳':'layers','⌁':'layers','▰':'truck','💧':'droplet','€':'euro','🔒':'lock'
+  '☰':'menu','×':'close','✕':'close','✖':'close','＋':'add','+':'add','⌕':'search','🔍':'search','✓':'check','✔':'check','!':'warning','⚠':'warning','✎':'edit','👁':'eye','←':'back','→':'forward','⌂':'home','◫':'home','▤':'document','▥':'chart','▦':'grid','▣':'box','▶':'production','●':'production','✂':'scissors','⚙':'settings','♙':'user','⇄':'swap','↔':'swap','⇥':'swap','◷':'clock','⌾':'circle','◉':'circle','◎':'circle','◇':'layers','◈':'layers','✦':'layers','✳':'layers','⌁':'layers','▰':'truck','💧':'droplet','€':'euro','🔒':'lock'
 };
 
 export function icon(value='circle',className='ui-icon'){
@@ -41,7 +51,7 @@ export function icon(value='circle',className='ui-icon'){
 function enhance(root=document){
   const iconElements=[...(root.matches?.('[data-icon]')?[root]:[]),...(root.querySelectorAll?.('[data-icon]')||[])];
   iconElements.forEach(element=>{if(!element.querySelector('svg'))element.innerHTML=icon(element.dataset.icon)});
-  const selectors='nav a>i,.module-nav a>i,.command-icon,.btn.icon,.icon-button,.catalog-select,.metric-icon,.quick-workflows button>span,.all-clear>span,.cost-transition-confirm>span,.service-lock,.stock-material-icon,.sidebar-shortcuts button>i';
+  const selectors='nav a>i,.module-nav a>i,.command-icon,.btn.icon,.icon-button,.catalog-select,.metric-icon,.quick-workflows button>span,.all-clear>span,.cost-transition-confirm>span,.service-lock,.stock-material-icon,.sidebar-shortcuts button>i,.table-search>span';
   const glyphElements=[...(root.matches?.(selectors)?[root]:[]),...(root.querySelectorAll?.(selectors)||[])];
   glyphElements.forEach(element=>{
     if(element.querySelector('svg'))return;

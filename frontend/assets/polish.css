@@ -204,7 +204,7 @@
 #dist-quantity{max-width:200px;font-size:16px;font-weight:700}
 .dist-destination-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
 .dist-destination-head label{margin:0}
-.dist-hint{font-size:10.5px;font-weight:700;color:var(--chrome-blue-2);background:#eef4ff;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.dist-hint{font-size:12px;font-weight:700;color:var(--chrome-blue-2);background:#eef4ff;padding:3px 9px;border-radius:999px;white-space:nowrap}
 .dest-options{display:flex;flex-wrap:wrap;gap:8px}
 .dist-board .track-splits{max-width:none}
 .dist-two-fields{display:flex;gap:10px}
@@ -232,7 +232,7 @@
 .dist-override input{width:auto!important}
 .distribute-outcome{
   margin:0;padding:9px 12px;border:1px solid #c9d7f2;background:#eef4ff;
-  border-radius:var(--r-sm);color:#1a335c!important;font-size:11.5px;
+  border-radius:var(--r-sm);color:#1a335c!important;font-size:12px;
 }
 #distribute-form .form-footer{margin:0;padding-top:0;border-top:0}
 .qty-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
@@ -320,12 +320,12 @@ body .card-header span{font-size:12px}
 body .metric .label{font-size:12px;letter-spacing:.035em}
 
 body .data-table{font-size:12px;line-height:1.35}
-body .data-table th{padding:10px 11px;font-size:10.5px;letter-spacing:.035em;color:#53637a;background:#f6f8fb}
+body .data-table th{padding:10px 11px;font-size:12px;letter-spacing:.035em;color:#53637a;background:#f6f8fb}
 body .data-table td{padding:10px 11px;max-width:360px}
 body .data-table tbody tr{transition:background-color .14s ease}
 body .data-table tbody tr:hover{background:#f3f7ff}
 body .data-table tbody tr:focus-within{background:#eef4ff}
-body .badge{min-height:24px;padding:4px 8px;font-size:10.5px;line-height:1.2}
+body .badge{min-height:24px;padding:4px 8px;font-size:12px;line-height:1.2}
 body .badge.green{color:#056246;background:#ddf5eb}
 body .badge.amber{color:#774700;background:#ffedc7}
 body .badge.red{color:#982631;background:#ffe2e5}
@@ -344,7 +344,7 @@ body .wizard-stepper b,body .wizard-stepper span,body .choice-card b,
 body .material-choice b,body .operation-choice b,body .catalog-pager,
 body .factory-sector header span,body .machine-copy b,body .machine-copy small,
 body .mcm-resource b,body .mcm-resource small,body .mcm-task b,body .mcm-task span{
-  font-size:10.5px;
+  font-size:12px;
   line-height:1.3;
 }
 body .choice-card small,body .material-choice small,body .operation-choice small,

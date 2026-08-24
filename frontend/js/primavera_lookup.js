@@ -27,7 +27,7 @@ function ensureLayer() {
   layer = document.createElement('div');
   layer.className = 'pri-lookup-layer hidden';
   layer.innerHTML = `<div class="pri-lookup" role="dialog" aria-modal="true">
-    <header><span data-f4-title>Tabela</span><button type="button" data-f4-close title="Esc">×</button></header>
+    <header><span data-f4-title>Tabela</span><button type="button" class="icon-button" data-icon="close" data-f4-close aria-label="Fechar" title="Fechar (Esc)"></button></header>
     <div class="pri-lookup-tools"><input data-f4-filter placeholder="Procurar"></div>
     <div class="table-wrap"><table class="data-table pri-lookup-table"><thead data-f4-head></thead><tbody data-f4-body></tbody></table></div>
     <footer><small>Enter confirma · Esc fecha</small></footer>

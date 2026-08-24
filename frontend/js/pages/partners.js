@@ -1,10 +1,10 @@
 import { post } from '../api.js';
-import { renderEntityTabs } from '../entity.js?v=20260819-9';
+import { renderEntityTabs } from '../entity.js?v=20260824-41';
 import { badge, date, esc, number } from '../format.js?v=20260819-5';
 import { options } from '../data.js';
 import { state } from '../state.js';
 import { toast } from '../ui.js?v=20260820-5';
-import { openSupplierDossier } from './supplier_dossier.js?v=20260823-3';
+import { openSupplierDossier } from './supplier_dossier.js?v=20260824-41';
 
 const common = [
   { key:'code', label:'Código (Cliente/Fornecedor)', required:true, help:'Mesmo código do Primavera' },
@@ -45,7 +45,7 @@ export async function render(container) {
       {key:'active', label:'Estado', render:r=>badge(r.active?'activo':'inactivo')},
     ] } },
     { label:'Fornecedores', config:{ resource:'suppliers', title:'Fornecedores (Primavera)', subtitle:'Fornecedor, NIF, morada e IBAN — Base/Suppliers. Use 👁 para abrir a ficha completa com desempenho e ocorrências.', singular:'fornecedor', newLabel:'Novo fornecedor', extraActions:'<button class="btn" data-sync-pri="suppliers">Puxar do Primavera</button>',
-      rowActions: row => `<button class="btn icon" type="button" data-supplier-ficha="${row.id}" title="Abrir ficha completa">👁</button>`,
+      rowActions: row => `<button class="btn icon" type="button" data-icon="eye" data-supplier-ficha="${row.id}" aria-label="Abrir ficha completa" title="Abrir ficha completa"></button>`,
       onAction: event => {
         const button = event.target.closest('[data-supplier-ficha]');
         if (button) openSupplierDossier(Number(button.dataset.supplierFicha));

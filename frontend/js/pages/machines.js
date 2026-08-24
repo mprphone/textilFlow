@@ -73,7 +73,7 @@ async function renderFactoryFloor(container) {
       const pos=saved[machine.id]||{x:7+(index%4)*23,y:12+Math.floor(index/4)*36}; const status=effectiveStatus(machine); const task=activeByMachine[machine.id];
       return `<button class="machine-node ${status}" style="left:${pos.x}%;top:${pos.y}%" data-machine="${machine.id}" data-status-value="${status}" data-search-value="${esc(`${machine.code} ${machine.name}`.toLowerCase())}" aria-label="${esc(machine.name)} — ${statusLabel[status]||status}"><span class="machine-icon">${machineGlyph(machine.machine_type)}</span><span class="machine-copy"><b>${esc(machine.code)}</b><small>${esc(machine.name)}</small>${task?`<em>${esc(task.order_no||'Em produção')}</em>`:''}</span><i></i></button>`;
     }).join('') || '<div class="sector-empty">Sem máquinas atribuídas</div>'}</div></section>`;
-  }).join('')}</div><aside class="machine-inspector" data-machine-inspector><button aria-label="Fechar detalhe" data-close-inspector>×</button><div data-inspector-body></div></aside></div>
+  }).join('')}</div><aside class="machine-inspector" data-machine-inspector><button type="button" class="icon-button" data-icon="close" aria-label="Fechar detalhe" title="Fechar detalhe" data-close-inspector></button><div data-inspector-body></div></aside></div>
   <p class="factory-hint">Selecione uma máquina para ver detalhes. Ative “Editar planta” para arrastar equipamentos.</p>`;
 
   let editing=false, filter='all', search='';
