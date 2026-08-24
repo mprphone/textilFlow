@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from ...db import get_db
 from ...models import (
     Company, Customer, CuttingJob, Employee, InventoryMovement, Machine, Operation, ProductionBatch,
-    ProductionEvent, ProductionLine, ProductionMaterialRequirement, ProductionOrder, QualityInspection, StockLot,
-    SalesOrder, SalesOrderLine, Sample, Shipment, Style, User, WorkAssignment,
+    ProductionEvent, ProductionLine, ProductionMaterialRequirement, ProductionOrder, ProductionOrderVariant, QualityInspection, StockLot,
+    SalesOrder, SalesOrderLine, Sample, Shipment, ShipmentLine, Style, User, WorkAssignment,
 )
 from ...schemas import ProductionEventRequest, StockMovementRequest
 from ...services.analytics import line_performance
@@ -20,12 +20,161 @@ from ...services.production import register_output
 from ...services.production_cockpit import order_cockpit
 from ...services.production_split import distribute as distribute_order
 from ...services.kanban import complete_sewing_batch, kanban_board, release_batch_to_sewing, request_next_batch
-from ...services.production_stage import dispatch_ready_status, record_packing, record_revista, update_order_stage
+from ...services.production_stage import record_packing, record_revista, update_order_stage
+from ...services.shipping import create_partial_shipment, dispatch_status
+from ...services.control_tower import control_tower, finite_plan
+from ...services.execution import batch_trace, merge_batches, operation_flow, split_batch, transfer_operation
 from ...services.serialization import model_to_dict
 from ..deps import current_user, require_module_access, require_role
 
 
 router = APIRouter(prefix="/production", tags=["Produção"])
+
+
+@router.post("/sales-orders/save")
+def save_sales_order(payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Grava cabeçalho e grade inteira numa única transação."""
+    company_id = int(payload.get("company_id") or 0)
+    require_role(db, user, company_id, {"admin", "manager", "commercial", "planner"})
+    require_module_access(db, user, company_id, {"commercial"})
+    order_id = int(payload.get("id") or 0)
+    order = db.get(SalesOrder, order_id) if order_id else None
+    if order_id and (not order or order.company_id != company_id):
+        raise HTTPException(404, "Encomenda não encontrada")
+    if order:
+        linked = (
+            db.query(ProductionOrder.id)
+            .join(SalesOrderLine, SalesOrderLine.id == ProductionOrder.sales_order_line_id)
+            .filter(SalesOrderLine.sales_order_id == order.id)
+            .first()
+        )
+        if linked:
+            raise HTTPException(409, "A encomenda já foi libertada para produção e a grade está congelada")
+    header = payload.get("header") or {}
+    status = str(header.get("status") or "confirmed")
+    if status not in {"draft", "confirmed"}:
+        raise HTTPException(422, "Uma encomenda manual só pode ser gravada como rascunho ou confirmada")
+    customer = db.get(Customer, int(header.get("customer_id") or 0))
+    if not customer or customer.company_id != company_id:
+        raise HTTPException(422, "Escolha um cliente válido")
+    order_no = str(header.get("order_no") or "").strip()
+    if not order_no:
+        raise HTTPException(422, "Indique o número da encomenda")
+    items = payload.get("items") or []
+    if not items:
+        raise HTTPException(422, "Indique pelo menos uma variante com quantidade")
+    try:
+        if not order:
+            order = SalesOrder(company_id=company_id, customer_id=customer.id, order_no=order_no)
+            db.add(order)
+        order.customer_id = customer.id
+        order.order_no = order_no
+        order.customer_po = header.get("customer_po")
+        order.order_date = date.fromisoformat(header["order_date"]) if header.get("order_date") else None
+        order.delivery_date = date.fromisoformat(header["delivery_date"]) if header.get("delivery_date") else None
+        order.status = status
+        order.currency = str(header.get("currency") or "EUR")[:3].upper()
+        order.notes = header.get("notes")
+        data = dict(order.custom_data or {})
+        data.setdefault("source", "direct_sales_order")
+        order.custom_data = data
+        db.flush()
+
+        from ...services.inventory import ensure_item_for_variant, ensure_variant
+        existing_lines = db.query(SalesOrderLine).filter_by(company_id=company_id, sales_order_id=order.id).all()
+        by_variant = {(row.style_id, row.variant_id): row for row in existing_lines}
+        used_ids = set()
+        seen = set()
+        for item in items:
+            style = db.get(Style, int(item.get("style_id") or 0))
+            quantity = float(item.get("quantity") or 0)
+            color = str(item.get("color") or "").strip()
+            size = str(item.get("size") or "").strip()
+            if not style or style.company_id != company_id or quantity <= 0 or not color or not size:
+                raise HTTPException(422, "Artigo, cor, tamanho e quantidade têm de ser válidos")
+            key = (style.id, color.casefold(), size.casefold())
+            if key in seen:
+                raise HTTPException(422, "A grade contém uma variante repetida")
+            seen.add(key)
+            variant = ensure_variant(db, style, color, size)
+            ensure_item_for_variant(db, variant, style)
+            line = by_variant.get((style.id, variant.id))
+            if not line:
+                line = SalesOrderLine(company_id=company_id, sales_order_id=order.id, style_id=style.id, variant_id=variant.id)
+                db.add(line)
+            line.description = f"{variant.color} · {variant.size}"
+            line.quantity = quantity
+            line.unit_price = float(item.get("unit_price") or 0)
+            line.delivery_date = order.delivery_date
+            db.flush()
+            used_ids.add(line.id)
+        for line in existing_lines:
+            if line.id not in used_ids:
+                db.delete(line)
+        db.commit()
+        db.refresh(order)
+        saved_lines = db.query(SalesOrderLine).filter_by(sales_order_id=order.id).order_by(SalesOrderLine.id).all()
+        return {"order": model_to_dict(order), "lines": [model_to_dict(row) for row in saved_lines]}
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "Já existe uma encomenda com esse número") from exc
+
+
+@router.post("/sales-orders/{order_id}/release")
+def release_sales_order(order_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Liberta uma encomenda direta para produção de forma repetível e segura."""
+    order = db.get(SalesOrder, order_id)
+    if not order:
+        raise HTTPException(404, "Encomenda não encontrada")
+    require_role(db, user, order.company_id, {"admin", "manager", "planner", "commercial"})
+    require_module_access(db, user, order.company_id, {"commercial", "production"})
+    if order.status in {"cancelled", "partially_shipped", "shipped"}:
+        raise HTTPException(409, "O estado atual da encomenda não permite libertação")
+    lines = db.query(SalesOrderLine).filter_by(company_id=order.company_id, sales_order_id=order.id).order_by(SalesOrderLine.id).all()
+    if not lines:
+        raise HTTPException(422, "A encomenda não tem linhas")
+    created = []
+    reused = []
+    try:
+        from ...services.cutting_map import ensure_cutting_job_for_order
+        from ...services.inventory import ensure_item_for_style
+        from ...services.sequences import formatted
+        for line in lines:
+            production_order = db.query(ProductionOrder).filter_by(
+                company_id=order.company_id, sales_order_line_id=line.id
+            ).first()
+            if production_order:
+                reused.append(production_order)
+                continue
+            style = db.get(Style, line.style_id)
+            ensure_item_for_style(db, style)
+            number = formatted(db, order.company_id, "production_order", prefix=f"OF-{order.order_no}-", width=3)
+            production_order = ProductionOrder(
+                company_id=order.company_id, sales_order_line_id=line.id, style_id=line.style_id,
+                order_no=number, quantity=float(line.quantity or 0), planned_end=line.delivery_date or order.delivery_date,
+                status="planned", priority=3, current_stage="planning",
+                custom_data={"source": "direct_sales_order", "sales_order_id": order.id, "variant_id": line.variant_id},
+            )
+            db.add(production_order)
+            db.flush()
+            if line.variant_id:
+                db.add(ProductionOrderVariant(
+                    company_id=order.company_id, production_order_id=production_order.id,
+                    variant_id=line.variant_id, quantity=float(line.quantity or 0), unit_price=line.unit_price,
+                ))
+                db.flush()
+            ensure_cutting_job_for_order(db, production_order)
+            created.append(production_order)
+        order.status = "in_production"
+        db.commit()
+        return {
+            "order": model_to_dict(order),
+            "created": [model_to_dict(row) for row in created],
+            "existing": [model_to_dict(row) for row in reused],
+        }
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "Não foi possível numerar as ordens de fabrico") from exc
 
 
 @router.post("/samples/{sample_id}/release", status_code=201)
@@ -78,31 +227,11 @@ def dispatch_sales_order(order_id: int, payload: dict, db: Session = Depends(get
         raise HTTPException(404, "Encomenda não encontrada")
     require_role(db, user, order.company_id, {"admin", "manager", "warehouse"})
     require_module_access(db, user, order.company_id, {"shipping"})
-    if order.status == "shipped":
-        existing = db.query(Shipment).filter_by(company_id=order.company_id, sales_order_id=order.id).order_by(Shipment.id.desc()).first()
-        if existing:
-            return {"shipment": model_to_dict(existing), "already_dispatched": True}
-    if order.status != "ready":
-        raise HTTPException(409, "A encomenda tem de estar pronta antes de confirmar a saída")
     checks = [payload.get("quantities_checked"), payload.get("quality_checked"), payload.get("documents_checked"), payload.get("carrier_checked")]
     if not all(checks):
         raise HTTPException(422, "Conclua toda a checklist de expedição")
-    ready = dispatch_ready_status(db, order)
-    if not ready["ready"] and not payload.get("override_dispatch"):
-        raise HTTPException(409, f"Não dá para expedir: {ready['reason']}")
-    shipment = Shipment(
-        company_id=order.company_id, sales_order_id=order.id,
-        shipment_no=str(payload.get("shipment_no") or "").strip(), carrier=payload.get("carrier"),
-        tracking_no=payload.get("tracking_no"), destination=payload.get("destination"),
-        quantity=float(payload.get("quantity") or 0),
-        shipped_at=datetime.fromisoformat(payload["shipped_at"]) if payload.get("shipped_at") else datetime.now(timezone.utc),
-        status="shipped", documents=payload.get("documents") or [],
-    )
-    if not shipment.shipment_no or not shipment.carrier or shipment.quantity <= 0:
-        raise HTTPException(422, "Indique documento, transportador e quantidade")
     try:
-        db.add(shipment)
-        order.status = "shipped"
+        shipment, shipment_lines, status = create_partial_shipment(db, order, {**payload, "user_id": user.id})
         lines = db.query(SalesOrderLine).filter_by(sales_order_id=order.id).all()
         for line in lines:
             for production_order in db.query(ProductionOrder).filter_by(sales_order_line_id=line.id).all():
@@ -111,13 +240,66 @@ def dispatch_sales_order(order_id: int, payload: dict, db: Session = Depends(get
         company = db.get(Company, order.company_id)
         if company:
             customer = db.get(Customer, order.customer_id)
-            erp = queue_delivery(company, order=order, shipment=shipment, customer=customer, lines=lines)
+            quantities = {}
+            for shipment_line in shipment_lines:
+                quantities[shipment_line.sales_order_line_id] = round(
+                    quantities.get(shipment_line.sales_order_line_id, 0) + shipment_line.quantity, 2
+                )
+            erp = queue_delivery(
+                company, order=order, shipment=shipment, customer=customer,
+                lines=lines, quantities_by_line=quantities,
+            )
         db.commit()
         db.refresh(shipment)
-        return {"shipment": model_to_dict(shipment), "already_dispatched": False, "primavera": erp}
+        return {
+            "shipment": model_to_dict(shipment),
+            "shipment_lines": [model_to_dict(row) for row in shipment_lines],
+            "dispatch_status": status,
+            "primavera": erp,
+        }
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(409, str(exc)) from exc
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(409, "Já existe uma expedição com esse número") from exc
+
+
+@router.get("/sales-orders/{order_id}/dispatch-status")
+def sales_order_dispatch_status(order_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    order = db.get(SalesOrder, order_id)
+    if not order:
+        raise HTTPException(404, "Encomenda não encontrada")
+    require_module_access(db, user, order.company_id, {"shipping", "production", "quality"})
+    return dispatch_status(db, order)
+
+
+@router.get("/{company_id}/shipping-board")
+def shipping_board(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_module_access(db, user, company_id, {"shipping"})
+    orders = (
+        db.query(SalesOrder)
+        .filter_by(company_id=company_id)
+        .filter(SalesOrder.status != "cancelled")
+        .order_by(SalesOrder.delivery_date.asc(), SalesOrder.id.desc())
+        .all()
+    )
+    shipments = (
+        db.query(Shipment)
+        .filter_by(company_id=company_id)
+        .order_by(Shipment.shipped_at.desc(), Shipment.id.desc())
+        .all()
+    )
+    by_order = {}
+    for shipment in shipments:
+        by_order.setdefault(shipment.sales_order_id, []).append(model_to_dict(shipment))
+    result = []
+    for order in orders:
+        row = model_to_dict(order)
+        row["dispatch"] = dispatch_status(db, order)
+        row["shipments"] = by_order.get(order.id, [])
+        result.append(row)
+    return result
 
 
 @router.post("/orders/{order_id}/distribute")
@@ -128,8 +310,9 @@ def distribute_production_order(order_id: int, payload: dict, db: Session = Depe
     require_role(db, user, order.company_id, {"admin", "manager", "planner", "supervisor"})
     require_module_access(db, user, order.company_id, {"production", "confection", "subcontracting"})
     try:
-        return distribute_order(db, order, payload)
+        return _distribute_and_document(db, order, {**payload, "user_id": user.id})
     except ValueError as exc:
+        db.rollback()
         raise HTTPException(422, str(exc)) from exc
 
 
@@ -161,22 +344,34 @@ def distribute_with_document(order_id: int, payload: dict, db: Session = Depends
     require_role(db, user, order.company_id, {"admin", "manager", "planner", "supervisor"})
     require_module_access(db, user, order.company_id, {"production", "confection", "subcontracting"})
     try:
-        result = distribute_order(db, order, payload)
+        return _distribute_and_document(db, order, {**payload, "user_id": user.id})
     except ValueError as exc:
+        db.rollback()
         raise HTTPException(422, str(exc)) from exc
-    destination = payload.get("destination")
-    document = None
-    if destination in {"internal", "subcontract"}:
-        document = from_distribution(
-            db, order.company_id, order_id=order_id, quantity=float(payload.get("quantity") or 0),
-            destination=destination, line_id=payload.get("line_id"),
-            subcontract_service_id=payload.get("subcontract_service_id"),
-            subcontract_job_id=result.get("subcontract_job_id"),
-        )
+
+
+def _distribute_and_document(db: Session, order: ProductionOrder, payload: dict) -> dict:
+    """Confirma movimento e documento na mesma transacao de base de dados."""
+    try:
+        result = distribute_order(db, order, payload)
+        destination = payload.get("destination")
+        document = None
+        if destination in {"internal", "subcontract", "revista"}:
+            document = from_distribution(
+                db, order.company_id, order_id=order.id, quantity=float(payload.get("quantity") or 0),
+                destination=destination, source=payload.get("source"), line_id=payload.get("line_id"),
+                subcontract_service_id=payload.get("subcontract_service_id"),
+                subcontract_job_id=result.get("subcontract_job_id"),
+            )
         db.commit()
-        db.refresh(document)
-    result["document"] = public_document(db, document) if document else None
-    return result
+        db.refresh(order)
+        if document:
+            db.refresh(document)
+        result["document"] = public_document(db, document) if document else None
+        return result
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.post("/orders/{order_id}/revista")
@@ -187,7 +382,7 @@ def complete_revista(order_id: int, payload: dict, db: Session = Depends(get_db)
     require_role(db, user, order.company_id, {"admin", "manager", "planner", "supervisor", "quality", "operator"})
     require_module_access(db, user, order.company_id, {"quality", "production"})
     try:
-        inspection = record_revista(db, order, payload or {})
+        inspection = record_revista(db, order, {**(payload or {}), "user_id": user.id})
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     db.commit()
@@ -203,7 +398,7 @@ def pack_production_order(order_id: int, payload: dict, db: Session = Depends(ge
     require_role(db, user, order.company_id, {"admin", "manager", "planner", "supervisor", "warehouse", "operator"})
     require_module_access(db, user, order.company_id, {"shipping", "production"})
     try:
-        result = record_packing(db, order, payload or {})
+        result = record_packing(db, order, {**(payload or {}), "user_id": user.id})
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     db.commit()
@@ -411,3 +606,117 @@ def kanban_complete(company_id: int, batch_id: int, payload: dict = {}, db: Sess
         return model_to_dict(batch)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/{company_id}/control-tower")
+def get_control_tower(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_module_access(db, user, company_id, {"production", "confection"})
+    try:
+        result = control_tower(db, company_id)
+        db.commit()
+        return result
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.post("/{company_id}/finite-plan")
+def apply_finite_plan(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_role(db, user, company_id, {"admin", "manager", "planner", "supervisor"})
+    require_module_access(db, user, company_id, {"production", "confection"})
+    result = finite_plan(db, company_id, apply=True)
+    db.commit()
+    return result
+
+
+@router.get("/orders/{order_id}/operation-flow")
+def get_operation_flow(order_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    order = db.get(ProductionOrder, order_id)
+    if not order:
+        raise HTTPException(404, "Ordem de fabrico não encontrada")
+    require_module_access(db, user, order.company_id, {"production", "confection", "quality"})
+    return operation_flow(db, order)
+
+
+@router.post("/orders/{order_id}/transfer-operation")
+def post_operation_transfer(order_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    order = db.get(ProductionOrder, order_id)
+    if not order:
+        raise HTTPException(404, "Ordem de fabrico não encontrada")
+    require_role(db, user, order.company_id, {"admin", "manager", "planner", "supervisor", "operator"})
+    require_module_access(db, user, order.company_id, {"production", "confection"})
+    try:
+        result = transfer_operation(db, order, payload, user.id)
+        db.commit()
+        return result
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/batches/{batch_id}/split", status_code=201)
+def post_batch_split(batch_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    batch = db.get(ProductionBatch, batch_id)
+    if not batch:
+        raise HTTPException(404, "Lote não encontrado")
+    require_role(db, user, batch.company_id, {"admin", "manager", "planner", "supervisor"})
+    require_module_access(db, user, batch.company_id, {"production", "confection"})
+    try:
+        rows = split_batch(db, batch, payload.get("children") or [], user.id)
+        db.commit()
+        return [model_to_dict(row) for row in rows]
+    except (ValueError, IntegrityError) as exc:
+        db.rollback()
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/{company_id}/batches/merge", status_code=201)
+def post_batch_merge(company_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_role(db, user, company_id, {"admin", "manager", "planner", "supervisor"})
+    require_module_access(db, user, company_id, {"production", "confection"})
+    ids = [int(value) for value in (payload.get("batch_ids") or [])]
+    rows = db.query(ProductionBatch).filter(ProductionBatch.id.in_(ids), ProductionBatch.company_id == company_id).all() if ids else []
+    if len(rows) != len(set(ids)):
+        raise HTTPException(422, "Um ou mais lotes não existem nesta empresa")
+    try:
+        row = merge_batches(db, rows, payload, user.id)
+        db.commit()
+        return model_to_dict(row)
+    except (ValueError, IntegrityError) as exc:
+        db.rollback()
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/batches/{batch_id}/trace")
+def get_batch_trace(batch_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    batch = db.get(ProductionBatch, batch_id)
+    if not batch:
+        raise HTTPException(404, "Lote não encontrado")
+    require_module_access(db, user, batch.company_id, {"production", "confection", "quality", "shipping"})
+    return batch_trace(db, batch)
+
+
+@router.post("/alerts/{alert_id}/seen")
+def see_operational_alert(alert_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    from ...models import OperationalAlert
+    row = db.get(OperationalAlert, alert_id)
+    if not row:
+        raise HTTPException(404, "Alerta não encontrado")
+    require_module_access(db, user, row.company_id, {"production", "confection"})
+    row.seen_at = datetime.now(timezone.utc)
+    row.seen_by = user.id
+    db.commit()
+    return model_to_dict(row)
+
+
+@router.post("/alerts/{alert_id}/resolve")
+def resolve_operational_alert(alert_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    from ...models import OperationalAlert
+    row = db.get(OperationalAlert, alert_id)
+    if not row:
+        raise HTTPException(404, "Alerta não encontrado")
+    require_role(db, user, row.company_id, {"admin", "manager", "planner", "supervisor"})
+    row.status = "resolved"
+    row.resolved_at = datetime.now(timezone.utc)
+    db.commit()
+    return model_to_dict(row)

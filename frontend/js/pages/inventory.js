@@ -2,7 +2,8 @@ import { get, patch, post } from '../api.js';
 import { options } from '../data.js';
 import { renderEntityTabs } from '../entity.js?v=20260819-9';
 import { badge, date, datetime, esc, humanize, money, number } from '../format.js?v=20260819-5';
-import { loadOrderDossier } from '../production/dossier.js?v=20260822-21';
+import { loadOrderDossier } from '../production/dossier.js?v=20260824-2';
+import { recordModal } from '../quick_create.js?v=20260821-19';
 import { stageLabel } from '../production/cycle.js?v=20260822-20';
 import { state } from '../state.js';
 import { loading, openModal, pageHeader, toast } from '../ui.js?v=20260820-5';
@@ -195,6 +196,38 @@ async function renderFg(container) {
   container.querySelectorAll('[data-open-of]').forEach(button => button.addEventListener('click', () => loadOrderDossier(Number(button.dataset.openOf))));
 }
 
+async function renderPacking(container) {
+  const data = await board();
+  const rows = data.packing || [];
+  container.innerHTML = pageHeader(
+    'Embalagem',
+    'Só aparecem peças que chegaram à revista e têm controlo de qualidade aprovado.',
+    '<a class="btn" href="#/stock-wip">Stock em fabrico</a><a class="btn" href="#/stock-fg">Produto acabado</a><a class="btn primary" href="#/shipping">Expedição</a>',
+    'compact',
+  ) + `
+    <section class="listing-panel"><div class="table-wrap listing-table"><table class="data-table stock-table"><thead><tr><th>OF</th><th>Artigo</th><th>Descrição</th><th class="num">Por embalar</th><th class="num">Já embalado</th><th></th></tr></thead><tbody>
+      ${rows.length ? rows.map((row,index) => `<tr><td class="stock-code">${esc(row.order_no)}</td><td class="stock-code">${esc(row.article_code || '')}</td><td>${esc(row.article_name || '—')}${row.variant ? `<small class="table-subline">${esc(row.variant)}</small>` : ''}</td><td class="num"><b>${number(row.available_to_pack)}</b></td><td class="num">${number(row.packed_total)}</td><td class="listing-actions"><button class="btn small primary" data-pack-index="${index}">Registar embalagem</button><button class="btn small" data-open-of="${row.id}">Ver OF</button></td></tr>`).join('') : emptyRow(6, 'Nada por embalar', 'As peças aprovadas na revista aparecerão aqui.')}
+    </tbody></table></div></section>`;
+  container.querySelectorAll('[data-open-of]').forEach(button => button.addEventListener('click', () => loadOrderDossier(Number(button.dataset.openOf))));
+  container.querySelectorAll('[data-pack-index]').forEach(button => button.addEventListener('click', () => {
+    const row = rows[Number(button.dataset.packIndex)];
+    recordModal({
+      title: `Embalagem · ${row.order_no}`,
+      values: { quantity: row.available_to_pack, package_type: 'box', packaging_unit_cost: 0 },
+      fields: [
+        { key: 'quantity', label: `Quantidade (máx. ${number(row.available_to_pack)})`, type: 'number', required: true, section: 'Produto acabado' },
+        ...(row.batch_options?.length ? [{ key: 'batch_id', label: 'Lote produtivo', type: 'select', required: true, options: row.batch_options, help: 'Mantém a rastreabilidade até à caixa e à expedição.', section: 'Produto acabado' }] : []),
+        { key: 'package_code', label: 'Código da caixa/palete', help: 'Em branco: numeração automática', section: 'Unidade logística' },
+        { key: 'package_type', label: 'Tipo', type: 'select', options:[{value:'box',label:'Caixa'},{value:'pallet',label:'Palete'},{value:'bundle',label:'Volume'}], section: 'Unidade logística' },
+        { key: 'packaging_unit_cost', label: 'Custo embalagem / unidade (€)', type: 'number', default:0, section: 'Custo real' },
+        { key: 'notes', label: 'Notas', type: 'textarea', full:true },
+      ],
+      save: payload => post(`/production/orders/${row.id}/pack`, {...payload, variant_id:row.variant_id}),
+      onSaved: async () => { toast('Embalagem registada em produto acabado.'); await renderPacking(container); },
+    });
+  }));
+}
+
 async function articleTabs() {
   return [
     {label:'Artigos',config:{resource:'materials',title:'Artigos (Primavera)',subtitle:'Código artigo, unidade, IVA, família e armazém — os mesmos campos de Base/Items.',singular:'artigo',newLabel:'Novo artigo',extraActions:'<button class="btn" data-sync-pri="items">Puxar artigos do Primavera</button>',fields:async()=>[
@@ -334,7 +367,7 @@ function historyHtml(data) {
     </section>` : ''}
     <section class="dossier-block"><h3>Anotações</h3>
       <textarea data-item-notes rows="4" placeholder="Prazos combinados, qualidade, mínimo de encomenda, contactos…">${esc(item.notes || '')}</textarea>
-      <div class="actions" style="margin-top:8px"><button class="btn primary" type="button" data-save-notes>Gravar anotações</button></div>
+      <div class="actions u-mt-2"><button class="btn primary" type="button" data-save-notes>Gravar anotações</button></div>
     </section>
   </div>`;
 }
@@ -373,12 +406,12 @@ async function renderCatalog(container) {
 function primaveraBlock(pri) {
   if (pri.ok) {
     const items = pri.items || [];
-    return `<section class="card" style="margin-top:16px"><div class="card-header"><h2>Stock Primavera</h2><span>${number(pri.count)} linhas · ${esc(pri.path || '')}</span></div>
+    return `<section class="card u-mt-4"><div class="card-header"><h2>Stock Primavera</h2><span>${number(pri.count)} linhas · ${esc(pri.path || '')}</span></div>
       ${items.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Artigo</th><th>Armazém</th><th>Stock</th><th>Reservado</th><th>Disponível</th></tr></thead>
       <tbody>${items.map(row => `<tr><td><b>${esc(row.item)}</b></td><td>${esc(row.warehouse)}</td><td>${number(row.quantity)}</td><td>${number(row.reserved)}</td><td>${number(row.available)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">A Web API não devolveu linhas de stock.</p>'}
     </section>`;
   }
-  return `<section class="card" style="margin-top:16px"><div class="card-header"><h2>Stock Primavera</h2><span>Não ligado</span></div>
+  return `<section class="card u-mt-4"><div class="card-header"><h2>Stock Primavera</h2><span>Não ligado</span></div>
     <p class="muted">${esc(pri.error || 'Configure a Web API em ERP → Ligação Primavera.')} Enquanto não houver ligação, a listagem usa os artigos já sincronizados.</p>
   </section>`;
 }
@@ -386,6 +419,7 @@ function primaveraBlock(pri) {
 export async function render(container, view = 'mp') {
   container.dataset.stockView = view;
   if (view === 'wip') return renderWip(container);
+  if (view === 'packing') return renderPacking(container);
   if (view === 'fg') return renderFg(container);
   if (view === 'purchases') return renderPurchases(container);
   if (view === 'catalog') return renderCatalog(container);

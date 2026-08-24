@@ -94,7 +94,7 @@ ROLE_MODULES = {
 }
 
 RESOURCE_MODULES = {
-    "styles": {"design", "commercial"}, "style-revisions": {"design"}, "style-variants": {"design", "commercial"},
+    "styles": {"design", "commercial"}, "style-revisions": {"design"}, "style-variants": {"design", "commercial", "production", "shipping"},
     "article-types": {"design"}, "bom-items": {"design", "commercial"}, "product-operations": {"design", "production", "commercial"},
     "samples": {"design"}, "developments": {"design"}, "certifications": {"design"}, "materials": {"design", "commercial", "shipping", "erp", "tables"},
     "cost-sheets": {"commercial"}, "cost-lines": {"commercial"}, "customers": {"commercial", "erp", "tables"}, "suppliers": {"commercial", "subcontracting", "shipping", "erp", "tables", "confection"},

@@ -70,36 +70,50 @@ def request_next_batch(db: Session, company_id: int, line_id: int, order_id: int
     return batch
 
 
-def _create_sewing_assignment(db: Session, batch: ProductionBatch, line: ProductionLine) -> WorkAssignment | None:
+def _create_sewing_assignments(db: Session, batch: ProductionBatch, line: ProductionLine) -> list[WorkAssignment]:
     order = db.get(ProductionOrder, batch.production_order_id) if batch.production_order_id else None
     if not order:
-        return None
-    product_operation = (
+        return []
+    product_operations = (
         db.query(ProductOperation)
         .filter_by(style_id=order.style_id)
         .order_by(ProductOperation.sequence, ProductOperation.id)
-        .first()
+        .all()
     )
-    operation = db.get(Operation, product_operation.operation_id) if product_operation else None
-    if not operation:
+    if not product_operations:
         operation = db.query(Operation).filter_by(company_id=batch.company_id).order_by(Operation.id).first()
-    if not operation:
-        return None
-    assignment = WorkAssignment(
-        company_id=batch.company_id,
-        production_order_id=order.id,
-        batch_id=batch.id,
-        product_operation_id=product_operation.id if product_operation else None,
-        operation_id=operation.id,
-        line_id=line.id,
-        planned_quantity=batch.quantity or 0,
-        standard_minutes=(product_operation.smv or 0) * (batch.quantity or 0) if product_operation else 0,
-        status="in_progress",
-        notes="Gerado pelo kanban corte→costura",
-    )
-    db.add(assignment)
+        if not operation:
+            return []
+        product_operations = [None]
+    assignments = []
+    for product_operation in product_operations:
+        operation = db.get(Operation, product_operation.operation_id) if product_operation else operation
+        if not operation:
+            continue
+        existing = db.query(WorkAssignment).filter_by(
+            batch_id=batch.id,
+            product_operation_id=product_operation.id if product_operation else None,
+            operation_id=operation.id,
+        ).first()
+        if existing:
+            assignments.append(existing)
+            continue
+        assignment = WorkAssignment(
+            company_id=batch.company_id,
+            production_order_id=order.id,
+            batch_id=batch.id,
+            product_operation_id=product_operation.id if product_operation else None,
+            operation_id=operation.id,
+            line_id=line.id,
+            planned_quantity=batch.quantity or 0,
+            standard_minutes=(product_operation.smv or 0) * (batch.quantity or 0) if product_operation else 0,
+            status="queued",
+            notes="Gerado pelo kanban corte→costura",
+        )
+        db.add(assignment)
+        assignments.append(assignment)
     db.flush()
-    return assignment
+    return assignments
 
 
 def release_batch_to_sewing(db: Session, company_id: int, batch_id: int, line_id: int) -> ProductionBatch:
@@ -117,7 +131,7 @@ def release_batch_to_sewing(db: Session, company_id: int, batch_id: int, line_id
     batch.status = "in_progress"
     batch.updated_at = datetime.now(timezone.utc)
     db.flush()
-    _create_sewing_assignment(db, batch, line)
+    _create_sewing_assignments(db, batch, line)
     return batch
 
 

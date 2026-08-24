@@ -1,5 +1,7 @@
 import { esc } from './format.js?v=20260819-5';
 import { closeModal, openModal } from './ui.js?v=20260820-5';
+import { icon, initIconSystem } from './icons.js?v=20260824-40';
+import { initResponsiveTables } from './responsive_tables.js?v=20260824-40';
 
 const commands = [
   {group:'Ir para', icon:'⌂', label:'Centro de comando', detail:'Prioridades, risco e indicadores', route:'dashboard', keywords:'inicio dashboard resumo'},
@@ -49,7 +51,7 @@ function commandMarkup(items) {
   return items.map((command, index) => {
     const heading = command.group !== group ? `<div class="command-group">${esc(command.group)}</div>` : '';
     group = command.group;
-    return `${heading}<button class="command-item ${index === 0 ? 'selected' : ''}" data-command-route="${command.route}"><span class="command-icon">${command.icon}</span><span><b>${esc(command.label)}</b><small>${esc(command.detail)}</small></span><kbd>↵</kbd></button>`;
+    return `${heading}<button class="command-item ${index === 0 ? 'selected' : ''}" data-command-route="${command.route}"><span class="command-icon">${icon(command.icon)}</span><span><b>${esc(command.label)}</b><small>${esc(command.detail)}</small></span><kbd>Enter</kbd></button>`;
   }).join('');
 }
 
@@ -57,7 +59,7 @@ export function openCommandPalette(actionsOnly = false) {
   let visible = commands.filter(command => canNavigate(command.route) && (!actionsOnly || command.action));
   openModal(actionsOnly ? 'O que quer criar ou registar?' : 'Onde quer ir ou o que quer fazer?', `
     <div class="command-palette">
-      <div class="command-search"><span>⌕</span><input id="command-search-input" autocomplete="off" placeholder="Escreva, por exemplo: custo, produção, artigo…"></div>
+      <div class="command-search"><span>${icon('search')}</span><input id="command-search-input" autocomplete="off" placeholder="Escreva, por exemplo: custo, produção, artigo…"></div>
       <div class="command-results" data-command-results>${commandMarkup(visible)}</div>
       <div class="command-hint"><span>↑ ↓ para navegar</span><span>Enter para abrir</span><span>Esc para fechar</span></div>
     </div>`, 'Não precisa de saber em que menu está cada função.');
@@ -88,6 +90,8 @@ export function openCommandPalette(actionsOnly = false) {
 }
 
 export function initExperience(options = {}) {
+  initIconSystem();
+  initResponsiveTables();
   if (typeof options.canNavigate === 'function') canNavigate = options.canNavigate;
   document.getElementById('global-command')?.addEventListener('click', () => openCommandPalette(false));
   document.getElementById('quick-action')?.addEventListener('click', () => openCommandPalette(true));

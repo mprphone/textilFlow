@@ -362,7 +362,7 @@ function jobsHtml(rows, empty) {
 
 function purchasesHtml(data) {
   return `${jobsHtml(data.history || [], 'Sem compras / requisições no período.')}
-    <section class="sf-card" style="margin-top:14px"><h3>Encomendas de compra</h3>
+    <section class="sf-card section-spaced"><h3>Encomendas de compra</h3>
       <div class="table-wrap"><table class="data-table"><thead><tr><th>Nº</th><th>Data</th><th>Previsto</th><th>Total</th><th>Estado</th></tr></thead>
       <tbody>${(data.purchases || []).length ? data.purchases.map(row => `<tr>
         <td><b>${esc(row.order_no)}</b></td><td>${date(row.order_date)}</td><td>${date(row.expected_date)}</td>
@@ -417,8 +417,8 @@ function performanceHtml(data) {
     </section>
   </div>
   <section class="sf-card"><h3>% de entregas no prazo por mês</h3>${chart(p.evolution || [], true)}</section>
-  <section class="sf-card" style="margin-top:14px"><h3>Avaliação interna</h3>
-    <p class="muted" style="margin:-4px 0 10px;font-size:12px">Complementa os indicadores automáticos — não os substitui. Escala 1 a 5.</p>
+  <section class="sf-card section-spaced"><h3>Avaliação interna</h3>
+    <p class="muted rating-help">Complementa os indicadores automáticos — não os substitui. Escala 1 a 5.</p>
     <div class="sf-rate">${Object.entries(rateLabels).map(([key, label]) => {
       const value = Number(ratings[key] || 0);
       return `<div class="sf-rate-row"><span>${label}</span>
@@ -476,7 +476,7 @@ function documentsHtml(data) {
       <td>${row.document_path ? `<a href="${esc(row.document_path)}" target="_blank" rel="noopener">Abrir</a>` : '—'}</td>
     </tr>`).join('') : '<tr><td colspan="6">Sem certificações. Adicione-as em Parceiros → Certificações.</td></tr>'}</tbody></table></div>
   </section>
-  <section class="sf-card" style="margin-top:14px"><h3>Documentos ERP</h3>
+  <section class="sf-card section-spaced"><h3>Documentos ERP</h3>
     <div class="table-wrap"><table class="data-table"><thead><tr><th>Documento</th><th>Tipo</th><th>Data</th><th>Total</th><th>Estado</th></tr></thead>
     <tbody>${(data.documents || []).length ? data.documents.map(row => `<tr>
       <td><b>${esc(row.doc_no)}</b></td><td>${esc(row.doc_type)}</td><td>${date(row.doc_date)}</td>

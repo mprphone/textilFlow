@@ -6,6 +6,9 @@ class ProductionEventRequest(BaseModel):
     quantity_good: float = Field(default=0, ge=0)
     quantity_rejected: float = Field(default=0, ge=0)
     duration_minutes: float = Field(default=0, ge=0)
+    energy_cost: float = Field(default=0, ge=0)
+    consumables_cost: float = Field(default=0, ge=0)
+    setup_cost: float = Field(default=0, ge=0)
     event_type: str = "output"
     notes: str | None = None
     source: str = "manual"
@@ -16,13 +19,15 @@ class ProductionRouteStepIn(BaseModel):
     sequence: int = 10
     step_type: str = "subcontract"
     subcontract_service_id: int | None = None
+    product_operation_id: int | None = None
+    service_stage_id: int | None = None
     is_required: bool = True
     notes: str | None = None
 
     @field_validator("step_type")
     @classmethod
     def _valid_type(cls, value: str) -> str:
-        if value not in {"cutting", "sewing", "subcontract"}:
+        if value not in {"cutting", "sewing", "subcontract", "operation", "service_stage", "quality", "packing", "shipping"}:
             raise ValueError("Tipo de passo inválido")
         return value
 

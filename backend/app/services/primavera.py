@@ -446,8 +446,9 @@ def _send(company, cfg: dict, kind: str, payload: dict):
     return str(status)
 
 
-def queue_delivery(company, *, order, shipment, customer, lines) -> dict:
+def queue_delivery(company, *, order, shipment, customer, lines, quantities_by_line=None) -> dict:
     cfg = _config(company)
+    quantities_by_line = quantities_by_line or {}
     payload = {
         "DocumentType": cfg.get("delivery_doc_type") or "GT",
         "Serie": cfg.get("delivery_series") or "A",
@@ -463,10 +464,11 @@ def queue_delivery(company, *, order, shipment, customer, lines) -> dict:
         "Lines": [
             {
                 "Item": getattr(line, "description", None) or str(getattr(line, "style_id", "")),
-                "Quantity": getattr(line, "quantity", 0),
+                "Quantity": quantities_by_line.get(getattr(line, "id", None), getattr(line, "quantity", 0)),
                 "UnitPrice": getattr(line, "unit_price", 0),
             }
             for line in (lines or [])
+            if quantities_by_line.get(getattr(line, "id", None), getattr(line, "quantity", 0)) > 0
         ],
     }
     return enqueue(company, "delivery", payload)

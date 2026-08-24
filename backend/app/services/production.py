@@ -5,7 +5,7 @@ from fastapi import HTTPException
 
 from ..models import (
     Employee, Machine, Operation, ProductOperation, ProductionBatch, ProductionEvent,
-    ProductionLine, ProductionOrder, SalesOrder, SalesOrderLine, Style, WorkAssignment,
+    ProductionLine, ProductionMovement, ProductionOrder, SalesOrder, SalesOrderLine, Style, WorkAssignment,
 )
 from .production_stage import dispatch_ready_status, ensure_final_quality_checkpoint, update_order_stage
 
@@ -29,6 +29,57 @@ def refresh_employee_rate(employee) -> None:
         employee.hourly_cost = round(salary / (weekly * 52 / 12), 4)
 
 
+def _routing_progress(db, order: ProductionOrder, assignments: list[WorkAssignment]) -> float:
+    """Avanco da OF pelo gargalo da sequencia, incluindo passos ainda sem atribuicao."""
+    routing = (
+        db.query(ProductOperation)
+        .filter_by(style_id=order.style_id)
+        .order_by(ProductOperation.sequence, ProductOperation.id)
+        .all()
+    )
+    if routing:
+        completed_by_step = defaultdict(float)
+        for row in assignments:
+            if row.product_operation_id:
+                completed_by_step[row.product_operation_id] += float(row.completed_quantity or 0)
+        target = float(order.quantity or 0)
+        if target <= 0:
+            return 0
+        return min(min(1.0, completed_by_step[step.id] / target) for step in routing)
+
+    by_operation = defaultdict(lambda: [0.0, 0.0])
+    for row in assignments:
+        if not row.planned_quantity:
+            continue
+        entry = by_operation[row.operation_id]
+        entry[0] += row.completed_quantity or 0
+        entry[1] += row.planned_quantity or 0
+    ratios = [min(1, completed / planned) for completed, planned in by_operation.values() if planned]
+    return min(ratios) if ratios else 0
+
+
+def _refresh_batch_progress(db, batch: ProductionBatch) -> None:
+    assignments = db.query(WorkAssignment).filter_by(batch_id=batch.id).all()
+    if not assignments:
+        return
+    order = db.get(ProductionOrder, batch.production_order_id)
+    routing = db.query(ProductOperation).filter_by(style_id=order.style_id).all() if order else []
+    if routing:
+        completed_by_step = defaultdict(float)
+        for row in assignments:
+            if row.product_operation_id:
+                completed_by_step[row.product_operation_id] += float(row.completed_quantity or 0)
+        ratios = [min(1.0, completed_by_step[step.id] / float(batch.quantity or 1)) for step in routing]
+        progress = min(ratios) if ratios else 0
+        batch.completed_quantity = round(float(batch.quantity or 0) * progress, 2)
+    else:
+        by_operation = defaultdict(float)
+        for row in assignments:
+            by_operation[row.operation_id] += float(row.completed_quantity or 0)
+        batch.completed_quantity = min(float(batch.quantity or 0), min(by_operation.values())) if by_operation else 0
+    batch.status = "completed" if batch.quantity and batch.completed_quantity >= batch.quantity * 0.99 else "in_progress"
+
+
 def register_output(db, assignment: WorkAssignment, payload, *, occurred_on: date | None = None) -> ProductionEvent:
     employee = db.get(Employee, assignment.employee_id) if assignment.employee_id else None
     machine = db.get(Machine, assignment.machine_id) if assignment.machine_id else None
@@ -41,6 +92,19 @@ def register_output(db, assignment: WorkAssignment, payload, *, occurred_on: dat
                 f"Isto ultrapassa a quantidade planeada desta atribuição ({assignment.planned_quantity:.0f} un.). "
                 "Confirme para registar mesmo assim (ex.: retrabalho).",
             )
+    # Quando a OF já usa transferências formais entre operações, uma operação
+    # posterior não pode declarar mais saída do que recebeu da anterior.
+    if assignment.product_operation_id and not getattr(payload, "allow_overage", False):
+        routing = db.query(ProductOperation).filter_by(style_id=db.get(ProductionOrder, assignment.production_order_id).style_id).order_by(ProductOperation.sequence, ProductOperation.id).all()
+        position = next((index for index, row in enumerate(routing) if row.id == assignment.product_operation_id), 0)
+        transfers = db.query(ProductionMovement).filter_by(production_order_id=assignment.production_order_id, movement_type="operation_transfer").all()
+        if position > 0 and transfers:
+            received = sum(float(row.quantity or 0) for row in transfers if int((row.metadata_json or {}).get("target_product_operation_id") or 0) == assignment.product_operation_id)
+            related = db.query(WorkAssignment).filter_by(production_order_id=assignment.production_order_id, product_operation_id=assignment.product_operation_id).all()
+            consumed = sum(float(row.completed_quantity or 0) + float(row.rejected_quantity or 0) for row in related)
+            incoming = float(payload.quantity_good or 0) + float(payload.quantity_rejected or 0)
+            if consumed + incoming > received + 0.001:
+                raise HTTPException(422, f"Esta operação recebeu apenas {received:g} unidades da operação anterior.")
     rate = employee_hourly_rate(employee)
     event = ProductionEvent(
         company_id=assignment.company_id,
@@ -57,6 +121,9 @@ def register_output(db, assignment: WorkAssignment, payload, *, occurred_on: dat
         quantity_rejected=payload.quantity_rejected,
         labor_cost=round((rate / 60) * minutes, 4),
         machine_cost=round(((machine.hourly_cost if machine else 0) / 60) * minutes, 4),
+        energy_cost=round(float(getattr(payload, "energy_cost", 0) or 0), 4),
+        consumables_cost=round(float(getattr(payload, "consumables_cost", 0) or 0), 4),
+        setup_cost=round(float(getattr(payload, "setup_cost", 0) or 0), 4),
         notes=payload.notes,
         source=payload.source,
         event_time=datetime.combine(occurred_on, time(12, 0), tzinfo=timezone.utc) if occurred_on else datetime.now(timezone.utc),
@@ -72,24 +139,12 @@ def register_output(db, assignment: WorkAssignment, payload, *, occurred_on: dat
         if batch:
             batch.current_operation_id = assignment.operation_id
             batch.current_location = f"Linha {assignment.line_id}" if assignment.line_id else batch.current_location
-            batch.completed_quantity = min(batch.quantity or 0, round((batch.completed_quantity or 0) + payload.quantity_good, 2))
-            batch.status = "completed" if batch.quantity and batch.completed_quantity >= batch.quantity * 0.99 else "in_progress"
+            _refresh_batch_progress(db, batch)
 
     order = db.get(ProductionOrder, assignment.production_order_id)
     if order:
-        # Agrupa por operacao antes de tirar o minimo: varias atribuicoes da
-        # mesma operacao (ex.: dois operadores no registo diario) tem de somar
-        # a sua producao, nao ser comparadas isoladamente contra o total da OF.
         assignments = db.query(WorkAssignment).filter_by(production_order_id=order.id).all()
-        by_operation = defaultdict(lambda: [0.0, 0.0])
-        for row in assignments:
-            if not row.planned_quantity:
-                continue
-            entry = by_operation[row.operation_id]
-            entry[0] += row.completed_quantity or 0
-            entry[1] += row.planned_quantity or 0
-        ratios = [min(1, completed / planned) for completed, planned in by_operation.values() if planned]
-        progress = min(ratios) if ratios else 0
+        progress = _routing_progress(db, order, assignments)
         order.completed_quantity = round(order.quantity * progress, 2)
         order.status = "completed" if progress >= 1 else "in_progress"
         update_order_stage(db, order)
@@ -101,9 +156,14 @@ def register_output(db, assignment: WorkAssignment, payload, *, occurred_on: dat
         if order.sales_order_line_id:
             sales_line = db.get(SalesOrderLine, order.sales_order_line_id)
             sales_order = db.get(SalesOrder, sales_line.sales_order_id) if sales_line else None
-            if sales_order and sales_order.status not in {"ready", "shipped", "cancelled"}:
-                if dispatch_ready_status(db, sales_order)["ready"]:
-                    sales_order.status = "ready"
+            if sales_order and sales_order.status not in {"ready", "partially_shipped", "shipped", "cancelled"}:
+                linked_lines = db.query(SalesOrderLine).filter_by(sales_order_id=sales_order.id).all()
+                complete = all(
+                    sum(float(item.completed_quantity or 0) for item in db.query(ProductionOrder).filter_by(sales_order_line_id=line.id).all())
+                    + 0.001 >= float(line.quantity or 0)
+                    for line in linked_lines
+                )
+                sales_order.status = "ready" if complete else "in_production"
     if machine:
         if assignment.status == "completed":
             still_active = db.query(WorkAssignment.id).filter(
@@ -115,6 +175,8 @@ def register_output(db, assignment: WorkAssignment, payload, *, occurred_on: dat
         else:
             machine.status = "running"
     db.flush()
+    from .execution import sync_output_movement
+    sync_output_movement(db, event, assignment)
     return event
 
 
@@ -240,4 +302,3 @@ def record_daily_output(db, company_id: int, payload: dict) -> dict:
     event = register_output(db, assignment, _Payload(), occurred_on=work_date)
     db.flush()
     return {"ok": True, "event_id": event.id, "labor_cost": event.labor_cost, **list_daily_output(db, company_id, work_date)}
-

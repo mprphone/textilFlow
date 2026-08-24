@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from .routes import admin, auth, commercial, confection, configuration, costing, dashboard, design, integrations, mailbox, partners, process, products, production, quality, reports, resources
+from .routes import admin, auth, commercial, confection, configuration, costing, dashboard, design, integrations, mailbox, operations_control, partners, process, products, production, quality, reports, resources
 
 
 api_router = APIRouter()
@@ -21,3 +21,4 @@ api_router.include_router(integrations.router)
 api_router.include_router(commercial.router)
 api_router.include_router(partners.router)
 api_router.include_router(mailbox.router)
+api_router.include_router(operations_control.router)

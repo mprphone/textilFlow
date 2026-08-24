@@ -5,16 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#e4eef8">
   <title>TextileFlow AI</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=20260819-4">
-  <link rel="stylesheet" href="/assets/costing.css?v=20260824-2">
-  <link rel="stylesheet" href="/assets/experience.css?v=20260820-8">
-  <link rel="stylesheet" href="/assets/wizard.css?v=20260819-8">
-  <link rel="stylesheet" href="/assets/confection.css?v=20260822-3">
-  <link rel="stylesheet" href="/assets/confection-map.css?v=20260822-15">
-  <link rel="stylesheet" href="/assets/chrome.css?v=20260821-23">
-  <link rel="stylesheet" href="/assets/design.css?v=20260822-15">
-  <link rel="stylesheet" href="/assets/polish.css?v=20260822-35">
-  <link rel="stylesheet" href="/assets/supplier.css?v=20260823-3">
+  <link rel="stylesheet" href="/assets/app.css?v=20260824-40">
 </head>
 <body>
   <section id="login-screen" class="login-screen">
@@ -37,12 +28,12 @@
 
   <div id="app-shell" class="app-shell saft-shell hidden">
     <header class="topbar">
-      <button id="menu-toggle" class="icon-button" aria-label="Menu">☰</button>
+      <button id="menu-toggle" class="icon-button" type="button" aria-label="Abrir menu" data-icon="menu"></button>
       <a class="brand" href="#/dashboard">Textile<span>Flow</span></a>
       <div class="topbar-title"><strong id="page-title">Dashboard</strong><span id="page-subtitle">Controlo industrial integrado</span></div>
       <nav id="module-nav" class="module-nav" aria-label="Módulos principais"></nav>
       <div class="topbar-actions">
-        <button id="quick-action" class="btn primary quick-action" type="button">＋ Novo</button>
+        <button id="quick-action" class="btn primary quick-action" type="button"><span data-icon="add" aria-hidden="true"></span>Novo</button>
         <button id="user-button" class="user-chip" type="button">A</button>
         <span id="user-meta" class="user-meta"></span>
         <button id="logout-button" class="topbar-logout" type="button">Sair</button>
@@ -65,19 +56,19 @@
   </div>
 
   <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
-    <button id="modal-emergency-close" class="modal-emergency-close" type="button" aria-label="Fechar janela">×</button>
+    <button id="modal-emergency-close" class="modal-emergency-close" type="button" aria-label="Fechar janela" data-icon="close"></button>
     <div class="modal-card">
       <header>
         <div><h2 id="modal-title">Registo</h2><p id="modal-subtitle"></p></div>
         <div class="modal-header-right">
           <div id="modal-status-slot"></div>
-          <button id="modal-close" class="icon-button">×</button>
+          <button id="modal-close" class="icon-button" type="button" aria-label="Fechar janela" data-icon="close"></button>
         </div>
       </header>
       <div id="modal-body" class="modal-body"></div>
     </div>
   </div>
-  <div id="toast-stack" class="toast-stack"></div>
-  <script type="module" src="/js/login.js?v=20260824-1"></script>
+  <div id="toast-stack" class="toast-stack" role="region" aria-label="Notificações" aria-live="polite"></div>
+  <script type="module" src="/js/login.js?v=20260824-40"></script>
 </body>
 </html>

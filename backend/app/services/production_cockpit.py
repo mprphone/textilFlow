@@ -4,7 +4,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from ..models import (
-    Customer, InventoryMovement, Material, ProductionBatch, ProductionEvent,
+    Customer, InventoryMovement, Material, ProductionBatch, ProductionEvent, ProductionMovement,
     ProductionLine, ProductionMaterialRequirement, ProductionOrder, PurchaseOrder,
     PurchaseOrderLine, QualityInspection, SalesOrder, SalesOrderLine, SewingPlan,
     Shipment, StockLot, Style, SubcontractJob, SubcontractService, Supplier,
@@ -219,7 +219,7 @@ def order_cockpit(db: Session, order: ProductionOrder) -> dict:
             "commercial_name": commercial_name(db, order, sales, sheet),
             "days_to_delivery": days_left,
         },
-        "holdings": {key: stock[key] for key in ("internal", "external", "shipped", "revista", "unassigned", "total")},
+        "holdings": {key: stock[key] for key in ("internal", "external", "shipped", "revista", "finished_goods", "unassigned", "total")},
         "locations": locations,
         "materials": materials,
         "goods": [row for row in materials if row.get("cost_group") == "fabric"],
@@ -235,5 +235,6 @@ def order_cockpit(db: Session, order: ProductionOrder) -> dict:
         "fabric_purchases": [{"id": row.id, "order_no": row.order_no, "status": row.status, "total": row.total, "expected_date": row.expected_date.isoformat() if row.expected_date else None} for row in fabric_pos],
         "shipments": shipped_docs,
         "stock_movements": [model_to_dict(row) for row in movements],
+        "production_movements": [model_to_dict(row) for row in db.query(ProductionMovement).filter_by(production_order_id=order.id).order_by(ProductionMovement.occurred_at.desc(), ProductionMovement.id.desc()).limit(150).all()],
         "material_requirements": materials,
     }

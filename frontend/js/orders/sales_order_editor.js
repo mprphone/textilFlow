@@ -1,5 +1,5 @@
-import { crudCreate, crudDelete, crudList, crudUpdate, get, post } from '../api.js';
-import { badge, date, esc, money, number } from '../format.js?v=20260819-5';
+import { crudDelete, crudList, get, post } from '../api.js';
+import { badge, date, esc, money, number } from '../format.js?v=20260824-2';
 import { state } from '../state.js';
 import { confirmDelete, empty, pageHeader, toast } from '../ui.js?v=20260821-19';
 
@@ -7,8 +7,9 @@ const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 
 const STATUS_LABELS = {
   draft: 'Rascunho', confirmed: 'Confirmada', in_production: 'Em produção',
-  ready: 'Pronta', shipped: 'Expedida', cancelled: 'Cancelada',
+  ready: 'Pronta', partially_shipped: 'Expedida parcialmente', shipped: 'Expedida', cancelled: 'Cancelada',
 };
+const EDITABLE_STATUS_LABELS = { draft: STATUS_LABELS.draft, confirmed: STATUS_LABELS.confirmed };
 
 const COLOR_HEX = {
   preto: '#1a1a1a', branco: '#f5f5f5', cinzento: '#8a8a8a', cinza: '#8a8a8a',
@@ -177,13 +178,20 @@ export async function renderSalesOrders(panel) {
         <td>${date(row.delivery_date)}</td>
         <td><span class="badge blue">${esc(STATUS_LABELS[row.status] || row.status)}</span></td>
         <td class="listing-actions"><div class="row-actions">
-          <button class="btn icon" type="button" data-edit-order="${row.id}" aria-label="Editar">✎</button>
-          <button class="btn icon danger" type="button" data-delete-order="${row.id}" aria-label="Eliminar">×</button>
+          ${['draft','confirmed'].includes(row.status) && row.custom_data?.source !== 'accepted_cost_proposal' ? `<button class="btn icon" type="button" data-edit-order="${row.id}" aria-label="Editar">✎</button><button class="btn small primary" type="button" data-release-order="${row.id}">Libertar</button><button class="btn icon danger" type="button" data-delete-order="${row.id}" aria-label="Eliminar">×</button>` : ''}
         </div></td>
       </tr>`).join('') : `<tr><td colspan="7">${empty('Sem encomendas', 'Crie a primeira encomenda de cliente.')}</td></tr>`}</tbody></table></div></section>`;
 
   panel.querySelector('[data-new-order]').addEventListener('click', () => renderSalesOrderEditor(panel, null));
   panel.querySelectorAll('[data-edit-order]').forEach(button => button.addEventListener('click', () => renderSalesOrderEditor(panel, Number(button.dataset.editOrder))));
+  panel.querySelectorAll('[data-release-order]').forEach(button => button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      const result = await post(`/production/sales-orders/${button.dataset.releaseOrder}/release`, {});
+      toast(`${result.created.length} ordem(ns) de fabrico criada(s).`);
+      await renderSalesOrders(panel);
+    } catch (error) { button.disabled = false; toast(error.message, 'error'); }
+  }));
   panel.querySelectorAll('[data-delete-order]').forEach(button => button.addEventListener('click', async () => {
     if (!confirmDelete('esta encomenda')) return;
     try { await crudDelete('sales-orders', Number(button.dataset.deleteOrder), state.companyId); toast('Encomenda eliminada.'); await renderSalesOrders(panel); }
@@ -254,7 +262,7 @@ export async function renderSalesOrderEditor(panel, orderId) {
         <label>PO cliente<input name="customer_po" value="${esc(order.customer_po || '')}" placeholder="Referência da encomenda do cliente"></label>
         <label>Data<input type="date" name="order_date" value="${order.order_date || ''}"></label>
         <label>Entrega<input type="date" name="delivery_date" value="${order.delivery_date || ''}"></label>
-        <label>Estado<select name="status">${Object.entries(STATUS_LABELS).map(([value, label]) => `<option value="${value}" ${value === order.status ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></label>
+        <label>Estado<select name="status">${Object.entries(EDITABLE_STATUS_LABELS).map(([value, label]) => `<option value="${value}" ${value === order.status ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></label>
         <label>Moeda<input name="currency" value="${esc(order.currency || 'EUR')}"></label>
         <label class="full">Notas<textarea name="notes">${esc(order.notes || '')}</textarea></label>
       </div>
@@ -443,35 +451,21 @@ export async function renderSalesOrderEditor(panel, orderId) {
         currency: root.querySelector('input[name="currency"]').value || 'EUR',
         notes: root.querySelector('textarea[name="notes"]').value || null,
       };
-      const savedOrder = orderId ? await crudUpdate('sales-orders', orderId, headerPayload) : await crudCreate('sales-orders', headerPayload);
-      const salesOrderId = savedOrder.id || orderId;
-
+      const items = [];
       for (const block of blocks) {
-        const usedVariantIds = new Set();
         for (const row of block.gradeState.rows) {
           const color = (row.color || '').trim();
           for (const size of block.gradeState.sizes) {
             const quantity = Number(row.qty[size]) || 0;
             if (quantity <= 0) continue;
             if (!color) { throw new Error(`Todas as linhas com quantidade têm de ter uma cor (artigo ${block.index}).`); }
-            const variant = await post(`/products/styles/${block.styleId}/variants`, { color, size });
-            usedVariantIds.add(variant.id);
-            const linePayload = {
-              company_id: state.companyId,
-              sales_order_id: salesOrderId, style_id: block.styleId, variant_id: variant.id,
-              description: `${color} · ${size}`, quantity, unit_price: row.price || 0,
-              delivery_date: headerPayload.delivery_date,
-            };
-            const existingLineId = block.lineIdByVariant[variant.id];
-            if (existingLineId) await crudUpdate('sales-order-lines', existingLineId, linePayload);
-            else { const savedLine = await crudCreate('sales-order-lines', linePayload); block.lineIdByVariant[variant.id] = savedLine.id; }
+            items.push({ style_id: block.styleId, color, size, quantity, unit_price: row.price || 0 });
           }
         }
-        for (const [variantId, lineId] of Object.entries(block.lineIdByVariant)) {
-          if (!usedVariantIds.has(Number(variantId))) await crudDelete('sales-order-lines', lineId, state.companyId);
-        }
       }
-      toast(orderId ? 'Encomenda atualizada.' : 'Encomenda criada.');
+      if (!items.length) throw new Error('Indique pelo menos uma quantidade na grade.');
+      await post('/production/sales-orders/save', { id: orderId || null, company_id: state.companyId, header: headerPayload, items });
+      toast(orderId ? 'Encomenda e grade atualizadas.' : 'Encomenda criada. Use “Libertar” para gerar as ordens de fabrico.');
       await renderSalesOrders(panel);
     } catch (error) {
       button.disabled = false;

@@ -2,9 +2,10 @@ from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from ...models import (
-    Certification, CostSheet, CuttingJob, Material, Operation, OverheadCost, ProductOperation,
-    ProductionBatch, ProductionOrder, PurchaseOrder, PurchaseOrderLine, QualityInspection,
-    SalesOrder, SalesOrderLine, Shipment, StockLot, WorkAssignment,
+    Certification, CostLine, CostSheet, CuttingJob, Material, Operation, OverheadCost, ProductOperation,
+    ProductionBatch, ProductionMaterialRequirement, ProductionOrder, ProposalProductionRelease,
+    PurchaseOrder, PurchaseOrderLine, QualityInspection, ReworkOrder, SalesOrder, SalesOrderLine,
+    ShipmentAllocation, StockLot, WorkAssignment,
 )
 from ..production import register_output
 
@@ -48,12 +49,12 @@ def seed_production(db, foundation: dict, product: dict) -> dict:
     )
     db.add(sales_order)
     db.flush()
-    sales_line = SalesOrderLine(company_id=company.id, sales_order_id=sales_order.id, style_id=product["style"].id, description=product["style"].description, quantity=25000, unit_price=12.20, delivery_date=sales_order.delivery_date)
+    sales_line = SalesOrderLine(company_id=company.id, sales_order_id=sales_order.id, style_id=product["style"].id, description=product["style"].description, quantity=1000, unit_price=12.20, delivery_date=sales_order.delivery_date)
     db.add(sales_line)
     db.flush()
     production_order = ProductionOrder(
         company_id=company.id, sales_order_line_id=sales_line.id, style_id=product["style"].id,
-        line_id=foundation["lines"]["L1"].id, order_no="OF-2026-0841", quantity=25000,
+        line_id=foundation["lines"]["L1"].id, order_no="OF-2026-0841", quantity=1000,
         planned_start=date.today() - timedelta(days=5), planned_end=date.today() + timedelta(days=8),
         status="in_progress", priority=1, current_stage="confeção", current_location="Linha Confeção 1",
         custom_data={"approved_cost_sheet_id": product["sheet"].id, "commercial_name": "Ana Costa"},
@@ -66,7 +67,7 @@ def seed_production(db, foundation: dict, product: dict) -> dict:
 
     employee_cycle = ["E003", "E004", "E004", "E003", "E005", "E007"]
     machine_cycle = ["PP-01", "COS-01", "COS-01", "COS-01", "REC-01", None]
-    outputs = [820, 780, 760, 690, 650, 610]
+    outputs = [995, 994, 993, 992, 991, 990]
     assignments = []
     product_operations = db.query(ProductOperation).filter_by(style_id=product["style"].id).order_by(ProductOperation.sequence).all()
     for index, product_operation in enumerate(product_operations):
@@ -84,7 +85,7 @@ def seed_production(db, foundation: dict, product: dict) -> dict:
         db.flush()
         assignments.append(assignment)
         register_output(db, assignment, SimpleNamespace(
-            quantity_good=outputs[index], quantity_rejected=5 + index,
+            quantity_good=outputs[index], quantity_rejected=max(0, 1000 - outputs[index]),
             duration_minutes=max(240, outputs[index] * product_operation.smv / 0.84),
             event_type="output", notes="Registo inicial demonstrativo", source="terminal",
         ))
@@ -130,5 +131,79 @@ def seed_production(db, foundation: dict, product: dict) -> dict:
     db.add(purchase)
     db.flush()
     db.add(PurchaseOrderLine(company_id=company.id, purchase_order_id=purchase.id, material_id=product["materials"]["FL320-RED"].id, quantity=2000, unit_cost=4.20))
-    db.add(Shipment(company_id=company.id, sales_order_id=sales_order.id, shipment_no="EXP-2026-0088", carrier="Transportes Demo", destination="Centro Logístico Cliente", quantity=0, status="planned"))
+    db.flush()
+
+    # Percurso demo coerente: revista -> lote -> caixas -> duas expedições parciais.
+    from ..execution import record_movement, sync_quality_movement
+    from ..operations_control import complete_rework, create_customer_claim, dispose_quality_hold
+    from ..production_stage import record_packing
+    from ..shipping import create_partial_shipment
+
+    record_movement(
+        db, company_id=company.id, production_order_id=production_order.id,
+        movement_type="distribution", quantity=990, location_from="unassigned", location_to="revista",
+        reference="Revista inicial demo", idempotency_key=f"demo-revista:{production_order.id}",
+    )
+    final_pass = QualityInspection(
+        company_id=company.id, production_order_id=production_order.id, batch_id=batch.id,
+        inspection_type="revista", inspected_quantity=990, defect_quantity=0,
+        result="passed", disposition="released", released_quantity=990,
+        notes="Lote demo aprovado para embalagem.",
+    )
+    db.add(final_pass)
+    db.flush()
+    record_packing(db, production_order, {"quantity": 400, "batch_id": batch.id, "package_code": "CX-0841-001", "packaging_unit_cost": .12})
+    record_packing(db, production_order, {"quantity": 340, "batch_id": batch.id, "package_code": "CX-0841-002", "packaging_unit_cost": .12})
+
+    def shipment_payload(number: str, quantity: float) -> dict:
+        return {
+            "shipment_no": number, "carrier": "Transportes Demo", "quantity": quantity,
+            "destination": "Centro Logístico Cliente", "transport_cost": 95,
+        }
+
+    first_shipment, first_lines, _ = create_partial_shipment(db, sales_order, shipment_payload("EXP-2026-0088", 300))
+    create_partial_shipment(db, sales_order, shipment_payload("EXP-2026-0091", 200))
+
+    # Devolução recebida e ainda por decidir, ligada à caixa original.
+    allocation = db.query(ShipmentAllocation).filter_by(shipment_line_id=first_lines[0].id).first()
+    if allocation:
+        create_customer_claim(db, company.id, {
+            "sales_order_id": sales_order.id, "shipment_id": first_shipment.id,
+            "claim_type": "quality", "severity": "major", "reason": "Mancha detetada na receção do cliente",
+            "lines": [{"shipment_line_id": first_lines[0].id, "shipment_allocation_id": allocation.id, "quantity": 10}],
+        })
+
+    # Retrabalho parcial: 12 peças bloqueadas, 5 recuperadas e 7 ainda em curso.
+    failed = QualityInspection(
+        company_id=company.id, production_order_id=production_order.id, batch_id=batch.id,
+        inspection_type="revista", inspected_quantity=12, defect_quantity=12,
+        result="failed", defect_code="MANCHA", severity="major", notes="Aguardar correção e reinspeção.",
+    )
+    db.add(failed)
+    db.flush()
+    sync_quality_movement(db, failed)
+    rework_result = dispose_quality_hold(db, failed, "rework")
+    rework = db.get(ReworkOrder, rework_result["rework_order_id"])
+    complete_rework(db, rework, {"completed_quantity": 5, "scrap_quantity": 0, "labor_cost": 8.5, "notes": "Primeira parcela corrigida"})
+
+    # Falta confirmada que alimenta o aprovisionamento por exceção.
+    release = ProposalProductionRelease(
+        company_id=company.id, cost_sheet_id=product["sheet"].id,
+        sales_order_id=sales_order.id, sales_order_line_id=sales_line.id,
+        production_order_id=production_order.id, idempotency_key="demo-release-0841",
+        quantity=1000, reserve_stock=True, request_snapshot={"source": "demo"},
+    )
+    db.add(release)
+    db.flush()
+    rib = product["materials"]["RIB280-RED"]
+    cost_line = db.query(CostLine).filter_by(cost_sheet_id=product["sheet"].id).order_by(CostLine.id).first()
+    if cost_line:
+        db.add(ProductionMaterialRequirement(
+            company_id=company.id, release_id=release.id, production_order_id=production_order.id,
+            cost_line_id=cost_line.id, material_id=rib.id, description=rib.name,
+            material_category=rib.category, unit=rib.unit, unit_required=.15,
+            required_quantity=150, available_quantity=25, shortage_quantity=125,
+            reserved_quantity=25, average_unit_cost=rib.unit_cost, real_unit_cost=rib.unit_cost,
+            estimated_amount=150 * rib.unit_cost, lots=[], status="shortage",
+        ))
     return {"sales_order": sales_order, "production_order": production_order, "batch": batch, "assignments": assignments}

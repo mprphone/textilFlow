@@ -7,7 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.db import Base
 from backend.app.models import (
-    Company, Customer, Employee, Machine, Operation, ProductionBatch, ProductionOrder,
+    Company, Customer, Employee, Machine, Operation, ProductOperation, ProductionBatch, ProductionOrder,
     SalesOrder, SalesOrderLine, Style, WorkAssignment,
 )
 from backend.app.services.production import record_daily_output, register_output
@@ -91,6 +91,25 @@ class ProductionSyncTest(unittest.TestCase):
         # isoladamente contra o total da ordem.
         self.assertEqual(self.order.completed_quantity, 100)
         self.assertEqual(self.order.status, "completed")
+
+    def test_first_routing_step_cannot_complete_the_whole_order(self):
+        second_operation = Operation(company_id=self.company.id, code="OP2", name="Remate", standard_time_min=1)
+        self.db.add(second_operation)
+        self.db.flush()
+        step_one = ProductOperation(company_id=self.company.id, style_id=self.style.id, operation_id=self.operation.id, sequence=1, smv=2)
+        step_two = ProductOperation(company_id=self.company.id, style_id=self.style.id, operation_id=second_operation.id, sequence=2, smv=1)
+        self.db.add_all([step_one, step_two])
+        self.db.flush()
+        first = WorkAssignment(
+            company_id=self.company.id, production_order_id=self.order.id,
+            product_operation_id=step_one.id, operation_id=self.operation.id,
+            planned_quantity=100, status="queued",
+        )
+        self.db.add(first)
+        self.db.flush()
+        register_output(self.db, first, _Payload(good=100))
+        self.assertEqual(self.order.completed_quantity, 0)
+        self.assertEqual(self.order.status, "in_progress")
 
     def test_sales_order_flips_to_ready_when_production_covers_the_line(self):
         sales = SalesOrder(company_id=self.company.id, customer_id=self.customer.id, order_no="EC-1", delivery_date=date.today() + timedelta(days=5), status="confirmed")

@@ -136,6 +136,8 @@ class ProductionBatch(Base, TimestampMixin):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
     production_order_id = Column(Integer, ForeignKey("production_orders.id"), nullable=False, index=True)
     sewing_line_id = Column(Integer, ForeignKey("production_lines.id"), index=True)
+    variant_id = Column(Integer, ForeignKey("style_variants.id"), index=True)
+    source_cutting_job_id = Column(Integer, ForeignKey("cutting_jobs.id"), index=True)
     batch_no = Column(String(100), nullable=False)
     color = Column(String(100))
     size = Column(String(30))
@@ -188,6 +190,9 @@ class ProductionEvent(Base):
     quantity_rejected = Column(Float, default=0, nullable=False)
     labor_cost = Column(Float, default=0, nullable=False)
     machine_cost = Column(Float, default=0, nullable=False)
+    energy_cost = Column(Float, default=0, nullable=False)
+    consumables_cost = Column(Float, default=0, nullable=False)
+    setup_cost = Column(Float, default=0, nullable=False)
     notes = Column(Text)
     source = Column(String(30), default="manual", nullable=False)
 

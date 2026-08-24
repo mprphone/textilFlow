@@ -1,0 +1,17 @@
+@layer legacy, tokens, base, components, pages, utilities, overrides;
+
+@import url("./styles.css?v=20260824-40") layer(legacy);
+@import url("./costing.css?v=20260824-40") layer(legacy);
+@import url("./experience.css?v=20260824-40") layer(legacy);
+@import url("./wizard.css?v=20260824-40") layer(legacy);
+@import url("./confection.css?v=20260824-40") layer(legacy);
+@import url("./confection-map.css?v=20260824-40") layer(legacy);
+@import url("./chrome.css?v=20260824-40") layer(legacy);
+@import url("./design.css?v=20260824-40") layer(legacy);
+@import url("./supplier.css?v=20260824-40") layer(legacy);
+@import url("./system/tokens.css?v=20260824-40") layer(tokens);
+@import url("./system/base.css?v=20260824-40") layer(base);
+@import url("./system/components.css?v=20260824-40") layer(components);
+@import url("./system/utilities.css?v=20260824-40") layer(utilities);
+@import url("./polish.css?v=20260824-40") layer(pages);
+@import url("./system/responsive.css?v=20260824-40") layer(overrides);

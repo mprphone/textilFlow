@@ -37,7 +37,7 @@ export async function render(container, moduleId) {
       <div class="table-wrap listing-table"><table class="data-table"><thead><tr><th>Ref.</th><th>OF</th><th>Qtd.</th><th>Concluído</th><th>Un.</th><th>Estado</th><th>Data</th></tr></thead>
       <tbody>${jobs.length ? jobs.map(job => `<tr><td><b>${esc(job.reference)}</b></td><td>${esc(orders.find(row => row.id === job.production_order_id)?.order_no || '—')}</td><td>${number(job.quantity)}</td><td>${number(job.completed_quantity)}</td><td>${esc(job.unit)}</td><td>${badge(job.status)}</td><td>${date(job.planned_date)}</td></tr>`).join('') : '<tr><td colspan="7"><div class="empty"><strong>Sem trabalhos internos</strong>Crie o primeiro trabalho deste processo.</div></td></tr>'}</tbody></table></div>
     </section>
-    <div class="dossier-grid" style="margin-top:10px">
+    <div class="dossier-grid u-mt-3">
       <section class="listing-panel"><div class="card-header" style="padding:8px 10px"><h2>OF no processo</h2></div>
         <div class="table-wrap listing-table"><table class="data-table"><thead><tr><th>OF</th><th>Artigo</th><th>Qtd.</th><th>Fase</th></tr></thead>
         <tbody>${orders.length ? orders.map(row => `<tr><td><b>${esc(row.order_no)}</b></td><td>${esc(row.reference ? `${row.reference} · ${row.description}` : '—')}</td><td>${number(row.quantity)}</td><td>${badge(row.current_stage)}</td></tr>`).join('') : '<tr><td colspan="4"><div class="empty"><strong>Nenhuma OF nesta fase</strong>Distribua quantidade para este processo no rasto da produção.</div></td></tr>'}</tbody></table></div>
@@ -47,7 +47,7 @@ export async function render(container, moduleId) {
         <tbody>${outside.length ? outside.map(job => `<tr><td><b>${esc(job.reference)}</b></td><td>${esc(job.service_name || '—')}</td><td>${number(job.out_quantity || job.quantity)}</td><td>${badge(job.status)}</td></tr>`).join('') : '<tr><td colspan="4"><div class="empty"><strong>Nada fora</strong>Este processo corre em casa, ou ainda não há envios.</div></td></tr>'}</tbody></table></div>
       </section>
     </div>
-    <div class="dossier-grid" style="margin-top:10px">
+    <div class="dossier-grid u-mt-3">
       <section class="listing-panel"><div class="card-header" style="padding:8px 10px"><h2>Máquinas</h2><a class="btn small" href="#/machines">Abrir cadastro</a></div>
         <div class="table-wrap listing-table"><table class="data-table"><tbody>${machines.length ? machines.map(row => `<tr><td><b>${esc(row.code)}</b></td><td>${esc(row.name)}</td><td>${badge(row.status || '—')}</td></tr>`).join('') : '<tr><td colspan="3" class="muted">Ainda sem máquinas associadas a este processo. Cadastre-as em Máquinas.</td></tr>'}</tbody></table></div>
       </section>

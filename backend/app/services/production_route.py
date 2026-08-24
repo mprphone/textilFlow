@@ -2,12 +2,18 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from ..models import ProductionOrder, ProductionRouteStep, SewingPlan, SubcontractJob, SubcontractService
+from ..models import (
+    Operation, ProcessJob, ProductOperation, ProductionOrder, ProductionRouteStep,
+    QualityInspection, ServiceStage, SewingPlan, SubcontractJob, SubcontractService,
+    WorkAssignment,
+)
 
 STEP_LABEL = {
     "cutting": "Corte", "sewing": "Confeção interna", "dyeing": "Tinturaria", "laundry": "Lavandaria",
     "printing": "Estamparia", "embroidery": "Bordado", "finishing": "Acabamento",
     "transport": "Transporte", "other": "Serviço externo",
+    "operation": "Operação", "service_stage": "Etapa interna",
+    "quality": "Qualidade / revista", "packing": "Embalagem", "shipping": "Expedição",
 }
 DONE_JOB = {"received", "cancelled"}
 OPEN_JOB = {"planned", "sent", "partial", "problem"}
@@ -66,18 +72,50 @@ def _subcontract_progress(db: Session, order: ProductionOrder, step: ProductionR
     return {"status": status, "quantity_sent": sent, "quantity_received": received}
 
 
+def _quantity_progress(value: float, target: float) -> dict:
+    status = "done" if target > 0 and value + 0.001 >= target else "in_progress" if value > 0.001 else "not_started"
+    return {"status": status, "quantity_sent": None, "quantity_received": round(value, 2)}
+
+
 def step_progress(db: Session, order: ProductionOrder, step: ProductionRouteStep, jobs: list[SubcontractJob] | None = None) -> dict:
     if step.step_type == "cutting":
         return _cutting_progress(db, order)
     if step.step_type == "sewing":
         return _sewing_progress(db, order)
+    if step.step_type == "operation":
+        completed = sum(float(row.completed_quantity or 0) for row in db.query(WorkAssignment).filter_by(
+            production_order_id=order.id, product_operation_id=step.product_operation_id
+        ).all())
+        return _quantity_progress(completed, float(order.quantity or 0))
+    if step.step_type == "service_stage":
+        stage = db.get(ServiceStage, step.service_stage_id) if step.service_stage_id else None
+        rows = db.query(ProcessJob).filter_by(production_order_id=order.id, process_kind=stage.code).all() if stage else []
+        return _quantity_progress(sum(float(row.completed_quantity or 0) for row in rows), float(order.quantity or 0))
+    if step.step_type == "quality":
+        rows = db.query(QualityInspection).filter_by(production_order_id=order.id).filter(
+            QualityInspection.inspection_type.in_(["final", "revista"])
+        ).all()
+        released = sum(float(row.released_quantity or 0) for row in rows if row.result in {"passed", "conditional"})
+        return _quantity_progress(released, float(order.quantity or 0))
+    if step.step_type in {"packing", "shipping"}:
+        from .execution import movement_holdings
+        stock = movement_holdings(db, order)
+        value = stock["finished_goods"] + stock["shipped"] if step.step_type == "packing" else stock["shipped"]
+        return _quantity_progress(value, float(order.quantity or 0))
     jobs = jobs if jobs is not None else db.query(SubcontractJob).filter_by(production_order_id=order.id).all()
     return _subcontract_progress(db, order, step, jobs)
 
 
 def _step_label(db: Session, step: ProductionRouteStep) -> str:
-    if step.step_type in {"cutting", "sewing"}:
+    if step.step_type in {"cutting", "sewing", "quality", "packing", "shipping"}:
         return STEP_LABEL[step.step_type]
+    if step.step_type == "operation":
+        product_step = db.get(ProductOperation, step.product_operation_id) if step.product_operation_id else None
+        operation = db.get(Operation, product_step.operation_id) if product_step else None
+        return operation.name if operation else STEP_LABEL["operation"]
+    if step.step_type == "service_stage":
+        stage = db.get(ServiceStage, step.service_stage_id) if step.service_stage_id else None
+        return stage.name if stage else STEP_LABEL["service_stage"]
     service = db.get(SubcontractService, step.subcontract_service_id) if step.subcontract_service_id else None
     return service.name if service else STEP_LABEL.get("other")
 
@@ -94,7 +132,7 @@ def build_route_status(db: Session, order: ProductionOrder) -> list[dict]:
     for step in steps:
         progress = step_progress(db, order, step, jobs)
         locked = not previous_done
-        kind = "internal" if step.step_type in {"cutting", "sewing"} else "external"
+        kind = "external" if step.step_type == "subcontract" else "internal"
         label = _step_label(db, step)
         if locked:
             status = "locked"
@@ -108,7 +146,7 @@ def build_route_status(db: Session, order: ProductionOrder) -> list[dict]:
             status, reason, can_go = "ready", None, True
         result.append({
             "sequence": step.sequence,
-            "key": step.step_type if step.step_type in {"cutting", "sewing"} else (
+            "key": step.step_type if step.step_type != "subcontract" else (
                 _service_category(db, step) or "other"
             ),
             "label": label,

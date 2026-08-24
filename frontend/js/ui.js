@@ -4,6 +4,7 @@ const modal = document.getElementById('modal');
 const modalTitle = document.getElementById('modal-title');
 const modalSubtitle = document.getElementById('modal-subtitle');
 const modalBody = document.getElementById('modal-body');
+let previousFocus = null;
 
 export function setHeading(title, subtitle = '') {
   document.getElementById('page-title').textContent = title;
@@ -16,12 +17,14 @@ export function pageHeader(title, subtitle, actions = '', extraClass = '') {
 }
 
 export function openModal(title, body, subtitle = '') {
+  previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   modalTitle.textContent = title;
   modalSubtitle.textContent = subtitle;
   modalBody.innerHTML = body;
   modal.setAttribute('aria-hidden', 'false');
   modal.classList.remove('hidden');
   document.body.classList.add('modal-open');
+  requestAnimationFrame(() => modal.querySelector('input:not(:disabled),select:not(:disabled),textarea:not(:disabled),button:not(:disabled),a[href]')?.focus());
 }
 
 export function closeModal() {
@@ -31,19 +34,25 @@ export function closeModal() {
   modalTitle.textContent = '';
   modalSubtitle.textContent = '';
   modalBody.innerHTML = '';
+  if (previousFocus?.isConnected) previousFocus.focus();
+  previousFocus = null;
   const statusSlot = document.getElementById('modal-status-slot');
   if (statusSlot) statusSlot.innerHTML = '';
 }
 
 export function toast(message, type = 'success') {
   const item = document.createElement('div');
-  item.className = `toast ${type}`; item.textContent = message;
+  item.className = `toast ${type}`;
+  item.setAttribute('role', type === 'error' ? 'alert' : 'status');
+  const symbol = document.createElement('span'); symbol.dataset.icon = type === 'error' ? 'warning' : 'check'; symbol.setAttribute('aria-hidden', 'true');
+  const copy = document.createElement('span'); copy.textContent = message;
+  item.append(symbol, copy);
   document.getElementById('toast-stack').appendChild(item);
   setTimeout(() => item.remove(), String(message).length > 90 ? 9000 : 3500);
 }
 
-export function loading(message = 'A carregar dados…') { return `<div class="loading">${esc(message)}</div>`; }
-export function empty(title = 'Sem registos', detail = 'Crie o primeiro registo para começar.') { return `<div class="empty"><strong>${esc(title)}</strong>${esc(detail)}</div>`; }
+export function loading(message = 'A carregar dados…') { return `<div class="loading" role="status" aria-live="polite"><span>${esc(message)}</span></div>`; }
+export function empty(title = 'Sem registos', detail = 'Crie o primeiro registo para começar.') { return `<div class="empty" role="status"><strong>${esc(title)}</strong><span>${esc(detail)}</span></div>`; }
 export function confirmDelete(label = 'este registo') { return window.confirm(`Eliminar ${label}? Esta ação não pode ser anulada.`); }
 
 document.getElementById('modal-close')?.addEventListener('click', closeModal);
@@ -55,6 +64,13 @@ if (emergencyClose) {
 }
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+  if(event.key==='Tab'&&!modal.classList.contains('hidden')){
+    const focusable=[...modal.querySelectorAll('a[href],button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex]:not([tabindex="-1"])')].filter(element=>!element.hidden&&element.offsetParent!==null);
+    if(!focusable.length)return;
+    const first=focusable[0],last=focusable[focusable.length-1];
+    if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}
+    else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}
+  }
 });
 
 // Evita que o navegador restaure uma camada modal antiga e bloqueie a aplicação.

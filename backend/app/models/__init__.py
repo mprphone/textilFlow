@@ -4,9 +4,11 @@ from .configuration import AuditLog, FieldDefinition, FormTemplate, WorkflowDefi
 from .confection import CapacityDay, CapacityEvent, EmployeeSkill, ExternalCapacity, SewingPlan, WorkShift
 from .costs import ActualCostEntry, CostLine, CostSheet, ExchangeRate, OverheadCost
 from .development import Development, DevelopmentAssignee, DevelopmentComment, DevelopmentStageEvent, DevelopmentTask
+from .execution import BatchGenealogy, OperationalAlert, ProductionMovement
 from .factory import Department, Employee, Facility, Machine, MachineType, ProductionLine, SkillType
 from .identity import Company, User, UserCompany
 from .inventory import InventoryMovement, PurchaseOrder, PurchaseOrderLine, StockLot, Warehouse
+from .operations_control import CustomerClaim, CustomerReturnLine, FinishedGoodsUnit, IntegrationReconciliation, OperationalNotification, ProcurementSuggestion, ReworkOrder, ShipmentAllocation
 from .manufacturing import (
     CuttingJob, DowntimeEvent, ProductionBatch, ProductionEvent, ProductionOrder,
     ProductionMaterialRequirement, ProductionOrderVariant, ProposalProductionRelease, SalesOrder, SalesOrderLine,
@@ -15,7 +17,7 @@ from .manufacturing import (
 from .partners import Bank, Certification, Customer, PaymentTerm, Supplier, SupplierOccurrence
 from .process import ProcessJob
 from .product import ArticleType, BOMItem, Material, Operation, ProductOperation, Sample, Style, StyleRevision, StyleVariant
-from .quality import CorrectiveAction, QualityInspection, Shipment
+from .quality import CorrectiveAction, QualityInspection, Shipment, ShipmentLine
 from .subcontracting import ProductionRouteStep, ServiceStage, SubcontractJob, SubcontractService
 
 __all__ = [name for name in globals() if not name.startswith("_")]

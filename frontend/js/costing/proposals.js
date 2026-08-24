@@ -85,8 +85,7 @@ function stageOf(row) {
 }
 
 function stageIndex(row) {
-  if (row.sales_order_status === 'finished') return 4;
-  if (row.sales_order_status === 'shipped') return 3;
+  if (['partially_shipped', 'shipped', 'finished'].includes(row.sales_order_status)) return 3;
   const stage = stageOf(row);
   if (stage === 'production') return 2;
   if (stage === 'approved') return 1;
@@ -115,8 +114,6 @@ function proposalFlow(row, compact = true) {
     ? `data-release-proposal="${row.id}"`
     : (stage === 'production' || row.sales_order_id) ? `data-open-production="${row.production_order_id || ''}"` : 'disabled';
   const shippedAction = row.sales_order_id ? `data-open-order="${row.sales_order_id}"` : 'disabled';
-  const canFinish = row.sales_order_status === 'shipped' && canAcceptCosts();
-  const finishAction = canFinish ? `data-finish-order="${row.sales_order_id}"` : 'disabled';
   return `<div class="proposal-click-flow ${compact ? 'compact' : ''}" aria-label="Estado da proposta">
     <button type="button" class="${stepClass(0)}" data-open-sheet="${row.id}" title="Abrir ficha de custo"><i>${index > 0 ? '✓' : '1'}</i><span>Ficha</span></button>
     <b>›</b>
@@ -125,8 +122,6 @@ function proposalFlow(row, compact = true) {
     <button type="button" class="${stepClass(2)}" ${productionAction} title="${stage === 'approved' && canAcceptCosts() ? 'Lançar em produção' : 'Produção'}"><i>${index > 2 ? '✓' : '3'}</i><span>Produção</span></button>
     <b>›</b>
     <button type="button" class="${stepClass(3)}" ${shippedAction} title="Ver em Expedição"><i>${index > 3 ? '✓' : '4'}</i><span>Expedido</span></button>
-    <b>›</b>
-    <button type="button" class="${stepClass(4)}" ${finishAction} title="${canFinish ? 'Marcar encomenda como finalizada' : 'Finalizado'}"><i>${index >= 4 ? '✓' : '5'}</i><span>Finalizado</span></button>
   </div>`;
 }
 
@@ -596,7 +591,7 @@ export async function renderProposalDetail(container, sheetId) {
           <label>Válida até<input name="valid_until" type="date" value="${esc(sheet.valid_until || '')}" ${locked ? 'disabled' : ''}></label>
           <label>Notas internas<input name="notes" value="${esc(sheet.notes || '')}" placeholder="Só para a fábrica" ${locked ? 'disabled' : ''}></label>
         </div>
-        ${sheet.currency && sheet.currency !== sheet.base_currency ? `<p class="muted" style="margin:8px 12px 0">${sheet.fx_missing ? `⚠ Sem taxa de câmbio ${esc(sheet.currency)} → ${esc(sheet.base_currency)} configurada em Tabelas → Câmbio — os totais em ${esc(sheet.base_currency)} não são mostrados.` : `≈ ${money(sheet.sales_total_base)} ${esc(sheet.base_currency)} à taxa de ${finiteNumber(sheet.fx_rate).toFixed(4)} (venda) · margem ≈ ${money(sheet.margin_value_base)} ${esc(sheet.base_currency)}`}</p>` : ''}
+        ${sheet.currency && sheet.currency !== sheet.base_currency ? `<p class="muted section-note">${sheet.fx_missing ? `⚠ Sem taxa de câmbio ${esc(sheet.currency)} → ${esc(sheet.base_currency)} configurada em Tabelas → Câmbio — os totais em ${esc(sheet.base_currency)} não são mostrados.` : `≈ ${money(sheet.sales_total_base)} ${esc(sheet.base_currency)} à taxa de ${finiteNumber(sheet.fx_rate).toFixed(4)} (venda) · margem ≈ ${money(sheet.margin_value_base)} ${esc(sheet.base_currency)}`}</p>` : ''}
       </section>
       <div class="proposal-alerts" data-proposal-alerts></div>
       <section class="card cost-composition-card">
@@ -761,14 +756,6 @@ function bindListActions(container, refresh) {
     if (production) { await openProductionOrder(Number(production.dataset.openProduction)); return; }
     const openOrder = event.target.closest('[data-open-order]');
     if (openOrder) { location.hash = '#/shipping'; return; }
-    const finishOrder = event.target.closest('[data-finish-order]');
-    if (finishOrder) {
-      try {
-        await put(`/crud/sales-orders/${finishOrder.dataset.finishOrder}`, { status: 'finished' });
-        toast('Encomenda marcada como finalizada.');
-        await refresh();
-      } catch (error) { toast(error.message, 'error'); }
-    }
   });
 }
 

@@ -46,10 +46,10 @@ export const MODULES = [
     quick:[['design-requests','Novo pedido de cliente'],['styles','Novo artigo'],['samples','Aprovar amostra']],
   },
   {
-    id:'production', label:'Produção', shortLabel:'Produção', icon:'▶', home:'tracking',
+    id:'production', label:'Produção', shortLabel:'Produção', icon:'▶', home:'control-tower',
     defaultRoles:['admin','manager','planner','supervisor','operator','quality'],
-    routes:[['tracking','Controlo da produção','▤'],['quality','Qualidade','✓']],
-    quick:[['tracking','Ver OF ativas'],['corte','Planear corte'],['confection-map','Planear confeção'],['subcontracts','Ver o que está fora']],
+    routes:[['control-tower','Torre de controlo','⌾'],['tracking','Controlo da produção','▤'],['operations-control','Fluxo integrado','⇥'],['quality','Qualidade / revista','✓'],['embalagem','Embalagem','▣'],['stock-fg','Produto acabado','▦']],
+    quick:[['control-tower','Ver exceções'],['tracking','Ver OF ativas'],['operations-control','Ler código / tratar exceção'],['quality','Abrir revista']],
   },
   {
     id:'corte', label:'Corte', shortLabel:'Corte', icon:'✂', home:'corte',
@@ -152,8 +152,8 @@ export const MODULES = [
   {
     id:'shipping', label:'Expedição', shortLabel:'Expedição', icon:'▰', home:'shipping',
     defaultRoles:['admin','manager','warehouse','commercial','planner'],
-    routes:[['shipping','Cockpit de expedição','▰'],['inventory','Stocks e compras','▦']],
-    quick:[['shipping','Preparar expedição'],['inventory','Consultar stock']],
+    routes:[['shipping','Cockpit de expedição','▰'],['operations-control','Devoluções e caixas','⇥'],['embalagem','Embalagem','▣'],['stock-fg','Produto acabado','▦'],['inventory','Matéria-prima e compras','▦']],
+    quick:[['shipping','Preparar expedição'],['embalagem','Registar embalagem'],['stock-fg','Consultar produto acabado']],
   },
   {
     id:'erp', label:'ERP', shortLabel:'ERP', icon:'↔', home:'erp-docs',

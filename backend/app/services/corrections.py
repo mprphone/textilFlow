@@ -15,6 +15,9 @@ class _CompensationPayload:
         self.quantity_good = -(original.quantity_good or 0)
         self.quantity_rejected = -(original.quantity_rejected or 0)
         self.duration_minutes = -(original.duration_minutes or 0)
+        self.energy_cost = -(original.energy_cost or 0)
+        self.consumables_cost = -(original.consumables_cost or 0)
+        self.setup_cost = -(original.setup_cost or 0)
         self.event_type = "correction"
         self.notes = f"Estorno do evento #{original.id}: {reason}".strip()
         self.source = "correction"
@@ -42,6 +45,8 @@ def compensate_event(db, event_id: int, reason: str) -> ProductionEvent:
             event_type="correction", duration_minutes=-(original.duration_minutes or 0),
             quantity_good=-(original.quantity_good or 0), quantity_rejected=-(original.quantity_rejected or 0),
             labor_cost=-(original.labor_cost or 0), machine_cost=-(original.machine_cost or 0),
+            energy_cost=-(original.energy_cost or 0), consumables_cost=-(original.consumables_cost or 0),
+            setup_cost=-(original.setup_cost or 0),
             notes=f"Estorno do evento #{original.id}: {reason}", source="correction",
         )
         db.add(compensating)

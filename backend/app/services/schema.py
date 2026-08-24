@@ -57,6 +57,29 @@ COLUMN_MIGRATIONS = (
     ("subcontract_services", "execution_type", "ALTER TABLE subcontract_services ADD COLUMN execution_type VARCHAR(20) DEFAULT 'external'"),
     ("subcontract_services", "allows_partial_batches", "ALTER TABLE subcontract_services ADD COLUMN allows_partial_batches BOOLEAN DEFAULT 1"),
     ("subcontract_services", "description", "ALTER TABLE subcontract_services ADD COLUMN description TEXT"),
+    ("shipment_lines", "variant_id", "ALTER TABLE shipment_lines ADD COLUMN variant_id INTEGER REFERENCES style_variants(id)"),
+    ("production_batches", "variant_id", "ALTER TABLE production_batches ADD COLUMN variant_id INTEGER REFERENCES style_variants(id)"),
+    ("production_batches", "source_cutting_job_id", "ALTER TABLE production_batches ADD COLUMN source_cutting_job_id INTEGER REFERENCES cutting_jobs(id)"),
+    ("quality_inspections", "variant_id", "ALTER TABLE quality_inspections ADD COLUMN variant_id INTEGER REFERENCES style_variants(id)"),
+    ("quality_inspections", "disposition", "ALTER TABLE quality_inspections ADD COLUMN disposition VARCHAR(30) DEFAULT 'pending' NOT NULL"),
+    ("quality_inspections", "released_quantity", "ALTER TABLE quality_inspections ADD COLUMN released_quantity FLOAT DEFAULT 0 NOT NULL"),
+    ("quality_inspections", "rework_quantity", "ALTER TABLE quality_inspections ADD COLUMN rework_quantity FLOAT DEFAULT 0 NOT NULL"),
+    ("quality_inspections", "scrap_quantity", "ALTER TABLE quality_inspections ADD COLUMN scrap_quantity FLOAT DEFAULT 0 NOT NULL"),
+    ("production_movements", "finished_goods_unit_id", "ALTER TABLE production_movements ADD COLUMN finished_goods_unit_id INTEGER REFERENCES finished_goods_units(id)"),
+    ("production_movements", "rework_order_id", "ALTER TABLE production_movements ADD COLUMN rework_order_id INTEGER REFERENCES rework_orders(id)"),
+    ("production_movements", "customer_return_id", "ALTER TABLE production_movements ADD COLUMN customer_return_id INTEGER REFERENCES customer_return_lines(id)"),
+    ("subcontract_jobs", "batch_id", "ALTER TABLE subcontract_jobs ADD COLUMN batch_id INTEGER REFERENCES production_batches(id)"),
+    ("subcontract_jobs", "variant_id", "ALTER TABLE subcontract_jobs ADD COLUMN variant_id INTEGER REFERENCES style_variants(id)"),
+    ("sewing_plans", "batch_id", "ALTER TABLE sewing_plans ADD COLUMN batch_id INTEGER REFERENCES production_batches(id)"),
+    ("sewing_plans", "variant_id", "ALTER TABLE sewing_plans ADD COLUMN variant_id INTEGER REFERENCES style_variants(id)"),
+    ("production_events", "energy_cost", "ALTER TABLE production_events ADD COLUMN energy_cost FLOAT DEFAULT 0 NOT NULL"),
+    ("production_events", "consumables_cost", "ALTER TABLE production_events ADD COLUMN consumables_cost FLOAT DEFAULT 0 NOT NULL"),
+    ("production_events", "setup_cost", "ALTER TABLE production_events ADD COLUMN setup_cost FLOAT DEFAULT 0 NOT NULL"),
+    ("customer_return_lines", "shipment_allocation_id", "ALTER TABLE customer_return_lines ADD COLUMN shipment_allocation_id INTEGER REFERENCES shipment_allocations(id)"),
+    ("customer_return_lines", "finished_goods_unit_id", "ALTER TABLE customer_return_lines ADD COLUMN finished_goods_unit_id INTEGER REFERENCES finished_goods_units(id)"),
+    ("production_route_steps", "product_operation_id", "ALTER TABLE production_route_steps ADD COLUMN product_operation_id INTEGER REFERENCES product_operations(id)"),
+    ("production_route_steps", "service_stage_id", "ALTER TABLE production_route_steps ADD COLUMN service_stage_id INTEGER REFERENCES service_stages(id)"),
+    ("finished_goods_units", "initial_quantity", "ALTER TABLE finished_goods_units ADD COLUMN initial_quantity FLOAT DEFAULT 0 NOT NULL"),
 )
 
 DEFAULT_SERVICE_STAGES = (
@@ -191,6 +214,40 @@ def _seed_default_service_stages(connection) -> None:
             )
 
 
+def _migrate_shipment_line_constraint(connection) -> None:
+    """Permite várias variantes da mesma OF dentro do mesmo envio."""
+    if connection.dialect.name != "postgresql":
+        return
+    inspector = inspect(connection)
+    if "shipment_lines" not in inspector.get_table_names():
+        return
+    constraints = inspector.get_unique_constraints("shipment_lines")
+    old = next((row for row in constraints if row.get("column_names") == ["shipment_id", "production_order_id"]), None)
+    if old and old.get("name"):
+        safe_name = old["name"].replace('"', '""')
+        connection.execute(text(f'ALTER TABLE shipment_lines DROP CONSTRAINT "{safe_name}"'))
+    refreshed = inspect(connection).get_unique_constraints("shipment_lines")
+    if not any(row.get("column_names") == ["shipment_id", "production_order_id", "variant_id"] for row in refreshed):
+        connection.execute(text(
+            "ALTER TABLE shipment_lines ADD CONSTRAINT uq_shipment_line_variant "
+            "UNIQUE (shipment_id, production_order_id, variant_id)"
+        ))
+
+
+def _backfill_finished_goods_initial_quantity(connection) -> None:
+    """Preserva a quantidade embalada original nas unidades logísticas antigas."""
+    tables = inspect(connection).get_table_names()
+    if "finished_goods_units" not in tables or "shipment_allocations" not in tables:
+        return
+    connection.execute(text(
+        "UPDATE finished_goods_units AS fg "
+        "SET initial_quantity = fg.quantity + COALESCE(("
+        "SELECT SUM(sa.quantity) FROM shipment_allocations AS sa "
+        "WHERE sa.finished_goods_unit_id = fg.id), 0) "
+        "WHERE fg.initial_quantity IS NULL OR fg.initial_quantity <= 0"
+    ))
+
+
 def ensure_schema() -> None:
     inspector = inspect(engine)
     if "companies" not in inspector.get_table_names():
@@ -207,5 +264,7 @@ def ensure_schema() -> None:
             )
         for table, column, ddl in COLUMN_MIGRATIONS:
             _add_column(connection, table, column, ddl)
+        _backfill_finished_goods_initial_quantity(connection)
+        _migrate_shipment_line_constraint(connection)
         _migrate_subcontract_chain_to_route(connection)
         _seed_default_service_stages(connection)

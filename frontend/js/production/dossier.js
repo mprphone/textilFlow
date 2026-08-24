@@ -5,7 +5,7 @@ import { state } from '../state.js';
 import { openModal, toast } from '../ui.js?v=20260820-5';
 
 const SOURCE_LABEL = { unassigned: 'Por distribuir', internal: 'Confeção interna', revista: 'Revista' };
-const DESTINATION_LABEL = { internal: 'Confeção interna', subcontract: 'Serviço externo', revista: 'Revista', shipped: 'Expedido' };
+const DESTINATION_LABEL = { internal: 'Confeção interna', subcontract: 'Serviço externo', revista: 'Revista' };
 
 const MAT_STATE = {
   delivered_to_floor: 'Entregue à linha',
@@ -70,11 +70,12 @@ export function dossierHtml(data) {
   const jobs = data.jobs || [];
   const events = data.events || [];
   const shipments = data.shipments || [];
+  const productionMovements = data.production_movements || [];
   const services = data.services || [];
   const alerts = data.alerts || [];
   const fabricPurchases = data.fabric_purchases || [];
   const cutting = data.cutting || [];
-  const distributed = (holdings.internal || 0) + (holdings.external || 0) + (holdings.revista || 0) + (holdings.shipped || 0);
+  const distributed = (holdings.internal || 0) + (holdings.external || 0) + (holdings.revista || 0) + (holdings.finished_goods || 0) + (holdings.shipped || 0);
   const article = [order.reference, order.description].filter(Boolean).join(' · ') || '—';
   const locationCards = locations.length
     ? locations.map(loc => `<span class="track-split ${esc(loc.kind)}"><b>${esc(loc.label)}</b><small>${number(loc.quantity)} un. · ${esc(loc.detail || '')}</small></span>`).join('')
@@ -99,6 +100,10 @@ export function dossierHtml(data) {
     <td>${number(row.quantity)}</td>
     <td>${badge(row.status)}</td>
     <td>${datetime(row.shipped_at)}</td>
+  </tr>`).join('');
+  const movementRows = productionMovements.map(row => `<tr>
+    <td>${datetime(row.occurred_at)}</td><td>${badge(row.movement_type)}</td><td>${number(row.quantity)}</td>
+    <td>${esc(row.location_from || '—')} → ${esc(row.location_to || '—')}</td><td>${esc(row.reference || '—')}</td>
   </tr>`).join('');
   const serviceRail = services.length
     ? `<ol class="service-rail">${services.map(step => {
@@ -136,6 +141,7 @@ export function dossierHtml(data) {
       <div><span>Distribuído</span><strong>${number(distributed)}</strong></div>
       <div><span>Na confeção</span><strong>${number(holdings.internal)}</strong></div>
       <div><span>Em subcontrato</span><strong>${number(holdings.external)}</strong></div>
+      <div><span>Produto acabado</span><strong>${number(holdings.finished_goods)}</strong></div>
       <div><span>Entregue / expedido</span><strong>${number(holdings.shipped)}</strong></div>
     </div>
     ${alertBox}
@@ -175,10 +181,15 @@ export function dossierHtml(data) {
         <tbody>${rowsOrEmpty(eventRows, 5, 'Ainda sem registos de chão de fábrica.')}</tbody></table></div>
       </section>
     </div>
+    <section class="dossier-block">
+      <h3>Livro de movimentos <small>histórico imutável de WIP, qualidade, embalagem e expedição</small></h3>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>Quando</th><th>Movimento</th><th>Qtd.</th><th>Origem → destino</th><th>Referência</th></tr></thead>
+      <tbody>${rowsOrEmpty(movementRows, 5, 'Ainda sem movimentos produtivos registados.')}</tbody></table></div>
+    </section>
   </div>`;
 }
 
-function distributeFormHtml(holdings, lines, services) {
+function distributeFormHtml(holdings, lines, services, batches = []) {
   const sources = ['unassigned', 'internal', 'revista'].filter(key => (holdings[key] || 0) > 0.001);
   if (!sources.length) sources.push('unassigned');
   return `<form class="dossier-distribute-form" data-distribute-form>
@@ -186,6 +197,7 @@ function distributeFormHtml(holdings, lines, services) {
       <label>Origem<select name="source">${sources.map(key => `<option value="${key}">${esc(SOURCE_LABEL[key])} · ${number(holdings[key])} disponíveis</option>`).join('')}</select></label>
       <label>Destino<select name="destination">${Object.entries(DESTINATION_LABEL).map(([key, label]) => `<option value="${key}">${esc(label)}</option>`).join('')}</select></label>
       <label>Quantidade<input type="number" name="quantity" min="1" step="1" required></label>
+      ${batches.length ? `<label>Lote produtivo<select name="batch_id" required><option value="">Selecionar…</option>${batches.map(row => `<option value="${row.id}">${esc(row.batch_no)}</option>`).join('')}</select></label>` : ''}
       <label data-distribute-line>Linha de confeção<select name="line_id"><option value="">Selecionar…</option>${lines.map(row => `<option value="${row.id}">${esc(row.name)}</option>`).join('')}</select></label>
       <label data-distribute-service hidden>Serviço / fornecedor<select name="subcontract_service_id"><option value="">Selecionar…</option>${services.map(row => `<option value="${row.id}">${esc(row.code)} · ${esc(row.name)}</option>`).join('')}</select></label>
       <label>Data planeada<input type="date" name="planned_date"></label>
@@ -225,6 +237,7 @@ function bindDistributeForm(container, orderId, lines, services) {
         quantity: Number(form.quantity.value),
         planned_date: form.planned_date.value || null,
       };
+      if (form.batch_id?.value) payload.batch_id = Number(form.batch_id.value);
       if (destinationField.value === 'internal') payload.line_id = form.line_id.value ? Number(form.line_id.value) : null;
       if (destinationField.value === 'subcontract') payload.subcontract_service_id = form.subcontract_service_id.value ? Number(form.subcontract_service_id.value) : null;
       const result = await post(`/production/orders/${orderId}/distribute-and-document`, payload);
@@ -249,7 +262,7 @@ export function openOrderDossier(data, lines = [], services = []) {
   const body = document.getElementById('modal-body');
   const distributePanel = body.querySelector('[data-distribute-panel]');
   if (distributePanel) {
-    distributePanel.innerHTML = distributeFormHtml(data.holdings || {}, lines, services);
+    distributePanel.innerHTML = distributeFormHtml(data.holdings || {}, lines, services, data.batches || []);
     bindDistributeForm(body, order.id, lines, services);
   }
   body.querySelectorAll('.dossier-tabs [data-tab]').forEach(button => button.addEventListener('click', () => {

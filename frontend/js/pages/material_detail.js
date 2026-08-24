@@ -47,7 +47,7 @@ function generalTabHtml(material) {
   const { identification, textile, costing, notes, image } = materialFieldGroups(material);
   const values = { ...material, active: material.active ? 'true' : 'false' };
   return `<form data-material-form>
-    <div class="grid-2" style="margin-top:0">
+    <div class="grid-2 u-mt-0">
       ${fieldsCard('Identificação', identification, values, `Primavera: ${material.sync_status === 'synced' ? 'sincronizado' : 'só local'}${material.primavera_id ? ` · ${material.primavera_id}` : ''}`)}
       <div style="display:flex;flex-direction:column;gap:14px">
         ${fieldsCard('Imagem', image, values)}
@@ -155,7 +155,7 @@ export async function renderMaterialDetail(container, materialId, back, activeTa
       <div class="card-header"><div><h2>${esc(material.name)}</h2><p>${esc(TF_TYPE_LABELS[material.tf_type] || 'Não classificado')}</p></div>${badge(material.active ? 'ativo' : 'inativo')}</div>
       <div class="tag-list"><span class="tag">${esc(material.composition || 'Sem composição')}</span><span class="tag">${esc(material.color || 'Sem cor')}</span><span class="tag">${money(material.unit_cost)} / ${esc(material.unit)}</span></div>
     </div></div>
-    <div class="tabs" style="margin-top:14px">${tabs.map(([key, label]) => `<button class="tab ${key === activeTab ? 'active' : ''}" data-detail-tab="${key}">${label}</button>`).join('')}</div>
+    <div class="tabs section-spaced">${tabs.map(([key, label]) => `<button class="tab ${key === activeTab ? 'active' : ''}" data-detail-tab="${key}">${label}</button>`).join('')}</div>
     <div data-detail-content>${renderTab(activeTab, data)}</div>`;
   bindPhotoFields(container);
   container.querySelector('[data-back]').addEventListener('click', back);

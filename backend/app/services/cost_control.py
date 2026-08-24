@@ -14,7 +14,10 @@ from .proposal_release import ACCEPTED_STATUSES, annotated_cost_lines, productio
 from .serialization import model_to_dict
 
 
-CATEGORIES = ("material", "labor", "machine", "subcontract", "overhead", "energy", "packaging", "transport", "other")
+CATEGORIES = (
+    "material", "labor", "machine", "subcontract", "overhead", "energy",
+    "consumables", "setup", "packaging", "transport", "rework", "other",
+)
 # Nota: a CostSheet só tem colunas fixas para as 6 categorias originais; as 3
 # novas (energy/packaging/transport) ganham linha própria aqui no custo real
 # (actual_order_cost/order_control) mas continuam a cair em "other_cost" no
@@ -290,12 +293,18 @@ def actual_order_cost(db, order: ProductionOrder) -> dict:
     events = db.query(ProductionEvent).filter_by(production_order_id=order.id).all()
     event_labor = _round(sum(row.labor_cost or 0 for row in events))
     event_machine = _round(sum(row.machine_cost or 0 for row in events))
+    event_energy = _round(sum(row.energy_cost or 0 for row in events))
+    event_consumables = _round(sum(row.consumables_cost or 0 for row in events))
+    event_setup = _round(sum(row.setup_cost or 0 for row in events))
     cutting = db.query(CuttingJob).filter_by(production_order_id=order.id).all()
     cutting_labor = _round(sum(row.labor_cost or 0 for row in cutting))
     cutting_machine = _round(sum(row.machine_cost or 0 for row in cutting))
     for category, description, amount, source in [
         ("labor", "Mão de obra registada na produção", event_labor, "terminal_producao"),
         ("machine", "Máquinas registadas na produção", event_machine, "terminal_producao"),
+        ("energy", "Energia registada na produção", event_energy, "terminal_producao"),
+        ("consumables", "Consumíveis registados na produção", event_consumables, "terminal_producao"),
+        ("setup", "Afinações e preparação registadas", event_setup, "terminal_producao"),
         ("labor", "Mão de obra do corte", cutting_labor, "corte"),
         ("machine", "Máquinas do corte", cutting_machine, "corte"),
     ]:

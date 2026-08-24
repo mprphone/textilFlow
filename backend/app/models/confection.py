@@ -77,6 +77,8 @@ class SewingPlan(Base, TimestampMixin):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
     code = Column(String(80), nullable=False)
     production_order_id = Column(Integer, ForeignKey("production_orders.id"), nullable=True, index=True)
+    batch_id = Column(Integer, ForeignKey("production_batches.id"), nullable=True, index=True)
+    variant_id = Column(Integer, ForeignKey("style_variants.id"), nullable=True, index=True)
     style_id = Column(Integer, ForeignKey("styles.id"), nullable=True)
     line_id = Column(Integer, ForeignKey("production_lines.id"), nullable=True, index=True)
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)

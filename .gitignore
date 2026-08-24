@@ -4,6 +4,7 @@ __pycache__/
 *.py[cod]
 *.log
 .pytest_cache/
+.claude/
 *.db
 *.sqlite3
 /Primavera.zip

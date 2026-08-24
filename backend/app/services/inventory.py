@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 from ..models import (
     BOMItem, CommercialDocument, Company, InventoryMovement, ItemAlias, Material, ProductionMaterialRequirement,
-    ProductionOrder, ProductionOrderVariant, PurchaseOrder, PurchaseOrderLine, StockLot, Style, StyleVariant,
+    ProductionBatch, ProductionMovement, ProductionOrder, ProductionOrderVariant, PurchaseOrder, PurchaseOrderLine, StockLot, Style, StyleVariant,
     Supplier,
 )
 
@@ -248,6 +248,7 @@ def stock_board(db: Session, company_id: int) -> dict:
     from .primavera import PrimaveraError, fetch_stock
     from .production_split import holdings
     from .production_stage import STAGE_LABEL, derive_stage
+    from .shipping import approved_quantity
 
     shadow_sources = {"style", "variant"}
     materials = [
@@ -302,12 +303,12 @@ def stock_board(db: Session, company_id: int) -> dict:
         .filter(ProductionOrder.status != "cancelled")
         .all()
     )
-    wip_rows, finished_rows = [], []
+    wip_rows, packing_rows, finished_rows = [], [], []
     wip_pieces = finished_pieces = 0.0
     for order in orders:
         stock = holdings(db, order)
-        active_wip = stock["internal"] + stock["external"] + stock["unassigned"]
-        if active_wip <= 0.001 and stock["revista"] <= 0.001:
+        active_wip = stock["internal"] + stock["external"] + stock["unassigned"] + stock["revista"]
+        if active_wip <= 0.001 and stock["finished_goods"] <= 0.001:
             continue
         style = db.get(Style, order.style_id) if order.style_id else None
         stage = order.current_stage or derive_stage(db, order)
@@ -324,14 +325,40 @@ def stock_board(db: Session, company_id: int) -> dict:
             )
             wip_rows.append({**row, "in_progress": round(active_wip, 2), "quantity": order.quantity or 0, "reserved_mp": round(reserved_mp, 2)})
             wip_pieces += active_wip
-        if stock["revista"] > 0.001:
-            packed = float((order.custom_data or {}).get("packed_quantity") or 0)
-            finished_rows.append({**row, "packed": round(min(packed, stock["revista"]), 2)})
-            finished_pieces += stock["revista"]
+        packed_total = max(float(stock["packed"]), float((order.custom_data or {}).get("packed_quantity") or 0))
+        from .production_split import revista_qty
+        to_pack = max(0.0, min(revista_qty(order), approved_quantity(db, order) - packed_total))
+        variants = db.query(ProductionOrderVariant).filter_by(production_order_id=order.id).order_by(ProductionOrderVariant.id).all()
+        batches = db.query(ProductionBatch).filter_by(production_order_id=order.id).filter(
+            ProductionBatch.status != "cancelled"
+        ).order_by(ProductionBatch.id).all()
+        remaining_pool = to_pack
+        scoped_rows = []
+        for order_variant in variants:
+            approved_variant = approved_quantity(db, order, order_variant.variant_id)
+            if approved_variant <= 0.001:
+                continue
+            variant = db.get(StyleVariant, order_variant.variant_id)
+            packed_variant = sum(float(movement.quantity or 0) for movement in db.query(ProductionMovement).filter_by(
+                production_order_id=order.id, movement_type="packing", variant_id=order_variant.variant_id
+            ).all())
+            available_variant = min(remaining_pool, max(0.0, approved_variant - packed_variant))
+            if available_variant > 0.001:
+                batch_options = [{"value": batch.id, "label": batch.batch_no} for batch in batches if batch.variant_id in {None, order_variant.variant_id}]
+                scoped_rows.append({**row, "variant_id": order_variant.variant_id, "variant": " · ".join(value for value in ((variant.color if variant else None), (variant.size if variant else None)) if value), "batch_options": batch_options, "available_to_pack": round(available_variant, 2), "packed_total": round(packed_variant, 2)})
+                remaining_pool = round(remaining_pool - available_variant, 2)
+        if scoped_rows:
+            packing_rows.extend(scoped_rows)
+        elif to_pack > 0.001:
+            packing_rows.append({**row, "variant_id": None, "variant": None, "batch_options": [{"value": batch.id, "label": batch.batch_no} for batch in batches], "available_to_pack": round(to_pack, 2), "packed_total": round(packed_total, 2)})
+        if stock["finished_goods"] > 0.001:
+            finished_rows.append({**row, "packed": round(stock["finished_goods"], 2)})
+            finished_pieces += stock["finished_goods"]
 
     return {
         "raw_items": raw_items, "primavera": primavera,
         "wip": wip_rows, "wip_pieces": round(wip_pieces, 2),
+        "packing": packing_rows,
         "finished": finished_rows, "finished_pieces": round(finished_pieces, 2),
     }
 

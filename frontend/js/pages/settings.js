@@ -52,7 +52,7 @@ async function renderIntegrations(panel){
   const outbox=(data.outbox||[]).map(item=>`<tr><td>${esc(item.created_at||'').slice(0,16).replace('T',' ')}</td><td>${badge(item.kind)}</td><td>${badge(item.status)}</td><td>${esc(item.remote_id||item.error||'—')}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">Ainda não há documentos na fila. As expedições entram automaticamente.</td></tr>';
   panel.innerHTML=pageHeader('Integrações ERP','Primavera é o motor fiscal e de stock. O TextileFlow envia guias e faturas quando a Web API estiver licenciada.')+`
     <div class="integration-hero"><div class="integration-brand"><span>P</span><div><small>ERP PRINCIPAL</small><h2>PRIMAVERA v10</h2><p>${esc(data.message)}</p></div></div><span class="integration-state ${stateClass}"><i></i>${esc(stateLabel)}</span></div>
-    <section class="card" style="margin-bottom:12px"><div class="card-header"><h2>Sistema de faturação desta empresa</h2><span>Define o ecrã de Documentos</span></div>
+    <section class="card u-mb-4"><div class="card-header"><h2>Sistema de faturação desta empresa</h2><span>Define o ecrã de Documentos</span></div>
       <form id="erp-system-form" class="form-grid">
         <div class="field"><label>Trabalham com<select name="system">
           <option value="primavera" ${erpSystem==='primavera'?'selected':''}>Primavera (tipo FA + série)</option>
@@ -88,7 +88,7 @@ async function renderIntegrations(panel){
         <p class="integration-note">A fila envia sozinha a cada 2 minutos. Depois de 3 falhas o documento fica em alerta no dashboard e deixa de repetir até clicar em Enviar fila.</p>
       </section>
     </div>
-    <section class="card" style="margin-top:12px"><div class="card-header"><h2>Fila para o Primavera</h2><span>Expedições entram aqui mesmo sem licença</span></div>
+    <section class="card u-mt-3"><div class="card-header"><h2>Fila para o Primavera</h2><span>Expedições entram aqui mesmo sem licença</span></div>
       <div class="table-wrap"><table class="data-table"><thead><tr><th>Quando</th><th>Documento</th><th>Estado</th><th>Resposta</th></tr></thead><tbody>${outbox}</tbody></table></div>
     </section>`;
   const form=panel.querySelector('#primavera-form');
@@ -480,7 +480,7 @@ async function renderCompanies(panel){
       <h3>Processos internos</h3><p class="muted">Ative só o que esta fábrica faz. O que ficar desligado não aparece na barra e o trabalho sai por subcontrato.</p>
       <div class="module-grid">${plant.map(module=>box(module,enabled.has(module.id))).join('')}</div>
     </section>`:''}
-    <div class="table-wrap" style="margin-top:12px"><table class="data-table"><thead><tr><th></th><th>Código</th><th>Empresa</th><th>NIF</th><th>Moeda</th><th>Módulos de processo</th><th>Estado</th></tr></thead><tbody>${rows.map(row=>`<tr class="track-row ${Number(row.id)===Number(current?.id)?'is-current':''}" data-open-company="${row.id}"><td>${Number(row.id)===Number(current?.id)?'<b>Atual</b>':'Abrir'}</td><td><b>${esc(row.code)}</b></td><td>${esc(row.name)}</td><td>${esc(row.tax_id||'—')}</td><td>${esc(row.currency)}</td><td>${(row.enabled_modules||[]).filter(id=>PLANT_MODULE_IDS.includes(id)).map(id=>`<span class="tag">${esc(MODULES.find(module=>module.id===id)?.label||id)}</span>`).join(' ')||'<span class="muted">Sem processos extra</span>'}</td><td>${statusBadge(row)}</td></tr>`).join('')}</tbody></table></div>`;
+    <div class="table-wrap u-mt-3"><table class="data-table"><thead><tr><th></th><th>Código</th><th>Empresa</th><th>NIF</th><th>Moeda</th><th>Módulos de processo</th><th>Estado</th></tr></thead><tbody>${rows.map(row=>`<tr class="track-row ${Number(row.id)===Number(current?.id)?'is-current':''}" data-open-company="${row.id}"><td>${Number(row.id)===Number(current?.id)?'<b>Atual</b>':'Abrir'}</td><td><b>${esc(row.code)}</b></td><td>${esc(row.name)}</td><td>${esc(row.tax_id||'—')}</td><td>${esc(row.currency)}</td><td>${(row.enabled_modules||[]).filter(id=>PLANT_MODULE_IDS.includes(id)).map(id=>`<span class="tag">${esc(MODULES.find(module=>module.id===id)?.label||id)}</span>`).join(' ')||'<span class="muted">Sem processos extra</span>'}</td><td>${statusBadge(row)}</td></tr>`).join('')}</tbody></table></div>`;
   panel.querySelector('[data-new-company]').addEventListener('click',()=>openCompanyFiche(panel));
   panel.querySelector('[data-edit-company]')?.addEventListener('click',()=>{
     if (!current) return;

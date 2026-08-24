@@ -7,7 +7,7 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Session
 
 from ...db import get_db
-from ...models import ActualCostEntry, BOMItem, CapacityDay, CapacityEvent, Company, CostLine, CostSheet, Customer, CuttingJob, Employee, EmployeeSkill, ExternalCapacity, Machine, Material, ProductOperation, ProductionMaterialRequirement, ProductionOrder, ProductionRouteStep, PurchaseOrder, PurchaseOrderLine, Sample, SewingPlan, Style, StyleRevision, SubcontractJob, SubcontractService, User
+from ...models import ActualCostEntry, BOMItem, CapacityDay, CapacityEvent, Company, CostLine, CostSheet, Customer, CuttingJob, Employee, EmployeeSkill, ExternalCapacity, Machine, Material, ProductOperation, ProductionMaterialRequirement, ProductionOrder, ProductionRouteStep, PurchaseOrder, PurchaseOrderLine, QualityInspection, SalesOrder, SalesOrderLine, Sample, ServiceStage, SewingPlan, Shipment, Style, StyleRevision, SubcontractJob, SubcontractService, User
 from ...schemas import ProductionRouteStepIn
 from ...services.primavera_sync import queue_master_record
 from ...services.audit import record_audit
@@ -23,7 +23,66 @@ from ..deps import current_user, require_company, require_resource_read, require
 
 
 router = APIRouter(prefix="/crud", tags=["Registos"])
-IMMUTABLE_RESOURCES = {"audit", "inventory-movements", "production-events", "style-revisions"}
+IMMUTABLE_RESOURCES = {"audit", "inventory-movements", "production-events", "shipments", "style-revisions"}
+
+
+def protect_sales_order_flow(row, payload: dict) -> None:
+    if not isinstance(row, SalesOrder) or "status" not in payload:
+        return
+    target = str(payload.get("status") or "")
+    current = str(row.status or "")
+    if target == current:
+        return
+    if target in {"in_production", "ready", "partially_shipped", "shipped", "finished"}:
+        raise HTTPException(405, "Este estado é calculado pelo fluxo de produção e expedição")
+    if current in {"partially_shipped", "shipped"}:
+        raise HTTPException(409, "Uma encomenda com expedições não pode mudar de estado manualmente")
+
+
+def protect_released_sales_line(db, row, payload: dict | None = None, *, deleting: bool = False) -> None:
+    if not isinstance(row, SalesOrderLine):
+        return
+    linked = db.query(ProductionOrder.id).filter_by(sales_order_line_id=row.id).first()
+    if not linked:
+        return
+    if deleting:
+        raise HTTPException(409, "A linha já foi libertada para produção e não pode ser eliminada")
+    payload = payload or {}
+    structural = {"sales_order_id", "style_id", "variant_id", "quantity"}
+    if any(key in payload and str(payload.get(key) or "") != str(getattr(row, key) or "") for key in structural):
+        raise HTTPException(409, "Artigo, variante e quantidade ficam congelados depois da libertação para produção")
+
+
+def protect_quality_decision(row, payload: dict | None = None, *, deleting: bool = False) -> None:
+    if not isinstance(row, QualityInspection) or row.result == "pending":
+        return
+    if deleting:
+        raise HTTPException(409, "Uma decisão de qualidade é imutável; registe uma nova inspeção corretiva")
+    payload = payload or {}
+    protected = {"production_order_id", "batch_id", "variant_id", "inspected_quantity", "defect_quantity", "result"}
+    if any(key in payload and str(payload.get(key) or "") != str(getattr(row, key) or "") for key in protected):
+        raise HTTPException(409, "Uma decisão de qualidade não pode ser reescrita; crie uma nova inspeção")
+
+
+def validate_quality_scope(db: Session, row) -> None:
+    if not isinstance(row, QualityInspection):
+        return
+    order = db.get(ProductionOrder, row.production_order_id) if row.production_order_id else None
+    if row.production_order_id and (not order or order.company_id != row.company_id):
+        raise HTTPException(422, "A ordem de fabrico não pertence a esta empresa")
+    from ...models import ProductionBatch, StyleVariant
+    batch = db.get(ProductionBatch, row.batch_id) if row.batch_id else None
+    if batch and (batch.company_id != row.company_id or (order and batch.production_order_id != order.id)):
+        raise HTTPException(422, "O lote não pertence à ordem de fabrico selecionada")
+    variant = db.get(StyleVariant, row.variant_id) if row.variant_id else None
+    if variant and (variant.company_id != row.company_id or (order and variant.style_id != order.style_id)):
+        raise HTTPException(422, "A variante não pertence ao artigo desta ordem")
+    if batch and row.variant_id and batch.variant_id and batch.variant_id != row.variant_id:
+        raise HTTPException(422, "A variante não corresponde à variante do lote")
+    limit = float(batch.quantity if batch else order.quantity if order else 0)
+    if limit and float(row.inspected_quantity or 0) > limit + 0.001:
+        scope = "lote" if batch else "ordem"
+        raise HTTPException(422, f"A inspeção não pode exceder as {limit:g} unidades do {scope}")
 
 
 def _queue_primavera(db, company_id, resource, row):
@@ -393,9 +452,18 @@ def create_record(resource: str, payload: dict, db: Session = Depends(get_db), u
         raise HTTPException(405, "A aprovação de propostas só pode ser feita no fluxo de Costing")
     protect_approved_cost(db, row)
     calculated_fields(db, row)
+    validate_quality_scope(db, row)
     try:
         db.add(row)
         db.flush()
+        if isinstance(row, QualityInspection):
+            from ...services.execution import sync_quality_movement
+            sync_quality_movement(db, row, user.id)
+            from ...services.operations_control import ensure_rework_for_inspection
+            ensure_rework_for_inspection(db, row, user.id)
+        if isinstance(row, SubcontractJob):
+            from ...services.execution import sync_subcontract_receipt
+            sync_subcontract_receipt(db, row, user_id=user.id)
         update_related_costs(db, row, created=True)
         record_audit(db, company_id=company_id, user_id=user.id, entity=resource, entity_id=row.id, action="create", payload=payload)
         db.commit()
@@ -417,9 +485,15 @@ def update_record(resource: str, item_id: int, payload: dict, db: Session = Depe
     if not row:
         raise HTTPException(404, "Registo não encontrado")
     company_id = getattr(row, "company_id", int(payload.get("company_id") or 0))
+    previous_subcontract_receipt = (
+        float(row.accepted_quantity or 0), float(row.rejected_quantity or 0)
+    ) if isinstance(row, SubcontractJob) else None
     require_resource_write(db, user, company_id, resource)
     protect_approved_cost(db, row)
     protect_released_order(db, row, payload)
+    protect_released_sales_line(db, row, payload)
+    protect_quality_decision(row, payload)
+    protect_sales_order_flow(row, payload)
     if isinstance(row, CostLine) and "cost_sheet_id" in payload and int(payload.get("cost_sheet_id") or 0) != row.cost_sheet_id:
         raise HTTPException(409, "Uma linha de custo nao pode ser movida para outra ficha")
     if isinstance(row, CostSheet) and "style_id" in payload and int(payload.get("style_id") or 0) != row.style_id:
@@ -436,8 +510,17 @@ def update_record(resource: str, item_id: int, payload: dict, db: Session = Depe
     validate_cost_tenant_links(db, row, company_id)
     protect_approved_cost(db, row)
     calculated_fields(db, row)
+    validate_quality_scope(db, row)
     try:
         db.flush()
+        if isinstance(row, QualityInspection):
+            from ...services.execution import sync_quality_movement
+            sync_quality_movement(db, row, user.id)
+            from ...services.operations_control import ensure_rework_for_inspection
+            ensure_rework_for_inspection(db, row, user.id)
+        if isinstance(row, SubcontractJob):
+            from ...services.execution import sync_subcontract_receipt
+            sync_subcontract_receipt(db, row, *previous_subcontract_receipt, user_id=user.id)
         update_related_costs(db, row)
         record_audit(db, company_id=company_id, user_id=user.id, entity=resource, entity_id=item_id, action="update", payload=payload)
         db.commit()
@@ -448,6 +531,9 @@ def update_record(resource: str, item_id: int, payload: dict, db: Session = Depe
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(409, "Alteração incompatível com outros registos") from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(409, str(exc)) from exc
 
 
 @router.delete("/{resource}/{item_id}", status_code=204)
@@ -461,6 +547,17 @@ def delete_record(resource: str, item_id: int, company_id: int, db: Session = De
         raise HTTPException(404, "Registo não encontrado")
     protect_approved_cost(db, row)
     protect_released_order(db, row, deleting=True)
+    protect_released_sales_line(db, row, deleting=True)
+    protect_quality_decision(row, deleting=True)
+    if isinstance(row, SalesOrder):
+        lines = db.query(SalesOrderLine).filter_by(company_id=company_id, sales_order_id=row.id).all()
+        line_ids = [line.id for line in lines]
+        linked_production = db.query(ProductionOrder.id).filter(ProductionOrder.sales_order_line_id.in_(line_ids)).first() if line_ids else None
+        linked_shipment = db.query(Shipment.id).filter_by(company_id=company_id, sales_order_id=row.id).first()
+        if linked_production or linked_shipment:
+            raise HTTPException(409, "Uma encomenda libertada ou expedida não pode ser eliminada; cancele-a no fluxo próprio")
+        for line in lines:
+            db.delete(line)
     try:
         cost_sheet_id = row.cost_sheet_id if isinstance(row, CostLine) else None
         style_id = row.style_id if isinstance(row, (BOMItem, ProductOperation)) else None
@@ -504,6 +601,8 @@ def list_production_route(style_id: int, company_id: int, db: Session = Depends(
             "sequence": step.sequence,
             "step_type": step.step_type,
             "subcontract_service_id": step.subcontract_service_id,
+            "product_operation_id": step.product_operation_id,
+            "service_stage_id": step.service_stage_id,
             "service": {"id": s.id, "code": s.code, "name": s.name, "category": s.category, "supplier_id": s.supplier_id}
             if (s := services.get(step.subcontract_service_id)) else None,
             "is_required": step.is_required,
@@ -525,6 +624,18 @@ def save_production_route(style_id: int, company_id: int, payload: list[Producti
             service = db.get(SubcontractService, item.subcontract_service_id) if item.subcontract_service_id else None
             if not service or service.company_id != company_id:
                 raise HTTPException(422, f"Serviço inválido no passo {index}")
+        elif item.step_type == "operation":
+            operation = db.get(ProductOperation, item.product_operation_id) if item.product_operation_id else None
+            if not operation or operation.company_id != company_id or operation.style_id != style_id:
+                raise HTTPException(422, f"Operação inválida no passo {index}")
+            key = f"operation:{operation.id}"
+            if key in seen_types:
+                raise HTTPException(422, "A mesma operação aparece duas vezes na sequência")
+            seen_types.add(key)
+        elif item.step_type == "service_stage":
+            stage = db.get(ServiceStage, item.service_stage_id) if item.service_stage_id else None
+            if not stage or stage.company_id != company_id:
+                raise HTTPException(422, f"Etapa inválida no passo {index}")
         elif item.step_type in seen_types:
             raise HTTPException(422, f"Só pode haver um passo de \"{item.step_type}\" na sequência")
         else:
@@ -545,6 +656,8 @@ def save_production_route(style_id: int, company_id: int, payload: list[Producti
             sequence=item.sequence or index * 10,
             step_type=item.step_type,
             subcontract_service_id=item.subcontract_service_id if item.step_type == "subcontract" else None,
+            product_operation_id=item.product_operation_id if item.step_type == "operation" else None,
+            service_stage_id=item.service_stage_id if item.step_type == "service_stage" else None,
             is_required=item.is_required,
             notes=item.notes,
         ))

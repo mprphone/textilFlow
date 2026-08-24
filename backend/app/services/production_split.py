@@ -3,8 +3,8 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from ..models import (
-    ProductOperation, ProductionLine, ProductionOrder, SalesOrder, SalesOrderLine,
-    SewingPlan, SubcontractJob, SubcontractService,
+    ProductOperation, ProductionBatch, ProductionLine, ProductionOrder, SalesOrder, SalesOrderLine,
+    SewingPlan, StyleVariant, SubcontractJob, SubcontractService,
 )
 from .production_stage import assert_subcontract_ready, update_order_stage
 
@@ -36,11 +36,20 @@ def _advance_sales_order_status(db: Session, order: ProductionOrder) -> None:
 
 
 def shipped_qty(order: ProductionOrder) -> float:
-    return float((order.custom_data or {}).get("shipped_quantity") or 0)
+    from .execution import movement_holdings
+    db = getattr(order, "_sa_instance_state", None).session if getattr(order, "_sa_instance_state", None) else None
+    return movement_holdings(db, order)["shipped"] if db else 0.0
 
 
 def revista_qty(order: ProductionOrder) -> float:
-    return float((order.custom_data or {}).get("revista_quantity") or 0)
+    from .execution import movement_holdings
+    db = getattr(order, "_sa_instance_state", None).session if getattr(order, "_sa_instance_state", None) else None
+    if not db:
+        return 0.0
+    physical = movement_holdings(db, order)["revista"]
+    data = order.custom_data or {}
+    legacy = max(0.0, float(data.get("revista_quantity") or 0) - float(data.get("packed_quantity") or 0))
+    return round(max(physical, legacy), 2)
 
 
 def _add_revista(order: ProductionOrder, quantity: float) -> None:
@@ -69,23 +78,8 @@ def internal_plans(db: Session, order: ProductionOrder) -> list[SewingPlan]:
 
 
 def holdings(db: Session, order: ProductionOrder, jobs: list[SubcontractJob] | None = None) -> dict:
-    jobs = jobs if jobs is not None else db.query(SubcontractJob).filter_by(production_order_id=order.id).all()
-    plans = internal_plans(db, order)
-    external = sum(job_out(job) for job in jobs)
-    internal = sum(plan.quantity or 0 for plan in plans)
-    shipped = shipped_qty(order)
-    revista = revista_qty(order)
-    total = order.quantity or 0
-    unassigned = max(0, total - internal - external - shipped - revista)
-    return {
-        "internal": internal,
-        "external": external,
-        "shipped": shipped,
-        "revista": revista,
-        "unassigned": unassigned,
-        "total": total,
-        "plans": plans,
-    }
+    from .execution import movement_holdings
+    return {**movement_holdings(db, order), "plans": internal_plans(db, order)}
 
 
 def _sam(db: Session, style_id: int) -> float:
@@ -108,7 +102,11 @@ def _reduce_internal(plans: list[SewingPlan], quantity: float) -> None:
         raise ValueError("Não há quantidade suficiente na confeção interna")
 
 
-def _add_internal(db: Session, order: ProductionOrder, line_id: int, quantity: float, planned_date: date | None = None) -> SewingPlan:
+def _add_internal(
+    db: Session, order: ProductionOrder, line_id: int, quantity: float,
+    planned_date: date | None = None, batch_id: int | None = None,
+    variant_id: int | None = None,
+) -> SewingPlan:
     from .production_route import assert_route_ready, route_for_style
     if route_for_style(db, order.style_id):
         ready = assert_route_ready(db, order, step_type="sewing")
@@ -117,7 +115,10 @@ def _add_internal(db: Session, order: ProductionOrder, line_id: int, quantity: f
     line = db.get(ProductionLine, line_id)
     if not line or line.company_id != order.company_id:
         raise ValueError("Linha de confeção inválida")
-    existing = next((plan for plan in internal_plans(db, order) if plan.line_id == line_id), None)
+    existing = next((
+        plan for plan in internal_plans(db, order)
+        if plan.line_id == line_id and plan.batch_id == batch_id and plan.variant_id == variant_id
+    ), None)
     if existing:
         existing.quantity = round((existing.quantity or 0) + quantity, 2)
         existing.status = "in_progress"
@@ -133,6 +134,8 @@ def _add_internal(db: Session, order: ProductionOrder, line_id: int, quantity: f
         company_id=order.company_id,
         code=f"DIST-{order.order_no}-{seq:03d}",
         production_order_id=order.id,
+        batch_id=batch_id,
+        variant_id=variant_id,
         style_id=order.style_id,
         line_id=line_id,
         source_type="confirmed",
@@ -156,7 +159,11 @@ def _add_internal(db: Session, order: ProductionOrder, line_id: int, quantity: f
     return plan
 
 
-def _add_subcontract(db: Session, order: ProductionOrder, service_id: int, quantity: float, override: bool = False, planned_date: date | None = None) -> SubcontractJob:
+def _add_subcontract(
+    db: Session, order: ProductionOrder, service_id: int, quantity: float,
+    override: bool = False, planned_date: date | None = None,
+    batch_id: int | None = None, variant_id: int | None = None,
+) -> SubcontractJob:
     service = db.get(SubcontractService, service_id)
     if not service or service.company_id != order.company_id or not service.active:
         raise ValueError("Serviço subcontratado inválido")
@@ -184,6 +191,8 @@ def _add_subcontract(db: Session, order: ProductionOrder, service_id: int, quant
     job = SubcontractJob(
         company_id=order.company_id,
         production_order_id=order.id,
+        batch_id=batch_id,
+        variant_id=variant_id,
         subcontract_service_id=service.id,
         supplier_id=service.supplier_id,
         chain_step_sequence=step_sequence,
@@ -222,6 +231,19 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
     override = bool(payload.get("override") or payload.get("exception"))
     planned_date_raw = payload.get("planned_date")
     planned_date = date.fromisoformat(str(planned_date_raw)[:10]) if planned_date_raw else None
+    batch_id = int(payload.get("batch_id") or 0) or None
+    variant_id = int(payload.get("variant_id") or 0) or None
+    if batch_id:
+        batch = db.get(ProductionBatch, batch_id)
+        if not batch or batch.company_id != order.company_id or batch.production_order_id != order.id:
+            raise ValueError("O lote não pertence a esta ordem de fabrico")
+        variant_id = variant_id or batch.variant_id
+        if batch.variant_id and variant_id != batch.variant_id:
+            raise ValueError("A variante não corresponde ao lote selecionado")
+    if variant_id:
+        variant = db.get(StyleVariant, variant_id)
+        if not variant or variant.company_id != order.company_id or variant.style_id != order.style_id:
+            raise ValueError("A variante não pertence ao artigo desta ordem")
     from .order_followup import assert_can_distribute
     assert_can_distribute(db, order, payload, override=override)
 
@@ -240,12 +262,12 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
         line_id = int(payload.get("line_id") or 0)
         if not line_id:
             raise ValueError("Escolha a linha de confeção")
-        _add_internal(db, order, line_id, quantity, planned_date=planned_date)
+        _add_internal(db, order, line_id, quantity, planned_date=planned_date, batch_id=batch_id, variant_id=variant_id)
     elif destination == "subcontract":
         service_id = int(payload.get("subcontract_service_id") or 0)
         if not service_id:
             raise ValueError("Escolha o serviço e o fornecedor")
-        job = _add_subcontract(db, order, service_id, quantity, override=override, planned_date=planned_date)
+        job = _add_subcontract(db, order, service_id, quantity, override=override, planned_date=planned_date, batch_id=batch_id, variant_id=variant_id)
         subcontract_job_id = job.id
     if destination in {"internal", "subcontract"}:
         _advance_sales_order_status(db, order)
@@ -266,11 +288,22 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
         if produced >= target * 0.99 > 0 and stock["external"] <= 0 and new_shipped >= target - 0.001:
             order.status = "completed"
 
-    db.commit()
-    db.refresh(order)
+    # A transacao e controlada pelo endpoint chamador para que o movimento e o
+    # respetivo documento sejam confirmados (ou anulados) em conjunto.
+    db.flush()
+    from .execution import record_movement
+    movement = record_movement(
+        db, company_id=order.company_id, production_order_id=order.id,
+        batch_id=batch_id, variant_id=variant_id,
+        movement_type="distribution", quantity=quantity,
+        location_from=source, location_to=destination,
+        reference=payload.get("reference"), user_id=payload.get("user_id"),
+        metadata={"line_id": payload.get("line_id"), "subcontract_job_id": subcontract_job_id},
+    )
     stock = holdings(db, order)
     return {
         "order_id": order.id,
-        "holdings": {key: stock[key] for key in ("internal", "external", "shipped", "revista", "unassigned", "total")},
+        "holdings": {key: stock[key] for key in ("internal", "external", "shipped", "revista", "finished_goods", "unassigned", "total")},
         "subcontract_job_id": subcontract_job_id,
+        "movement_id": movement.id,
     }

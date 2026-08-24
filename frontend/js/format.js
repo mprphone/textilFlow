@@ -25,7 +25,7 @@ const labels = {
   sales_invoice:'Fatura venda', sales_credit:'NC cliente', sales_debit:'ND cliente', sales_delivery:'Guia cliente',
   planned:'Planeado', released:'Libertado', queued:'Em fila', in_progress:'Em curso', paused:'Em pausa', completed:'Concluído', cancelled:'Cancelado',
   synced:'Sincronizado', local:'Só local', failed:'Falhou',
-  confirmed:'Confirmado', ready:'Pronto', shipped:'Expedido', waiting:'Em espera', blocked:'Bloqueado', running:'Em funcionamento', stopped:'Parado',
+  confirmed:'Confirmado', in_production:'Em produção', ready:'Pronto', partially_shipped:'Expedido parcialmente', shipped:'Expedido', waiting:'Em espera', blocked:'Bloqueado', running:'Em funcionamento', stopped:'Parado',
   active:'Ativo', available:'Disponível', quarantine:'Em quarentena', consumed:'Consumido', valid:'Válido', expired:'Expirado', sent:'Enviado', partial:'Parcial', received:'Recebido', problem:'Incidência',
   material:'Materiais', labor:'Mão de obra', machine:'Máquinas', subcontract:'Serviços externos', overhead:'Custos gerais', other:'Outros',
   fabric:'Tecido / malha', thread:'Linhas', trim:'Acessórios', label:'Etiquetas', packaging:'Embalagem', chemical:'Químicos',

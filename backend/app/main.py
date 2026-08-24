@@ -11,6 +11,7 @@ from .api.router import api_router
 from .auth import require_app_secret
 from .db import Base, SessionLocal, engine
 from .services.primavera_worker import start_worker, stop_worker
+from .services.operations_worker import start_operations_worker, stop_operations_worker
 from .services.schema import ensure_schema
 from .services.seed import seed_database
 
@@ -23,6 +24,9 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         seed_database(db)
+        from .services.execution import backfill_execution_ledger
+        backfill_execution_ledger(db)
+        db.commit()
     except Exception:
         db.rollback()
         import logging
@@ -30,7 +34,9 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
     start_worker()
+    start_operations_worker()
     yield
+    stop_operations_worker()
     stop_worker()
 
 
