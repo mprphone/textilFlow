@@ -160,6 +160,7 @@ export const MODULES = [
     defaultRoles:['admin','manager','commercial','warehouse','planner'],
     routes:[
       ['erp-docs','Documentos','↔'],
+      ['erp-orders','Encomendas','▤'],
       ['erp-capture','Ler fatura (foto / PDF)','◉'],
       ['erp-map','Artigos aprendidos','▣'],
       ['settings-primavera','Ligação Primavera','⚙'],

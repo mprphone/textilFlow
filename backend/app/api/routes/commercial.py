@@ -6,7 +6,7 @@ from ...models import CommercialDocument, Company, User
 from ...services.commercial_docs import (
     DOC_TYPES, convert_document, create_document, document_view, from_purchase_order,
     from_sales_order, list_documents, prepare_primavera, public_document, receive_stock,
-    unlock_document, update_document,
+    sales_orders_overview, unlock_document, update_document,
 )
 from ...services.erp_flavor import catalog as erp_catalog, set_system
 from ..deps import current_user, require_module_access, require_role
@@ -45,6 +45,12 @@ def set_erp_system(company_id: int, payload: dict, db: Session = Depends(get_db)
     set_system(company, str(payload.get("system") or "primavera"))
     db.commit()
     return erp_catalog(company)
+
+
+@router.get("/{company_id}/sales-orders")
+def erp_sales_orders(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_module_access(db, user, company_id, {"erp", "shipping", "commercial", "management"})
+    return sales_orders_overview(db, company_id)
 
 
 @router.get("/{company_id}/documents")

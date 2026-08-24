@@ -26,8 +26,9 @@ import * as partners from './pages/partners.js?v=20260821-6';
 import * as tables from './pages/tables.js?v=20260822-29';
 import * as shipping from './pages/shipping.js?v=20260822-23';
 import * as commercialDocs from './pages/commercial_docs.js?v=20260822-33';
+import * as erpOrders from './pages/erp_orders.js?v=20260824-1';
 import * as settings from './pages/settings.js?v=20260822-27';
-import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260822-27';
+import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260824-1';
 
 async function renderDesign(container, view) {
   const { render } = await import('./pages/design.js?v=20260822-16');
@@ -41,6 +42,7 @@ const routes={dashboard,planning:tracking,live,styles,samples,costing,orders,con
   'design-organization':{render:container=>renderDesign(container,'organization')},
   'design-report':{render:container=>renderDesign(container,'report')},
   'erp-docs':commercialDocs,
+  'erp-orders':erpOrders,
   'erp-doc':{render:container=>commercialDocs.renderDocument(container)},
   'erp-capture':{render:container=>commercialDocs.renderCapture(container)},
   'erp-map':{render:container=>commercialDocs.renderAliases(container)},

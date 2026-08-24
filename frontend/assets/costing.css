@@ -100,6 +100,10 @@
 .grade-add-btn:hover{background:#243fc3;transform:translateY(-1px)}
 @media(max-width:600px){.grade-add-group,.grade-add-group input{width:100%}}
 
+.qty-cell{display:flex;flex-direction:column;gap:3px;min-width:90px}
+.qty-cell>span{font-size:11px;color:#3a4a5f}
+.qty-cell .progress{min-width:0}
+
 .requirement-panel{margin-top:14px;padding-top:14px;border-top:1px dashed #dbe3ee}
 .requirement-empty{margin:12px 2px 0;color:#7a899d;font-size:11px}
 .requirement-summary{margin:9px 2px 0;color:#5b6c82;font-size:11px}

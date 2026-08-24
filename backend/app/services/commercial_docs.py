@@ -437,6 +437,65 @@ def update_document(db: Session, company: Company, document: CommercialDocument,
     return document
 
 
+def sales_orders_overview(db: Session, company_id: int) -> list[dict]:
+    """Encomendas de cliente com quantidade total, produzida e faturada — para o menu de Encomendas do ERP."""
+    orders = (
+        db.query(SalesOrder)
+        .filter_by(company_id=company_id)
+        .order_by(SalesOrder.order_date.desc().nullslast(), SalesOrder.id.desc())
+        .all()
+    )
+    order_ids = [order.id for order in orders]
+    customers = {row.id: row for row in db.query(Customer).filter(Customer.company_id == company_id).all()}
+
+    lines = db.query(SalesOrderLine).filter(SalesOrderLine.sales_order_id.in_(order_ids or [0])).all()
+    total_by_order: dict[int, float] = {}
+    order_by_line: dict[int, int] = {}
+    for line in lines:
+        total_by_order[line.sales_order_id] = total_by_order.get(line.sales_order_id, 0.0) + float(line.quantity or 0)
+        order_by_line[line.id] = line.sales_order_id
+
+    line_ids = list(order_by_line.keys())
+    produced_by_order: dict[int, float] = {}
+    if line_ids:
+        for production_order in db.query(ProductionOrder).filter(ProductionOrder.sales_order_line_id.in_(line_ids)).all():
+            order_id = order_by_line.get(production_order.sales_order_line_id)
+            if order_id:
+                produced_by_order[order_id] = produced_by_order.get(order_id, 0.0) + float(production_order.completed_quantity or 0)
+
+    invoiced_by_order: dict[int, float] = {}
+    invoices = (
+        db.query(CommercialDocument)
+        .filter(
+            CommercialDocument.company_id == company_id,
+            CommercialDocument.sales_order_id.in_(order_ids or [0]),
+            CommercialDocument.doc_type == "sales_invoice",
+        )
+        .all()
+    )
+    for document in invoices:
+        qty = sum(float((line or {}).get("quantity") or 0) for line in (document.lines or []))
+        invoiced_by_order[document.sales_order_id] = invoiced_by_order.get(document.sales_order_id, 0.0) + qty
+
+    result = []
+    for order in orders:
+        customer = customers.get(order.customer_id)
+        result.append({
+            "id": order.id,
+            "order_no": order.order_no,
+            "customer_po": order.customer_po,
+            "customer_id": order.customer_id,
+            "customer_name": customer.name if customer else "—",
+            "order_date": order.order_date.isoformat() if order.order_date else None,
+            "delivery_date": order.delivery_date.isoformat() if order.delivery_date else None,
+            "status": order.status,
+            "quantity_total": round(total_by_order.get(order.id, 0.0), 2),
+            "quantity_produced": round(produced_by_order.get(order.id, 0.0), 2),
+            "quantity_invoiced": round(invoiced_by_order.get(order.id, 0.0), 2),
+        })
+    return result
+
+
 def from_purchase_order(db: Session, company_id: int, order_id: int, doc_type: str = "requisition") -> CommercialDocument:
     order = db.get(PurchaseOrder, order_id)
     if not order or order.company_id != company_id:
