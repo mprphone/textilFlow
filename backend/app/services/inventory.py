@@ -427,6 +427,7 @@ def material_history(db: Session, company_id: int, item_key: str) -> dict:
             "unit_cost": material.unit_cost, "lead_time_days": material.lead_time_days,
             "notes": material.notes or "", "active": material.active,
             "sync_status": material.sync_status, "primavera_id": material.primavera_id,
+            "custom_data": material.custom_data or {},
         },
         "summary": {
             "last_price": last_price, "average_price": average_price,
