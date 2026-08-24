@@ -210,6 +210,102 @@ function orderEmailHtml(data, message = '') {
   return `<div style="font-family:Arial,sans-serif;max-width:720px;color:#172033"><p>${esc(message).replace(/\n/g, '<br>')}</p><div style="margin:24px 0;padding:20px;border-radius:12px;background:#122548;color:#fff"><small style="letter-spacing:.12em">NOTA DE ENCOMENDA</small><h1 style="margin:6px 0 4px">${esc(data.orderNo)}</h1><span>${esc(data.customer?.name || '')}</span></div><table style="width:100%;border-collapse:collapse"><tr><td><small>PO CLIENTE</small><br><b>${esc(data.customerPo || '—')}</b></td><td><small>DATA</small><br><b>${esc(data.orderDate ? date(data.orderDate) : '—')}</b></td><td><small>ENTREGA</small><br><b>${esc(data.deliveryDate ? date(data.deliveryDate) : '—')}</b></td></tr></table><table style="width:100%;margin-top:24px;border-collapse:collapse"><thead><tr style="background:#f1f5f9"><th style="padding:10px;text-align:left">Artigo</th><th style="padding:10px;text-align:left">Peças</th><th style="padding:10px;text-align:right">Subtotal</th></tr></thead><tbody>${articleRows || '<tr><td colspan="3" style="padding:16px">Sem quantidades registadas.</td></tr>'}</tbody><tfoot><tr><td style="padding:16px 12px"><b>Total</b></td><td style="padding:16px 12px"><b>${esc(number(data.quantity))}</b></td><td style="padding:16px 12px;text-align:right;font-size:18px"><b>${esc(orderMoney(data.value, data.currency))}</b></td></tr></tfoot></table>${data.notes ? `<div style="margin-top:20px;padding:14px;background:#f8fafc"><b>Notas</b><p>${esc(data.notes).replace(/\n/g, '<br>')}</p></div>` : ''}</div>`;
 }
 
+function printValue(value, fallback = 'Por indicar') {
+  const normalized = String(value ?? '').trim();
+  return esc(normalized || fallback);
+}
+
+function orderPrintMarkup(root, blocks, styles, customers) {
+  const data = orderCommunicationData(root, blocks, styles, customers);
+  const customer = data.customer || {};
+  const currency = data.currency || 'EUR';
+  const status = root.querySelector('[name="status"]')?.value || 'draft';
+  const paymentTerms = root.querySelector('[name="payment_terms"]')?.value || '';
+  const incoterm = root.querySelector('[name="incoterm"]')?.value || '';
+  const transportValue = root.querySelector('[name="transport"]')?.value || '';
+  const deliveryAddress = root.querySelector('[name="delivery_address"]')?.value || '';
+  const transportLabels = {
+    customer: 'A cargo do cliente', factory: 'Organizado pela fábrica', carrier: 'Transportadora acordada',
+  };
+  const vatRate = Math.max(0, Number(root.dataset.vatRate) || 0);
+  const vatValue = data.value * vatRate / 100;
+  const totalValue = data.value + vatValue;
+  const companyName = document.querySelector('[data-company-name], .company-card-name, #company-card-name')?.textContent?.trim() || 'TextileFlow';
+
+  const articleMarkup = blocks.map((block, articleIndex) => {
+    const style = styles.find(row => String(row.id) === String(block.styleId));
+    const sizes = block.gradeState.sizes.length ? block.gradeState.sizes : ['Único'];
+    const rows = block.gradeState.rows;
+    const sizeTotals = sizes.map(size => rows.reduce((sum, row) => sum + (Number(row.qty[size]) || 0), 0));
+    const articleQuantity = sizeTotals.reduce((sum, value) => sum + value, 0);
+    const articleValue = rows.reduce((sum, row) => {
+      const quantity = sizes.reduce((qty, size) => qty + (Number(row.qty[size]) || 0), 0);
+      return sum + quantity * (Number(row.price) || 0);
+    }, 0);
+    const averagePrice = articleQuantity ? articleValue / articleQuantity : 0;
+    const bodyRows = rows.length ? rows.map(row => {
+      const rowTotal = sizes.reduce((sum, size) => sum + (Number(row.qty[size]) || 0), 0);
+      return `<tr>
+        <td class="print-grade-color"><span class="print-color-swatch" style="background:${colorSwatch(row.color)}"></span>${printValue(gradeLabel(row.color, 'color'))}</td>
+        <td class="print-grade-price">${esc(orderMoney(Number(row.price) || 0, currency))}</td>
+        ${sizes.map(size => `<td>${esc(number(Number(row.qty[size]) || 0))}</td>`).join('')}
+        <td class="print-grade-total">${esc(number(rowTotal))}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="${sizes.length + 3}" class="print-empty-grade">Sem cores ou quantidades registadas.</td></tr>`;
+    return `<article class="print-order-article">
+      <header class="print-article-header">
+        <span class="print-article-number">${String(articleIndex + 1).padStart(2, '0')}</span>
+        <div class="print-article-title"><b>${printValue(style?.reference, 'Artigo por selecionar')}</b><span>${printValue(style?.description, 'Sem descrição')}</span></div>
+        <div class="print-article-stat"><span>Peças</span><b>${esc(number(articleQuantity))} un.</b></div>
+        <div class="print-article-stat"><span>Preço médio</span><b>${esc(orderMoney(averagePrice, currency))}</b></div>
+      </header>
+      <table class="print-grade-table">
+        <thead><tr><th>Cor</th><th>Preço / un.</th>${sizes.map(size => `<th>${printValue(gradeLabel(size, 'size'))}</th>`).join('')}<th>Total</th></tr></thead>
+        <tbody>${bodyRows}</tbody>
+        <tfoot><tr><th colspan="2">Total por tamanho</th>${sizeTotals.map(value => `<th>${esc(number(value))}</th>`).join('')}<th>${esc(number(articleQuantity))}</th></tr></tfoot>
+      </table>
+    </article>`;
+  }).join('');
+
+  return `<section class="sales-order-print-sheet" aria-label="Nota de encomenda para impressão">
+    <header class="print-document-header">
+      <div class="print-document-brand"><span>${printValue(companyName, 'TextileFlow')}</span><small>Documento comercial</small></div>
+      <div class="print-document-title"><small>NOTA DE ENCOMENDA</small><h1>${printValue(data.orderNo, 'Nova encomenda')}</h1></div>
+      <span class="print-document-status">${printValue(STATUS_LABELS[status] || status, 'Rascunho')}</span>
+    </header>
+    <section class="print-customer-strip">
+      <div><span>Cliente</span><b>${printValue(customer.name, 'Por selecionar')}</b><small>${printValue(customer.tax_id || customer.vat_number || customer.nif, '')}</small></div>
+      <div><span>PO / Encomenda do cliente</span><b>${printValue(data.customerPo)}</b></div>
+      <div><span>Data da encomenda</span><b>${data.orderDate ? esc(date(data.orderDate)) : 'Por indicar'}</b></div>
+      <div><span>Data de entrega</span><b>${data.deliveryDate ? esc(date(data.deliveryDate)) : 'Por indicar'}</b></div>
+      <div class="print-total-highlight"><span>Valor total</span><b>${esc(orderMoney(totalValue, currency))}</b><small>${vatRate ? 'com IVA' : 'sem IVA'}</small></div>
+    </section>
+    <section class="print-document-section print-commercial-section">
+      <h2><span>1</span>Dados comerciais</h2>
+      <div class="print-commercial-grid">
+        <div><span>Condição de pagamento</span><b>${printValue(paymentTerms)}</b></div>
+        <div><span>Incoterm</span><b>${printValue(incoterm)}</b></div>
+        <div><span>Transporte</span><b>${printValue(transportLabels[transportValue] || transportValue)}</b></div>
+        <div><span>Moeda</span><b>${printValue(currency)}</b></div>
+        <div class="print-wide-field"><span>Morada de entrega</span><b>${printValue(deliveryAddress)}</b></div>
+        ${data.notes ? `<div class="print-wide-field print-notes"><span>Notas e instruções comerciais</span><p>${esc(data.notes).replace(/\n/g, '<br>')}</p></div>` : ''}
+      </div>
+    </section>
+    <section class="print-document-section print-articles-section">
+      <h2><span>2</span>Artigos da encomenda</h2>
+      <div class="print-articles-list">${articleMarkup || '<p class="print-empty-grade">Sem artigos registados.</p>'}</div>
+    </section>
+    <footer class="print-order-summary">
+      <div class="print-summary-title"><span>Resumo da encomenda</span><small>${printValue(data.orderNo, '')}</small></div>
+      <div><span>N.º de artigos</span><b>${esc(number(blocks.length))}</b></div>
+      <div><span>Total de peças</span><b>${esc(number(data.quantity))} un.</b></div>
+      <div><span>Mercadoria (sem IVA)</span><b>${esc(orderMoney(data.value, currency))}</b></div>
+      <div><span>IVA (${esc(number(vatRate))}%)</span><b>${esc(orderMoney(vatValue, currency))}</b></div>
+      <div class="print-summary-total"><span>Valor total</span><b>${esc(orderMoney(totalValue, currency))}</b></div>
+    </footer>
+  </section>`;
+}
+
 async function newArticleBlock(index, styleId = '') {
   let knownColors = [];
   let knownSizes = [];
@@ -372,6 +468,7 @@ export async function renderSalesOrderEditor(panel, orderId) {
       <div class="release-summary-metric total"><span>Valor total (sem IVA)</span><b data-summary-value>0,00 €</b></div>
     </aside>
 
+    <div class="sales-order-print-host" data-order-print-host aria-hidden="true"></div>
   </div>`;
 
   const root = panel.querySelector('.release-order-page');
@@ -558,15 +655,22 @@ Com os melhores cumprimentos,</textarea></label>
       refreshHeaderMeta();
       const previousTitle = document.title;
       document.title = `Nota de encomenda ${root.querySelector('[name="order_no"]')?.value || ''}`.trim();
-      const printScale = Math.max(0.35, Math.min(0.94, 650 / Math.max(root.scrollHeight, 1)));
-      root.style.setProperty('--order-print-scale', printScale.toFixed(3));
-      root.style.setProperty('--order-print-width', `${(100 / printScale).toFixed(2)}%`);
+      const printHost = root.querySelector('[data-order-print-host]');
+      printHost.innerHTML = orderPrintMarkup(root, blocks, styles, customers);
+      printHost.setAttribute('aria-hidden', 'false');
+      const chrome = [...document.querySelectorAll('#app-shell > .topbar, #app-shell > .sidebar, .module-tabs, .tabs')];
+      const chromeDisplay = chrome.map(element => [element, element.style.getPropertyValue('display'), element.style.getPropertyPriority('display')]);
+      chrome.forEach(element => element.style.setProperty('display', 'none', 'important'));
       document.body.classList.add('printing-sales-order');
       try { window.print(); }
       finally {
         document.body.classList.remove('printing-sales-order');
-        root.style.removeProperty('--order-print-scale');
-        root.style.removeProperty('--order-print-width');
+        chromeDisplay.forEach(([element, value, priority]) => {
+          if (value) element.style.setProperty('display', value, priority);
+          else element.style.removeProperty('display');
+        });
+        printHost.replaceChildren();
+        printHost.setAttribute('aria-hidden', 'true');
         document.title = previousTitle;
       }
       return;
