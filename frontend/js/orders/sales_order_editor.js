@@ -426,7 +426,8 @@ export async function renderSalesOrderEditor(panel, orderId) {
       <div class="release-order-actions">
         <button type="button" class="btn release-order-output" data-print-order><span data-icon="print" aria-hidden="true"></span><span>PDF / Imprimir</span></button>
         <button type="button" class="btn release-order-output" data-email-order><span data-icon="mail" aria-hidden="true"></span><span>Enviar por email</span></button>
-        <div class="release-order-more"><button type="button" class="btn" data-toggle-order-menu><span data-icon="more" aria-hidden="true"></span>Mais ações<span data-icon="forward" aria-hidden="true"></span></button><div class="release-order-menu" data-order-menu hidden><button type="button" data-submit-order><span data-icon="save"></span>${orderId ? 'Guardar alterações' : 'Criar encomenda'}</button><button type="button" data-cancel-order><span data-icon="close"></span>Fechar sem guardar</button></div></div>
+        <button type="button" class="btn release-save-button" data-submit-order><span data-icon="save" aria-hidden="true"></span>${orderId ? 'Guardar' : 'Criar encomenda'}</button>
+        <div class="release-order-more"><button type="button" class="btn icon" data-toggle-order-menu data-icon="more" aria-label="Mais ações" title="Mais ações"></button><div class="release-order-menu" data-order-menu hidden><button type="button" data-cancel-order><span data-icon="close"></span>Fechar sem guardar</button></div></div>
         <button type="button" class="btn primary release-production-button" data-release-order-editor><span data-icon="production" aria-hidden="true"></span>Lançar em Produção</button>
       </div>
     </header>
