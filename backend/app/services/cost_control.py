@@ -36,6 +36,8 @@ def sheet_view(db, sheet: CostSheet) -> dict:
     lines = annotated_cost_lines(db, sheet)
     preview = production_preview(db, sheet)
     result = model_to_dict(sheet)
+    sales_order_id = meta.get("sales_order_id")
+    sales_order = db.get(SalesOrder, sales_order_id) if sales_order_id else None
     company = db.get(Company, sheet.company_id)
     sheet_currency = sheet.currency or base_currency(company)
     sales_total_native = _round(sheet.selling_price * sheet.quantity_basis)
@@ -78,7 +80,8 @@ def sheet_view(db, sheet: CostSheet) -> dict:
         "requirements": preview["requirements"],
         "cost_variance": preview["cost_variance"],
         "production_order_id": preview["production_order_id"],
-        "sales_order_id": meta.get("sales_order_id"),
+        "sales_order_id": sales_order_id,
+        "sales_order_status": sales_order.status if sales_order else None,
         "released_quantity": meta.get("released_quantity"),
         "released_at": preview["released_at"],
         "release_ready": preview["can_release"],

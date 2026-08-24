@@ -84,6 +84,15 @@ function stageOf(row) {
   return 'draft';
 }
 
+function stageIndex(row) {
+  if (row.sales_order_status === 'finished') return 4;
+  if (row.sales_order_status === 'shipped') return 3;
+  const stage = stageOf(row);
+  if (stage === 'production') return 2;
+  if (stage === 'approved') return 1;
+  return 0;
+}
+
 function stockSummaryFrom(sheet, requirements = []) {
   const provided = sheet.stock_summary || {};
   if (Object.keys(provided).length) return provided;
@@ -99,18 +108,25 @@ function stockSummaryFrom(sheet, requirements = []) {
 
 function proposalFlow(row, compact = true) {
   const stage = stageOf(row);
-  const index = stage === 'production' ? 2 : stage === 'approved' ? 1 : 0;
+  const index = stageIndex(row);
   const stepClass = position => position < index ? 'done' : position === index ? 'current' : 'next';
   const acceptAction = stage === 'draft' && canAcceptCosts() ? `data-accept-proposal="${row.id}"` : `data-open-sheet="${row.id}"`;
   const productionAction = stage === 'approved' && canAcceptCosts()
     ? `data-release-proposal="${row.id}"`
-    : stage === 'production' ? `data-open-production="${row.production_order_id || ''}"` : 'disabled';
+    : (stage === 'production' || row.sales_order_id) ? `data-open-production="${row.production_order_id || ''}"` : 'disabled';
+  const shippedAction = row.sales_order_id ? `data-open-order="${row.sales_order_id}"` : 'disabled';
+  const canFinish = row.sales_order_status === 'shipped' && canAcceptCosts();
+  const finishAction = canFinish ? `data-finish-order="${row.sales_order_id}"` : 'disabled';
   return `<div class="proposal-click-flow ${compact ? 'compact' : ''}" aria-label="Estado da proposta">
     <button type="button" class="${stepClass(0)}" data-open-sheet="${row.id}" title="Abrir ficha de custo"><i>${index > 0 ? '✓' : '1'}</i><span>Ficha</span></button>
     <b>›</b>
     <button type="button" class="${stepClass(1)}" ${acceptAction} ${stage === 'obsolete' ? 'disabled' : ''} title="${stage === 'draft' && canAcceptCosts() ? 'Aceitar proposta' : 'Abrir proposta'}"><i>${index > 1 ? '✓' : '2'}</i><span>Aceite</span></button>
     <b>›</b>
-    <button type="button" class="${stepClass(2)}" ${productionAction} title="${stage === 'approved' && canAcceptCosts() ? 'Lançar em produção' : 'Produção'}"><i>3</i><span>Produção</span></button>
+    <button type="button" class="${stepClass(2)}" ${productionAction} title="${stage === 'approved' && canAcceptCosts() ? 'Lançar em produção' : 'Produção'}"><i>${index > 2 ? '✓' : '3'}</i><span>Produção</span></button>
+    <b>›</b>
+    <button type="button" class="${stepClass(3)}" ${shippedAction} title="Ver em Expedição"><i>${index > 3 ? '✓' : '4'}</i><span>Expedido</span></button>
+    <b>›</b>
+    <button type="button" class="${stepClass(4)}" ${finishAction} title="${canFinish ? 'Marcar encomenda como finalizada' : 'Finalizado'}"><i>${index >= 4 ? '✓' : '5'}</i><span>Finalizado</span></button>
   </div>`;
 }
 
@@ -742,7 +758,17 @@ function bindListActions(container, refresh) {
       return;
     }
     const production = event.target.closest('[data-open-production]');
-    if (production) await openProductionOrder(Number(production.dataset.openProduction));
+    if (production) { await openProductionOrder(Number(production.dataset.openProduction)); return; }
+    const openOrder = event.target.closest('[data-open-order]');
+    if (openOrder) { location.hash = '#/shipping'; return; }
+    const finishOrder = event.target.closest('[data-finish-order]');
+    if (finishOrder) {
+      try {
+        await put(`/crud/sales-orders/${finishOrder.dataset.finishOrder}`, { status: 'finished' });
+        toast('Encomenda marcada como finalizada.');
+        await refresh();
+      } catch (error) { toast(error.message, 'error'); }
+    }
   });
 }
 

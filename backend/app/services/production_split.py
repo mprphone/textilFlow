@@ -2,7 +2,10 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
-from ..models import ProductOperation, ProductionLine, ProductionOrder, SewingPlan, SubcontractJob, SubcontractService
+from ..models import (
+    ProductOperation, ProductionLine, ProductionOrder, SalesOrder, SalesOrderLine,
+    SewingPlan, SubcontractJob, SubcontractService,
+)
 from .production_stage import assert_subcontract_ready, update_order_stage
 
 
@@ -16,6 +19,20 @@ def job_out(job: SubcontractJob) -> float:
     if job.status == "partial":
         return max(0, (job.quantity or 0) - (job.accepted_quantity or 0) - (job.rejected_quantity or 0))
     return max(0, job.quantity or 0)
+
+
+def _advance_sales_order_status(db: Session, order: ProductionOrder) -> None:
+    """Ao distribuir trabalho para produção (interna ou subcontrato), a encomenda
+    de cliente ligada avança automaticamente para 'em produção' — mas só a partir
+    de um estado inicial (nunca recua um estado mais avançado, ex. já expedido)."""
+    if not order.sales_order_line_id:
+        return
+    line = db.get(SalesOrderLine, order.sales_order_line_id)
+    if not line:
+        return
+    sales_order = db.get(SalesOrder, line.sales_order_id)
+    if sales_order and sales_order.status in {"draft", "confirmed"}:
+        sales_order.status = "in_production"
 
 
 def shipped_qty(order: ProductionOrder) -> float:
@@ -230,6 +247,8 @@ def distribute(db: Session, order: ProductionOrder, payload: dict) -> dict:
             raise ValueError("Escolha o serviço e o fornecedor")
         job = _add_subcontract(db, order, service_id, quantity, override=override, planned_date=planned_date)
         subcontract_job_id = job.id
+    if destination in {"internal", "subcontract"}:
+        _advance_sales_order_status(db, order)
     elif destination == "revista":
         _add_revista(order, quantity)
         update_order_stage(db, order)
