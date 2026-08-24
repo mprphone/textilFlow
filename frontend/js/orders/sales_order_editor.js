@@ -6,6 +6,11 @@ import { prepareFromSales } from '../pages/commercial_docs.js?v=20260822-33';
 
 const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 
+const STATUS_LABELS = {
+  draft: 'Rascunho', confirmed: 'Confirmada', in_production: 'Em produção',
+  ready: 'Pronta', shipped: 'Expedida', cancelled: 'Cancelada',
+};
+
 const COLOR_HEX = {
   preto: '#1a1a1a', branco: '#f5f5f5', cinzento: '#8a8a8a', cinza: '#8a8a8a',
   azul: '#2f5fa8', azulmarinho: '#1c2e4a', marinho: '#1c2e4a', navy: '#1c2e4a',
@@ -43,25 +48,54 @@ function gradeTableMarkup(gradeState) {
     <tfoot><tr><td>Total por tamanho</td><td></td>${sizes.map(() => '<td data-col-total>0</td>').join('')}<td data-grand-total>0</td><td></td></tr></tfoot>`;
 }
 
+function requirementsHtml(data) {
+  if (!data.requirements.length) {
+    return '<p class="muted requirement-empty">Este artigo ainda não tem ficha técnica (BOM) associada — não há necessidade de material a calcular.</p>';
+  }
+  const rows = data.requirements.map(row => `<tr class="${row.status === 'shortage' ? 'requirement-row-shortage' : ''}">
+      <td><b>${esc(row.material_code)}</b><div class="table-subline">${esc(row.material_name)}</div></td>
+      <td>${number(row.required_quantity)} ${esc(row.unit || '')}</td>
+      <td>${number(row.available_quantity)} ${esc(row.unit || '')}</td>
+      <td>${row.shortage_quantity > 0 ? `<b class="requirement-shortage">${number(row.shortage_quantity)} ${esc(row.unit || '')}</b>` : '<span class="requirement-ok">Coberto</span>'}</td>
+      <td>${money(row.estimated_cost)}</td>
+    </tr>`).join('');
+  const totalCost = data.requirements.reduce((sum, row) => sum + (row.estimated_cost || 0), 0);
+  const shortageCount = data.requirements.filter(row => row.status === 'shortage').length;
+  return `<div class="requirement-panel">
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>Material</th><th>Necessário</th><th>Disponível</th><th>Em falta</th><th>Custo estimado</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="requirement-summary">${shortageCount ? `<b class="requirement-shortage">${shortageCount} material(is) com falta de stock.</b>` : '<b class="requirement-ok">Stock cobre toda a necessidade.</b>'} Custo estimado de materiais: <b>${money(totalCost)}</b> para ${number(data.quantity)} peças.</p>
+  </div>`;
+}
+
 function articleBlockHtml(block, styles) {
-  return `<section class="release-order-card" data-article-block data-block-id="${block.id}">
-    <div class="release-order-card-head">
-      <h3><span class="step-badge">${block.index}</span>
+  return `<section class="card" data-article-block data-block-id="${block.id}">
+    <div class="card-header">
+      <h2 class="release-order-article-title"><span class="step-badge">${block.index}</span>
         <select data-style-select>
           <option value="">Selecionar modelo / artigo…</option>
           ${styles.map(row => `<option value="${row.id}" ${String(row.id) === String(block.styleId) ? 'selected' : ''}>${esc(row.reference)} · ${esc(row.description)}</option>`).join('')}
         </select>
-      </h3>
-      ${block.removable ? '<button type="button" class="btn small danger" data-remove-article>Remover artigo</button>' : ''}
+      </h2>
+      <div class="actions">
+        <button type="button" class="btn small" data-calc-requirements>📐 Necessidade de material</button>
+        ${block.removable ? '<button type="button" class="btn small danger" data-remove-article>Remover artigo</button>' : ''}
+      </div>
     </div>
-    <div class="release-order-grade-actions">
-      <label>Nova cor<input type="text" data-new-color placeholder="Ex.: Preto"></label>
-      <button type="button" class="btn small" data-add-color>+ Adicionar cor</button>
-      <label>Novo tamanho<input type="text" data-new-size placeholder="Ex.: 3XL"></label>
-      <button type="button" class="btn small" data-add-size>+ Tamanho</button>
+    <div class="grade-add-row">
+      <div class="grade-add-group">
+        <span class="grade-add-icon">🎨</span>
+        <input type="text" data-new-color placeholder="Nova cor (ex.: Preto)">
+        <button type="button" class="grade-add-btn" data-add-color aria-label="Adicionar cor" title="Adicionar cor">+</button>
+      </div>
+      <div class="grade-add-group">
+        <span class="grade-add-icon">📏</span>
+        <input type="text" data-new-size placeholder="Novo tamanho (ex.: 3XL)">
+        <button type="button" class="grade-add-btn" data-add-size aria-label="Adicionar tamanho" title="Adicionar tamanho">+</button>
+      </div>
     </div>
     <div class="table-wrap grade-table-wrap"><table class="data-table grade-table-full" data-grade-table></table></div>
     <p class="release-order-grade-summary">Total de cores: <b data-total-colors>0</b> · Total de peças: <b data-total-pieces>0</b> · Subtotal: <b data-total-value>0,00 €</b></p>
+    <div data-requirements></div>
   </section>`;
 }
 
@@ -108,6 +142,10 @@ function renderBlockGrid(root, block) {
   table.innerHTML = gradeTableMarkup(block.gradeState);
 }
 
+function blockTotalQty(block) {
+  return block.gradeState.rows.reduce((sum, row) => sum + block.gradeState.sizes.reduce((s, size) => s + (Number(row.qty[size]) || 0), 0), 0);
+}
+
 async function newArticleBlock(index, styleId = '') {
   let knownColors = [];
   let knownSizes = [];
@@ -138,7 +176,7 @@ export async function renderSalesOrders(panel) {
         <td>${esc(customerName(row.customer_id))}</td>
         <td>${date(row.order_date)}</td>
         <td>${date(row.delivery_date)}</td>
-        <td>${badge(row.status)}</td>
+        <td><span class="badge blue">${esc(STATUS_LABELS[row.status] || row.status)}</span></td>
         <td class="listing-actions"><div class="row-actions">
           <button class="btn small primary" type="button" data-erp-so="sales_invoice" data-id="${row.id}">Fatura</button>
           <button class="btn small" type="button" data-erp-so="sales_credit" data-id="${row.id}">NC</button>
@@ -163,11 +201,12 @@ export async function renderSalesOrders(panel) {
 }
 
 export async function renderSalesOrderEditor(panel, orderId) {
-  const [customers, styles] = await Promise.all([
+  const [customers, styles, autoOrderNo] = await Promise.all([
     crudList('customers', state.companyId),
     crudList('styles', state.companyId),
+    orderId ? Promise.resolve('') : get(`/production/${state.companyId}/next-number?key=sales_order&prefix=${encodeURIComponent(`ENC-${new Date().getFullYear()}-`)}&width=5`).then(r => r.number).catch(() => ''),
   ]);
-  let order = { order_no: '', customer_id: '', customer_po: '', order_date: new Date().toISOString().slice(0, 10), delivery_date: '', status: 'confirmed', currency: 'EUR', notes: '' };
+  let order = { order_no: autoOrderNo, customer_id: '', customer_po: '', order_date: new Date().toISOString().slice(0, 10), delivery_date: '', status: 'confirmed', currency: 'EUR', notes: '' };
   const blocks = [];
   if (orderId) {
     const [orderDetail, lines] = await Promise.all([
@@ -216,15 +255,15 @@ export async function renderSalesOrderEditor(panel, orderId) {
       </div>
     </header>
 
-    <section class="release-order-card">
-      <h3><span class="step-badge">1</span> Dados principais</h3>
+    <section class="card release-order-card">
+      <div class="card-header"><h2>Dados principais</h2></div>
       <div class="release-order-fields">
         <label>Cliente *<select name="customer_id" required>${customers.map(row => `<option value="${row.id}" ${String(row.id) === String(order.customer_id) ? 'selected' : ''}>${esc(row.name)}</option>`).join('')}</select></label>
-        <label>Número interno *<input name="order_no" value="${esc(order.order_no || '')}" required></label>
-        <label>PO cliente<input name="customer_po" value="${esc(order.customer_po || '')}"></label>
+        <label>Número interno<input name="order_no" value="${esc(order.order_no || '')}" readonly></label>
+        <label>PO cliente<input name="customer_po" value="${esc(order.customer_po || '')}" placeholder="Referência da encomenda do cliente"></label>
         <label>Data<input type="date" name="order_date" value="${order.order_date || ''}"></label>
         <label>Entrega<input type="date" name="delivery_date" value="${order.delivery_date || ''}"></label>
-        <label>Estado<select name="status">${['draft', 'confirmed', 'in_production', 'ready', 'shipped', 'cancelled'].map(value => `<option value="${value}" ${value === order.status ? 'selected' : ''}>${esc(value)}</option>`).join('')}</select></label>
+        <label>Estado<select name="status">${Object.entries(STATUS_LABELS).map(([value, label]) => `<option value="${value}" ${value === order.status ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></label>
         <label>Moeda<input name="currency" value="${esc(order.currency || 'EUR')}"></label>
         <label class="full">Notas<textarea name="notes">${esc(order.notes || '')}</textarea></label>
       </div>
@@ -233,7 +272,7 @@ export async function renderSalesOrderEditor(panel, orderId) {
     <div data-articles-list></div>
     <button type="button" class="btn" data-add-article>+ Adicionar artigo</button>
 
-    <aside class="release-order-summary-card">
+    <aside class="card release-order-summary-card">
       <h3>Resumo da encomenda</h3>
       <div><span>Total de peças</span><b data-summary-pieces>0</b></div>
       <div><span>N.º de artigos</span><b data-summary-articles>0</b></div>
@@ -301,6 +340,36 @@ export async function renderSalesOrderEditor(panel, orderId) {
     }
   });
 
+  function addColor(block) {
+    const scope = root.querySelector(`[data-article-block][data-block-id="${block.id}"]`);
+    const input = scope.querySelector('[data-new-color]');
+    const value = input.value.trim();
+    if (!value) { toast('Indique o nome da cor.', 'error'); return; }
+    if (block.gradeState.rows.some(row => row.color.toLocaleLowerCase('pt') === value.toLocaleLowerCase('pt'))) { toast('Essa cor já está na grelha.', 'error'); return; }
+    block.gradeState.rows.push({ id: uid(), color: value, price: 0, qty: {} });
+    input.value = '';
+    renderBlockGrid(root, block); updateOrderTotals(root, blocks);
+  }
+
+  function addSize(block) {
+    const scope = root.querySelector(`[data-article-block][data-block-id="${block.id}"]`);
+    const input = scope.querySelector('[data-new-size]');
+    const value = input.value.trim();
+    if (!value) { toast('Indique o tamanho.', 'error'); return; }
+    if (block.gradeState.sizes.some(size => size.toLocaleLowerCase('pt') === value.toLocaleLowerCase('pt'))) { toast('Esse tamanho já está na grelha.', 'error'); return; }
+    block.gradeState.sizes.push(value);
+    input.value = '';
+    renderBlockGrid(root, block); updateOrderTotals(root, blocks);
+  }
+
+  root.addEventListener('keydown', event => {
+    if (event.key !== 'Enter') return;
+    const newColor = event.target.closest('[data-new-color]');
+    const newSize = event.target.closest('[data-new-size]');
+    if (newColor) { event.preventDefault(); const block = findBlock(newColor); if (block) addColor(block); }
+    else if (newSize) { event.preventDefault(); const block = findBlock(newSize); if (block) addSize(block); }
+  });
+
   root.addEventListener('click', async event => {
     if (event.target.closest('[data-back-order]') || event.target.closest('[data-cancel-order]')) {
       await renderSalesOrders(panel);
@@ -326,28 +395,8 @@ export async function renderSalesOrderEditor(panel, orderId) {
       if (event.target.closest('[data-submit-order]')) await submit(event.target.closest('[data-submit-order]'));
       return;
     }
-    if (event.target.closest('[data-add-color]')) {
-      const scope = root.querySelector(`[data-article-block][data-block-id="${block.id}"]`);
-      const input = scope.querySelector('[data-new-color]');
-      const value = input.value.trim();
-      if (!value) { toast('Indique o nome da cor.', 'error'); return; }
-      if (block.gradeState.rows.some(row => row.color.toLocaleLowerCase('pt') === value.toLocaleLowerCase('pt'))) { toast('Essa cor já está na grelha.', 'error'); return; }
-      block.gradeState.rows.push({ id: uid(), color: value, price: 0, qty: {} });
-      input.value = '';
-      renderBlockGrid(root, block); updateOrderTotals(root, blocks);
-      return;
-    }
-    if (event.target.closest('[data-add-size]')) {
-      const scope = root.querySelector(`[data-article-block][data-block-id="${block.id}"]`);
-      const input = scope.querySelector('[data-new-size]');
-      const value = input.value.trim();
-      if (!value) { toast('Indique o tamanho.', 'error'); return; }
-      if (block.gradeState.sizes.some(size => size.toLocaleLowerCase('pt') === value.toLocaleLowerCase('pt'))) { toast('Esse tamanho já está na grelha.', 'error'); return; }
-      block.gradeState.sizes.push(value);
-      input.value = '';
-      renderBlockGrid(root, block); updateOrderTotals(root, blocks);
-      return;
-    }
+    if (event.target.closest('[data-add-color]')) { addColor(block); return; }
+    if (event.target.closest('[data-add-size]')) { addSize(block); return; }
     const removeColor = event.target.closest('[data-remove-color]');
     if (removeColor) {
       if (block.gradeState.rows.length <= 1) { toast('A grelha precisa de pelo menos uma cor.', 'error'); return; }
@@ -362,13 +411,29 @@ export async function renderSalesOrderEditor(panel, orderId) {
       block.gradeState.sizes = block.gradeState.sizes.filter(item => item !== size);
       block.gradeState.rows.forEach(row => { delete row.qty[size]; });
       renderBlockGrid(root, block); updateOrderTotals(root, blocks);
+      return;
+    }
+    const calcButton = event.target.closest('[data-calc-requirements]');
+    if (calcButton) {
+      if (!block.styleId) { toast('Escolha primeiro o modelo/artigo.', 'error'); return; }
+      const totalQty = blockTotalQty(block);
+      if (totalQty <= 0) { toast('Indique quantidades na grelha antes de calcular.', 'error'); return; }
+      const scope = root.querySelector(`[data-article-block][data-block-id="${block.id}"]`);
+      const requirementsPanel = scope.querySelector('[data-requirements]');
+      requirementsPanel.innerHTML = '<div class="loading">A calcular necessidade de material…</div>';
+      try {
+        const data = await get(`/products/styles/${block.styleId}/material-requirements?quantity=${totalQty}`);
+        requirementsPanel.innerHTML = requirementsHtml(data);
+      } catch (error) {
+        requirementsPanel.innerHTML = `<p class="muted requirement-empty">${esc(error.message)}</p>`;
+      }
     }
   });
 
   async function submit(button) {
     const orderNo = root.querySelector('input[name="order_no"]').value.trim();
     const customerId = Number(root.querySelector('select[name="customer_id"]').value || 0);
-    if (!orderNo) { toast('Indique o número interno da encomenda.', 'error'); return; }
+    if (!orderNo) { toast('Número interno em falta — recarregue a página.', 'error'); return; }
     if (!customerId) { toast('Escolha o cliente.', 'error'); return; }
     for (const block of blocks) {
       if (!block.styleId) { toast(`Escolha o modelo/artigo do artigo ${block.index}.`, 'error'); return; }

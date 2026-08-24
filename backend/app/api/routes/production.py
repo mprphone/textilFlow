@@ -255,6 +255,15 @@ def patch_material_notes(company_id: int, item_key: str, payload: dict, db: Sess
     return {"id": material.id, "code": material.code, "notes": material.notes or ""}
 
 
+@router.get("/{company_id}/next-number")
+def get_next_number(company_id: int, key: str, prefix: str = "", width: int = 5, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_module_access(db, user, company_id, {"commercial", "design", "production"})
+    from ...services.sequences import formatted
+    number = formatted(db, company_id, key, prefix=prefix, width=width, period=str(date.today().year))
+    db.commit()
+    return {"number": number}
+
+
 @router.post("/{company_id}/stock-movements", status_code=201)
 def stock_movement(company_id: int, payload: StockMovementRequest, db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_module_access(db, user, company_id, {"production", "shipping"})

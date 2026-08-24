@@ -177,6 +177,40 @@ def style_overview(db: Session, style: Style) -> dict:
     }
 
 
+def material_requirements(db: Session, style: Style, quantity: float) -> list[dict]:
+    """Necessidade de materiais da ficha técnica (BOM) para uma quantidade de peças, face ao stock disponível."""
+    quantity = max(0.0, float(quantity or 0))
+    items = (
+        db.query(BOMItem, Material)
+        .join(Material, Material.id == BOMItem.material_id)
+        .filter(BOMItem.style_id == style.id)
+        .order_by(BOMItem.id)
+        .all()
+    )
+    material_ids = [material.id for _, material in items]
+    stock_by_material: dict[int, float] = {}
+    if material_ids:
+        for lot in db.query(StockLot).filter(StockLot.material_id.in_(material_ids)).all():
+            if (lot.status or "available") not in {"available", "active", "open"}:
+                continue
+            stock_by_material[lot.material_id] = stock_by_material.get(lot.material_id, 0.0) + max(
+                0.0, float(lot.quantity or 0) - float(lot.reserved or 0)
+            )
+    requirements = []
+    for item, material in items:
+        required = quantity * float(item.quantity or 0) * (1 + float(item.waste_pct or 0) / 100)
+        available = stock_by_material.get(material.id, 0.0)
+        shortage = max(0.0, required - available)
+        requirements.append({
+            "material_id": material.id, "material_code": material.code, "material_name": material.name,
+            "unit": item.unit, "required_quantity": round(required, 4), "available_quantity": round(available, 4),
+            "shortage_quantity": round(shortage, 4), "unit_cost": material.unit_cost,
+            "estimated_cost": round(required * (material.unit_cost or 0), 2),
+            "status": "shortage" if shortage > 1e-9 else "ready",
+        })
+    return requirements
+
+
 def ensure_item_for_style(db, style) -> Material:
     """Cria ou reaproveita o artigo (Material) ligado ao modelo, com codigo == referencia."""
     existing = _material_by_code(db, style.company_id, style.reference)

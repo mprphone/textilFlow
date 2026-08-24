@@ -7,7 +7,7 @@ from ...models import (
     Style, StyleRevision, StyleVariant, User,
 )
 from ...services.costing import rebuild_product_cost
-from ...services.inventory import ensure_item_for_variant, ensure_variant, style_overview
+from ...services.inventory import ensure_item_for_variant, ensure_variant, material_requirements, style_overview
 from ...services.serialization import model_to_dict
 from ..deps import current_user, require_module_access
 
@@ -49,6 +49,15 @@ def create_style_variant(style_id: int, payload: dict, db: Session = Depends(get
     db.commit()
     db.refresh(variant)
     return {**model_to_dict(variant), "material": {"id": material.id, "code": material.code, "sync_status": material.sync_status, "barcode": material.barcode}}
+
+
+@router.get("/styles/{style_id}/material-requirements")
+def style_material_requirements(style_id: int, quantity: float = 0, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    style = db.get(Style, style_id)
+    if not style:
+        raise HTTPException(404, "Artigo não encontrado")
+    require_module_access(db, user, style.company_id, {"design", "commercial"})
+    return {"quantity": quantity, "requirements": material_requirements(db, style, quantity)}
 
 
 @router.post("/cost-sheets/{sheet_id}/rebuild")

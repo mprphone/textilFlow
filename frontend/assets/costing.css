@@ -55,7 +55,7 @@
 .release-order-fields label,.release-order-card>label.full{display:block;color:#5b6c82;font-size:11px;font-weight:700}
 .release-order-fields label.full,.release-order-card>label.full{grid-column:1/-1;margin-top:14px}
 .release-order-fields input,.release-order-fields select,.release-order-card>label.full textarea{width:100%;margin-top:5px;padding:9px 10px;border:1px solid #dbe3ee;border-radius:9px;background:#fff;font-size:12px;color:#243449}
-.release-order-fields input:disabled{background:#f4f6f9;color:#5b6c82}
+.release-order-fields input:disabled,.release-order-fields input[readonly]{background:#f4f6f9;color:#5b6c82;cursor:not-allowed}
 .release-order-card>label.full textarea{min-height:70px;resize:vertical;font-family:inherit}
 .release-order-card-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:6px}
 .release-order-card-head h3{margin:0}
@@ -88,6 +88,24 @@
 .release-order-footer{display:flex;justify-content:flex-end;gap:8px;padding-top:6px;border-top:1px solid #e6ebf2}
 @media(max-width:900px){.release-order-fields{grid-template-columns:1fr 1fr}.release-order-columns{grid-template-columns:1fr}}
 @media(max-width:600px){.release-order-fields{grid-template-columns:1fr}.release-order-header{flex-wrap:wrap}.release-order-actions{width:100%;justify-content:flex-end}}
+
+.release-order-article-title{display:flex;align-items:center;gap:10px;min-width:0}
+.release-order-article-title select{flex:1;min-width:0;padding:7px 9px;border:1px solid #dbe3ee;border-radius:8px;font-size:13px;font-weight:700;color:#243449;background:#fff}
+.grade-add-row{display:flex;flex-wrap:wrap;gap:10px;margin:2px 0 14px}
+.grade-add-group{display:flex;align-items:center;gap:6px;border:1px solid #dbe3ee;border-radius:10px;background:#f8f9fc;padding:4px 4px 4px 12px}
+.grade-add-group:focus-within{border-color:#3156e8;background:#fff;box-shadow:0 0 0 3px rgba(49,86,232,.1)}
+.grade-add-icon{font-size:13px;opacity:.65}
+.grade-add-group input{border:0;background:transparent;padding:7px 2px;font-size:12px;width:150px;outline:none;color:#243449}
+.grade-add-btn{border:0;background:#2f5fd8;color:#fff;width:28px;height:28px;border-radius:8px;font-size:16px;font-weight:800;line-height:1;cursor:pointer;flex:none;transition:.15s}
+.grade-add-btn:hover{background:#243fc3;transform:translateY(-1px)}
+@media(max-width:600px){.grade-add-group,.grade-add-group input{width:100%}}
+
+.requirement-panel{margin-top:14px;padding-top:14px;border-top:1px dashed #dbe3ee}
+.requirement-empty{margin:12px 2px 0;color:#7a899d;font-size:11px}
+.requirement-summary{margin:9px 2px 0;color:#5b6c82;font-size:11px}
+.requirement-shortage{color:#b5352f}
+.requirement-ok{color:#0b9c70}
+tr.requirement-row-shortage{background:#fff7f7}
 @media(max-width:600px){.stock-cost-variance{align-items:flex-start;flex-wrap:wrap}.stock-cost-variance em{margin-left:0}.cost-overview-kpis strong{font-size:16px}}
 
 /* Ficha de proposta — quadro único, campos densos, mais cor */
