@@ -77,6 +77,15 @@ def save_sales_order(payload: dict, db: Session = Depends(get_db), user: User = 
         order.notes = header.get("notes")
         data = dict(order.custom_data or {})
         data.setdefault("source", "direct_sales_order")
+        commercial_data = header.get("custom_data") or {}
+        for key in ("payment_terms", "incoterm", "transport", "delivery_address", "vat_rate", "vat_label"):
+            if key not in commercial_data:
+                continue
+            value = commercial_data.get(key)
+            if value in (None, ""):
+                data.pop(key, None)
+            else:
+                data[key] = value
         order.custom_data = data
         db.flush()
 

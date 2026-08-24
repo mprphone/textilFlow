@@ -42,23 +42,11 @@ function gradeLabel(value, kind) {
   return kind === 'size' ? 'Único' : 'Sem cor';
 }
 
-function deliveryInfo(value) {
-  if (!value) return { label: 'Sem data definida', detail: 'Prazo por definir', tone: 'neutral' };
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const delivery = new Date(`${value}T00:00:00`);
-  const days = Math.ceil((delivery - today) / 86400000);
-  const label = new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' }).format(delivery);
-  if (days < 0) return { label, detail: `${Math.abs(days)} dia(s) em atraso`, tone: 'danger' };
-  if (days === 0) return { label, detail: 'Entrega hoje', tone: 'warning' };
-  if (days <= 7) return { label, detail: `${days} dia(s) até à entrega`, tone: 'warning' };
-  return { label, detail: `${days} dia(s) até à entrega`, tone: 'success' };
-}
-
 function gradeTableMarkup(gradeState, currency = 'EUR') {
   const { rows, sizes } = gradeState;
   if (!sizes.length) return '';
   return `<thead><tr>
-      <th class="grade-color-heading">Cor</th><th class="grade-price-heading">Preço / un.</th>
+      <th class="grade-color-heading">Cor</th><th class="grade-price-heading">Preço unitário<small>(por peça)</small></th>
       ${sizes.map(size => `<th class="grade-size-heading"><span>${esc(gradeLabel(size, 'size'))}</span><button type="button" class="grade-remove-size" data-icon="delete" data-remove-size="${esc(size)}" aria-label="Remover tamanho ${esc(size)}" title="Remover tamanho ${esc(size)}"></button></th>`).join('')}
       <th class="grade-total-heading">Total</th><th class="grade-action-heading"><span class="sr-only">Ações</span></th>
     </tr></thead>
@@ -70,7 +58,7 @@ function gradeTableMarkup(gradeState, currency = 'EUR') {
         <td class="grade-row-total" data-row-total="${row.id}">0</td>
         <td><button type="button" class="btn icon danger" data-icon="delete" data-remove-color="${row.id}" aria-label="Remover cor" title="Remover cor"></button></td>
       </tr>`).join('') : `<tr class="grade-empty-row"><td colspan="${sizes.length + 4}"><span data-icon="palette" aria-hidden="true"></span><b>Adicione a primeira cor</b><small>Use o campo acima para construir a grelha deste artigo.</small></td></tr>`}</tbody>
-    <tfoot><tr><td>Totais</td><td class="grade-footer-label">por tamanho</td>${sizes.map(() => '<td data-col-total>0</td>').join('')}<td data-grand-total>0</td><td></td></tr></tfoot>`;
+    <tfoot><tr><td colspan="2">Total por tamanho</td>${sizes.map(() => '<td data-col-total>0</td>').join('')}<td colspan="2" class="grade-grand-total"><small>Total do artigo</small><b data-grand-total>0</b></td></tr></tfoot>`;
 }
 
 function requirementsHtml(data) {
@@ -93,35 +81,29 @@ function requirementsHtml(data) {
 }
 
 function articleBlockHtml(block, styles) {
+  const selectedStyle = styles.find(row => String(row.id) === String(block.styleId));
   return `<section class="card release-order-card release-order-article-card" data-article-block data-block-id="${block.id}">
     <div class="release-order-article-header">
       <div class="release-order-article-identity">
         <span class="step-badge">${String(block.index).padStart(2, '0')}</span>
-        <div><small>ARTIGO ${String(block.index).padStart(2, '0')}</small><select data-style-select aria-label="Modelo ou artigo">
+        <div><select data-style-select aria-label="Modelo ou artigo">
           <option value="">Selecionar modelo / artigo…</option>
           ${styles.map(row => `<option value="${row.id}" ${String(row.id) === String(block.styleId) ? 'selected' : ''}>${esc(row.reference)} · ${esc(row.description)}</option>`).join('')}
-        </select></div>
+        </select><small>Referência interna: <span data-style-reference>${esc(selectedStyle?.reference || 'por definir')}</span></small></div>
       </div>
       <div class="release-order-article-actions">
-        <div class="release-order-article-metric"><small>Peças</small><b data-article-pieces>0</b></div>
-        <div class="release-order-article-metric"><small>Subtotal</small><b data-article-value>0,00 €</b></div>
-        <button type="button" class="btn release-material-button" data-calc-requirements><span data-icon="document" aria-hidden="true"></span><span>Materiais</span></button>
+        <div class="release-order-article-metric"><small>Peças totais</small><b><span data-article-pieces>0</span> un.</b></div>
+        <div class="release-order-article-metric"><small>Preço médio</small><b data-article-value>0,00 €</b></div>
+        <button type="button" class="btn release-material-button" data-calc-requirements><span>Ver ficha de custo</span></button>
+        <button type="button" class="btn icon" data-icon="more" data-duplicate-article aria-label="Duplicar artigo" title="Duplicar artigo"></button>
         ${block.removable ? '<button type="button" class="btn icon danger" data-icon="delete" data-remove-article aria-label="Remover artigo" title="Remover artigo"></button>' : ''}
       </div>
     </div>
     <div class="release-grade-toolbar">
-      <div class="release-grade-title"><span data-icon="grid" aria-hidden="true"></span><div><b>Grelha comercial</b><small>Cores, tamanhos, quantidades e preço</small></div></div>
+      <div></div>
       <div class="grade-add-row">
-      <label class="grade-add-group"><span>Nova cor</span><div>
-        <span class="grade-add-icon" data-icon="palette" aria-hidden="true"></span>
-        <input type="text" data-new-color placeholder="Ex.: Preto">
-        <button type="button" class="grade-add-btn" data-icon="add" data-add-color aria-label="Adicionar cor" title="Adicionar cor"></button>
-      </div></label>
-      <label class="grade-add-group"><span>Novo tamanho</span><div>
-        <span class="grade-add-icon" data-icon="ruler" aria-hidden="true"></span>
-        <input type="text" data-new-size placeholder="Ex.: 3XL">
-        <button type="button" class="grade-add-btn" data-icon="add" data-add-size aria-label="Adicionar tamanho" title="Adicionar tamanho"></button>
-      </div></label>
+        <div class="grade-quick-add"><button type="button" class="btn small" data-toggle-color-add><span data-icon="add" aria-hidden="true"></span>Adicionar cor</button><div class="grade-inline-add" data-color-add-panel hidden><input type="text" data-new-color placeholder="Ex.: Preto"><button type="button" class="grade-add-btn" data-icon="check" data-add-color aria-label="Confirmar cor" title="Confirmar cor"></button></div></div>
+        <div class="grade-quick-add"><button type="button" class="btn small" data-toggle-size-add><span data-icon="add" aria-hidden="true"></span>Adicionar tamanho</button><div class="grade-inline-add" data-size-add-panel hidden><input type="text" data-new-size placeholder="Ex.: 3XL"><button type="button" class="grade-add-btn" data-icon="check" data-add-size aria-label="Confirmar tamanho" title="Confirmar tamanho"></button></div></div>
       </div>
     </div>
     <div class="table-wrap grade-table-wrap"><table class="data-table grade-table-full" data-grade-table></table></div>
@@ -153,7 +135,7 @@ function updateBlockTotals(root, block) {
   if (grandCell) grandCell.textContent = number(grandQty);
   const currency = root.querySelector('[name="currency"]')?.value || 'EUR';
   scope.querySelector('[data-article-pieces]').textContent = number(grandQty);
-  scope.querySelector('[data-article-value]').textContent = orderMoney(grandValue, currency);
+  scope.querySelector('[data-article-value]').textContent = orderMoney(grandQty ? grandValue / grandQty : 0, currency);
   return { qty: grandQty, value: grandValue };
 }
 
@@ -162,7 +144,13 @@ function updateOrderTotals(root, blocks) {
   blocks.forEach(block => { const t = updateBlockTotals(root, block); qty += t.qty; value += t.value; });
   root.querySelector('[data-summary-pieces]').textContent = number(qty);
   root.querySelector('[data-summary-articles]').textContent = number(blocks.length);
-  root.querySelector('[data-summary-value]').textContent = orderMoney(value, root.querySelector('[name="currency"]')?.value || 'EUR');
+  const currency = root.querySelector('[name="currency"]')?.value || 'EUR';
+  const vatRate = Math.max(0, Number(root.dataset.vatRate) || 0);
+  const vat = value * vatRate / 100;
+  root.querySelectorAll('[data-summary-value],[data-order-total]').forEach(element => { element.textContent = orderMoney(value, currency); });
+  root.querySelector('[data-summary-merchandise]').textContent = orderMoney(value, currency);
+  root.querySelector('[data-summary-vat]').textContent = orderMoney(vat, currency);
+  root.querySelector('[data-summary-vat-label]').textContent = `${number(vatRate)}%${root.dataset.vatLabel ? ` · ${root.dataset.vatLabel}` : ''}`;
 }
 
 function renderBlockGrid(root, block) {
@@ -276,9 +264,11 @@ export async function renderSalesOrders(panel) {
 }
 
 export async function renderSalesOrderEditor(panel, orderId) {
-  const [customers, styles, autoOrderNo] = await Promise.all([
+  const [customers, styles, paymentTerms, costSheets, autoOrderNo] = await Promise.all([
     crudList('customers', state.companyId),
     crudList('styles', state.companyId),
+    crudList('payment-terms', state.companyId).catch(() => []),
+    crudList('cost-sheets', state.companyId).catch(() => []),
     orderId ? Promise.resolve('') : get(`/production/${state.companyId}/next-number?key=sales_order&prefix=${encodeURIComponent(`ENC-${new Date().getFullYear()}-`)}&width=5`).then(r => r.number).catch(() => ''),
   ]);
   let order = { order_no: autoOrderNo, customer_id: '', customer_po: '', order_date: new Date().toISOString().slice(0, 10), delivery_date: '', status: 'confirmed', currency: 'EUR', notes: '' };
@@ -320,47 +310,66 @@ export async function renderSalesOrderEditor(panel, orderId) {
   if (!blocks.length) blocks.push(await newArticleBlock(1));
   blocks.forEach((block, idx) => { block.index = idx + 1; });
   const initialCustomer = customers.find(row => String(row.id) === String(order.customer_id));
-  const initialDelivery = deliveryInfo(order.delivery_date);
+  const commercial = order.custom_data || {};
+  const linkedSheetId = commercial.cost_sheet_id || commercial.approved_cost_sheet_id;
+  const linkedSheet = costSheets.find(row => String(row.id) === String(linkedSheetId));
+  const proposalReference = commercial.proposal_reference || linkedSheet?.custom_data?.quote_no || '';
+  const paymentTermsValue = commercial.payment_terms || initialCustomer?.payment_terms || initialCustomer?.payment_term_code || '';
+  const deliveryAddress = commercial.delivery_address || [initialCustomer?.address, [initialCustomer?.postal_code, initialCustomer?.city].filter(Boolean).join(' '), initialCustomer?.country].filter(Boolean).join(', ');
+  const vatRate = Number(commercial.vat_rate ?? 0) || 0;
+  const vatLabel = commercial.vat_label || 'Exportação';
 
-  panel.innerHTML = `<div class="release-order-page">
+  panel.innerHTML = `<div class="release-order-page" data-vat-rate="${vatRate}" data-vat-label="${esc(vatLabel)}">
     <header class="release-order-header">
       <button type="button" class="btn icon release-order-back" data-icon="back" data-back-order aria-label="Voltar às encomendas" title="Voltar às encomendas"></button>
       <div class="release-order-heading">
-        <span class="release-order-eyebrow">NOTA DE ENCOMENDA</span>
+        <span class="release-order-eyebrow">Nota de Encomenda</span>
         <div><h1>${esc(order.order_no || 'Nova encomenda')}</h1><span class="release-order-status-chip" data-order-status>${esc(STATUS_LABELS[order.status] || order.status)}</span></div>
-        <p><span data-order-customer-name>${esc(initialCustomer?.name || 'Cliente por selecionar')}</span><span aria-hidden="true">·</span><span data-order-po>${order.customer_po ? `PO ${esc(order.customer_po)}` : 'Sem PO do cliente'}</span></p>
+        <p>Cliente: <b data-order-customer-name>${esc(initialCustomer?.name || 'Por selecionar')}</b><span aria-hidden="true">|</span><span>Proposta origem: <b>${esc(proposalReference || 'Sem proposta')}</b></span></p>
       </div>
-      <div class="release-order-deadline ${initialDelivery.tone}" data-order-deadline><span data-icon="clock" aria-hidden="true"></span><div><small>Prazo acordado</small><b>${esc(initialDelivery.label)}</b><span>${esc(initialDelivery.detail)}</span></div></div>
       <div class="release-order-actions">
         <button type="button" class="btn release-order-output" data-print-order><span data-icon="print" aria-hidden="true"></span><span>PDF / Imprimir</span></button>
         <button type="button" class="btn release-order-output" data-email-order><span data-icon="mail" aria-hidden="true"></span><span>Enviar por email</span></button>
-        <button type="button" class="btn" data-cancel-order>Cancelar</button>
-        <button type="button" class="btn primary" data-submit-order>${orderId ? 'Guardar encomenda' : 'Criar encomenda'}</button>
+        <div class="release-order-more"><button type="button" class="btn" data-toggle-order-menu><span data-icon="more" aria-hidden="true"></span>Mais ações<span data-icon="forward" aria-hidden="true"></span></button><div class="release-order-menu" data-order-menu hidden><button type="button" data-submit-order><span data-icon="save"></span>${orderId ? 'Guardar alterações' : 'Criar encomenda'}</button><button type="button" data-cancel-order><span data-icon="close"></span>Fechar sem guardar</button></div></div>
+        <button type="button" class="btn primary release-production-button" data-release-order-editor><span data-icon="production" aria-hidden="true"></span>Lançar em Produção</button>
       </div>
     </header>
 
+    <section class="release-order-facts" aria-label="Resumo comercial">
+      <div><span data-icon="inbox" aria-hidden="true"></span><small>PO / Encomenda cliente</small><b data-order-po>${esc(order.customer_po || 'Por indicar')}</b></div>
+      <div><span data-icon="clock" aria-hidden="true"></span><small>Data da encomenda</small><b data-order-date>${order.order_date ? date(order.order_date) : '—'}</b></div>
+      <div><span data-icon="clock" aria-hidden="true"></span><small>Data de entrega</small><b data-order-delivery>${order.delivery_date ? date(order.delivery_date) : '—'}</b></div>
+      <div><small>Estado</small><b class="release-fact-status" data-order-fact-status>${esc(STATUS_LABELS[order.status] || order.status)}</b></div>
+      <div><span data-icon="euro" aria-hidden="true"></span><small>Moeda</small><b data-order-currency>${esc(order.currency || 'EUR')}</b></div>
+      <div class="release-order-fact-total"><small>Valor total (sem IVA)</small><b data-order-total>0,00 €</b></div>
+    </section>
+
     <section class="card release-order-card">
-      <div class="card-header release-order-section-heading"><span data-icon="document" aria-hidden="true"></span><div><h2>Dados comerciais</h2><p>Identificação, referência do cliente e condições da encomenda.</p></div></div>
+      <div class="card-header release-order-section-heading"><span class="release-section-number">1</span><h2>Dados comerciais</h2></div>
       <div class="release-order-fields">
+        <input type="hidden" name="order_no" value="${esc(order.order_no || '')}"><select name="status" hidden>${Object.entries(EDITABLE_STATUS_LABELS).map(([value, label]) => `<option value="${value}" ${value === order.status ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
         <label class="field-customer">Cliente *<select name="customer_id" required><option value="">Selecionar cliente…</option>${customers.map(row => `<option value="${row.id}" ${String(row.id) === String(order.customer_id) ? 'selected' : ''}>${esc(row.name)}</option>`).join('')}</select></label>
-        <label class="field-order-no">Número interno<input name="order_no" value="${esc(order.order_no || '')}" readonly></label>
-        <label class="field-customer-po">PO cliente<input name="customer_po" value="${esc(order.customer_po || '')}" placeholder="Referência da encomenda do cliente"></label>
-        <label class="field-order-date">Data<input type="date" name="order_date" value="${order.order_date || ''}"></label>
-        <label class="field-delivery-date">Entrega<input type="date" name="delivery_date" value="${order.delivery_date || ''}"></label>
-        <label class="field-status">Estado<select name="status">${Object.entries(EDITABLE_STATUS_LABELS).map(([value, label]) => `<option value="${value}" ${value === order.status ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></label>
-        <label class="field-currency">Moeda<input name="currency" value="${esc(order.currency || 'EUR')}"></label>
+        <label class="field-customer-po">Referência da encomenda do cliente<input name="customer_po" value="${esc(order.customer_po || '')}" placeholder="PO do cliente"></label>
+        <label class="field-order-date">Data da encomenda *<input type="date" name="order_date" value="${order.order_date || ''}"></label>
+        <label class="field-delivery-date">Data de entrega *<input type="date" name="delivery_date" value="${order.delivery_date || ''}"></label>
+        <label class="field-currency">Moeda *<select name="currency">${['EUR','USD','GBP','CHF'].map(value => `<option ${value === (order.currency || 'EUR') ? 'selected' : ''}>${value}</option>`).join('')}</select></label>
+        <label class="field-payment">Condição de pagamento<select name="payment_terms"><option value="">Por definir</option>${paymentTermsValue && !paymentTerms.some(row => [row.code,row.name].includes(paymentTermsValue)) ? `<option selected>${esc(paymentTermsValue)}</option>` : ''}${paymentTerms.map(row => `<option value="${esc(row.name || row.code)}" ${[row.code,row.name].includes(paymentTermsValue) ? 'selected' : ''}>${esc(row.name || row.code)}</option>`).join('')}</select></label>
+        <label class="field-incoterm">Incoterm<select name="incoterm">${['EXW','FCA','FOB','CIF','DAP','DDP'].map(value => `<option ${value === (commercial.incoterm || 'DAP') ? 'selected' : ''}>${value}</option>`).join('')}</select></label>
+        <label class="field-transport">Transporte<select name="transport"><option value="customer" ${commercial.transport === 'customer' || !commercial.transport ? 'selected' : ''}>A cargo do cliente</option><option value="factory" ${commercial.transport === 'factory' ? 'selected' : ''}>Organizado pela fábrica</option><option value="carrier" ${commercial.transport === 'carrier' ? 'selected' : ''}>Transportadora acordada</option></select></label>
+        <label class="field-delivery-address">Morada de entrega<input name="delivery_address" value="${esc(deliveryAddress)}" placeholder="Morada completa de entrega"></label>
         <label class="full field-notes">Notas e instruções comerciais<textarea name="notes" placeholder="Condições acordadas, instruções de embalagem, observações de entrega…">${esc(order.notes || '')}</textarea></label>
       </div>
     </section>
 
-    <div data-articles-list></div>
-    <button type="button" class="btn release-order-add-article" data-add-article><span data-icon="add" aria-hidden="true"></span>Adicionar artigo</button>
+    <section class="card release-order-articles-shell"><div class="card-header release-order-section-heading"><span class="release-section-number">2</span><h2>Artigos da encomenda</h2></div><div data-articles-list></div><button type="button" class="btn release-order-add-article" data-add-article><span data-icon="add" aria-hidden="true"></span>Adicionar artigo</button></section>
 
     <aside class="card release-order-summary-card">
-      <div class="release-summary-heading"><span data-icon="document" aria-hidden="true"></span><div><h3>Resumo da encomenda</h3><small>Atualizado automaticamente</small></div></div>
-      <div class="release-summary-metric"><span>Total de peças</span><b data-summary-pieces>0</b></div>
+      <div class="release-summary-heading"><span data-icon="document" aria-hidden="true"></span><h3>Resumo da encomenda</h3></div>
       <div class="release-summary-metric"><span>N.º de artigos</span><b data-summary-articles>0</b></div>
-      <div class="release-summary-metric total"><span>Valor total</span><b data-summary-value>0,00 €</b></div>
+      <div class="release-summary-metric"><span>Total de peças</span><b><span data-summary-pieces>0</span> un.</b></div>
+      <div class="release-summary-metric"><span>Valor mercadoria (sem IVA)</span><b data-summary-merchandise>0,00 €</b></div>
+      <div class="release-summary-metric"><span>IVA <small data-summary-vat-label></small></span><b data-summary-vat>0,00 €</b></div>
+      <div class="release-summary-metric total"><span>Valor total (sem IVA)</span><b data-summary-value>0,00 €</b></div>
     </aside>
 
   </div>`;
@@ -380,14 +389,16 @@ export async function renderSalesOrderEditor(panel, orderId) {
     const customer = customers.find(row => String(row.id) === String(customerId));
     const customerPo = root.querySelector('[name="customer_po"]')?.value.trim();
     const status = root.querySelector('[name="status"]')?.value;
-    const delivery = deliveryInfo(root.querySelector('[name="delivery_date"]')?.value);
-    root.querySelector('[data-order-customer-name]').textContent = customer?.name || 'Cliente por selecionar';
-    root.querySelector('[data-order-po]').textContent = customerPo ? `PO ${customerPo}` : 'Sem PO do cliente';
+    const orderDate = root.querySelector('[name="order_date"]')?.value;
+    const deliveryDate = root.querySelector('[name="delivery_date"]')?.value;
+    const currency = root.querySelector('[name="currency"]')?.value || 'EUR';
+    root.querySelector('[data-order-customer-name]').textContent = customer?.name || 'Por selecionar';
+    root.querySelector('[data-order-po]').textContent = customerPo || 'Por indicar';
     root.querySelector('[data-order-status]').textContent = STATUS_LABELS[status] || status || 'Sem estado';
-    const deadline = root.querySelector('[data-order-deadline]');
-    deadline.className = `release-order-deadline ${delivery.tone}`;
-    deadline.querySelector('b').textContent = delivery.label;
-    deadline.querySelector('div>span').textContent = delivery.detail;
+    root.querySelector('[data-order-fact-status]').textContent = STATUS_LABELS[status] || status || 'Sem estado';
+    root.querySelector('[data-order-date]').textContent = orderDate ? date(orderDate) : '—';
+    root.querySelector('[data-order-delivery]').textContent = deliveryDate ? date(deliveryDate) : '—';
+    root.querySelector('[data-order-currency]').textContent = currency;
   }
 
   async function openOrderEmailComposer() {
@@ -449,7 +460,15 @@ Com os melhores cumprimentos,</textarea></label>
   }
 
   root.addEventListener('input', async event => {
-    if (event.target.matches('[name="customer_id"],[name="customer_po"],[name="delivery_date"],[name="status"]')) refreshHeaderMeta();
+    if (event.target.matches('[name="customer_id"]')) {
+      const customer = customers.find(row => String(row.id) === String(event.target.value));
+      const payment = customer?.payment_terms || customer?.payment_term_code || '';
+      const paymentSelect = root.querySelector('[name="payment_terms"]');
+      if (payment && ![...paymentSelect.options].some(option => option.value === payment)) paymentSelect.add(new Option(payment, payment));
+      paymentSelect.value = payment;
+      root.querySelector('[name="delivery_address"]').value = [customer?.address, [customer?.postal_code, customer?.city].filter(Boolean).join(' '), customer?.country].filter(Boolean).join(', ');
+    }
+    if (event.target.matches('[name="customer_id"],[name="customer_po"],[name="order_date"],[name="delivery_date"],[name="status"],[name="currency"]')) refreshHeaderMeta();
     if (event.target.matches('[name="currency"]')) {
       blocks.forEach(block => renderBlockGrid(root, block));
       updateOrderTotals(root, blocks);
@@ -460,6 +479,8 @@ Com os melhores cumprimentos,</textarea></label>
       const block = findBlock(styleSelect);
       if (block) {
         block.styleId = styleSelect.value ? Number(styleSelect.value) : '';
+        const style = styles.find(row => String(row.id) === String(block.styleId));
+        styleSelect.closest('[data-article-block]')?.querySelector('[data-style-reference]')?.replaceChildren(document.createTextNode(style?.reference || 'por definir'));
         if (block.styleId && !block.gradeState.rows.length) {
           const variants = await crudList('style-variants', state.companyId, `style_id=${block.styleId}`).catch(() => []);
           const knownColors = [...new Set(variants.map(row => row.color).filter(Boolean))];
@@ -502,6 +523,8 @@ Com os melhores cumprimentos,</textarea></label>
     if (block.gradeState.rows.some(row => row.color.toLocaleLowerCase('pt') === value.toLocaleLowerCase('pt'))) { toast('Essa cor já está na grelha.', 'error'); return; }
     block.gradeState.rows.push({ id: uid(), color: value, price: 0, qty: {} });
     input.value = '';
+    scope.querySelector('[data-color-add-panel]').hidden = true;
+    scope.querySelector('[data-toggle-color-add]').hidden = false;
     renderBlockGrid(root, block); updateOrderTotals(root, blocks);
   }
 
@@ -513,6 +536,8 @@ Com os melhores cumprimentos,</textarea></label>
     if (block.gradeState.sizes.some(size => size.toLocaleLowerCase('pt') === value.toLocaleLowerCase('pt'))) { toast('Esse tamanho já está na grelha.', 'error'); return; }
     block.gradeState.sizes.push(value);
     input.value = '';
+    scope.querySelector('[data-size-add-panel]').hidden = true;
+    scope.querySelector('[data-toggle-size-add]').hidden = false;
     renderBlockGrid(root, block); updateOrderTotals(root, blocks);
   }
 
@@ -541,6 +566,18 @@ Com os melhores cumprimentos,</textarea></label>
       await openOrderEmailComposer();
       return;
     }
+    const menuToggle = event.target.closest('[data-toggle-order-menu]');
+    if (menuToggle) {
+      const menu = root.querySelector('[data-order-menu]');
+      menu.hidden = !menu.hidden;
+      menuToggle.setAttribute('aria-expanded', String(!menu.hidden));
+      return;
+    }
+    const releaseButton = event.target.closest('[data-release-order-editor]');
+    if (releaseButton) {
+      await submit(releaseButton, true);
+      return;
+    }
     if (event.target.closest('[data-add-article]')) {
       blocks.push(await newArticleBlock(blocks.length + 1));
       paintArticles();
@@ -556,9 +593,40 @@ Com os melhores cumprimentos,</textarea></label>
       paintArticles();
       return;
     }
+    const duplicateArticle = event.target.closest('[data-duplicate-article]');
+    if (duplicateArticle) {
+      const source = findBlock(duplicateArticle);
+      const sourceIndex = blocks.findIndex(item => item.id === source?.id);
+      if (sourceIndex >= 0) {
+        blocks.splice(sourceIndex + 1, 0, {
+          ...source, id: uid(), removable: true, lineIdByVariant: {},
+          gradeState: { sizes: [...source.gradeState.sizes], rows: source.gradeState.rows.map(row => ({ ...row, id: uid(), qty: { ...row.qty } })) },
+        });
+        blocks.forEach((item, index) => { item.index = index + 1; });
+        paintArticles();
+        toast('Artigo duplicado.');
+      }
+      return;
+    }
     const block = findBlock(event.target);
     if (!block) {
       if (event.target.closest('[data-submit-order]')) await submit(event.target.closest('[data-submit-order]'));
+      return;
+    }
+    const colorToggle = event.target.closest('[data-toggle-color-add]');
+    if (colorToggle) {
+      colorToggle.hidden = true;
+      const panel = colorToggle.nextElementSibling;
+      panel.hidden = false;
+      panel.querySelector('input').focus();
+      return;
+    }
+    const sizeToggle = event.target.closest('[data-toggle-size-add]');
+    if (sizeToggle) {
+      sizeToggle.hidden = true;
+      const panel = sizeToggle.nextElementSibling;
+      panel.hidden = false;
+      panel.querySelector('input').focus();
       return;
     }
     if (event.target.closest('[data-add-color]')) { addColor(block); return; }
@@ -596,7 +664,7 @@ Com os melhores cumprimentos,</textarea></label>
     }
   });
 
-  async function submit(button) {
+  async function submit(button, releaseAfter = false) {
     const orderNo = root.querySelector('input[name="order_no"]').value.trim();
     const customerId = Number(root.querySelector('select[name="customer_id"]').value || 0);
     if (!orderNo) { toast('Número interno em falta — recarregue a página.', 'error'); return; }
@@ -605,7 +673,7 @@ Com os melhores cumprimentos,</textarea></label>
       if (!block.styleId) { toast(`Escolha o modelo/artigo do artigo ${block.index}.`, 'error'); return; }
     }
     button.disabled = true;
-    button.textContent = 'A guardar…';
+    button.textContent = releaseAfter ? 'A preparar produção…' : 'A guardar…';
     try {
       const headerPayload = {
         company_id: state.companyId,
@@ -615,8 +683,16 @@ Com os melhores cumprimentos,</textarea></label>
         order_date: root.querySelector('input[name="order_date"]').value || null,
         delivery_date: root.querySelector('input[name="delivery_date"]').value || null,
         status: root.querySelector('select[name="status"]').value,
-        currency: root.querySelector('input[name="currency"]').value || 'EUR',
+        currency: root.querySelector('[name="currency"]').value || 'EUR',
         notes: root.querySelector('textarea[name="notes"]').value || null,
+        custom_data: {
+          payment_terms: root.querySelector('[name="payment_terms"]').value || null,
+          incoterm: root.querySelector('[name="incoterm"]').value || null,
+          transport: root.querySelector('[name="transport"]').value || null,
+          delivery_address: root.querySelector('[name="delivery_address"]').value || null,
+          vat_rate: Number(root.dataset.vatRate) || 0,
+          vat_label: root.dataset.vatLabel || null,
+        },
       };
       const items = [];
       for (const block of blocks) {
@@ -631,12 +707,17 @@ Com os melhores cumprimentos,</textarea></label>
         }
       }
       if (!items.length) throw new Error('Indique pelo menos uma quantidade na grade.');
-      await post('/production/sales-orders/save', { id: orderId || null, company_id: state.companyId, header: headerPayload, items });
-      toast(orderId ? 'Encomenda e grade atualizadas.' : 'Encomenda criada. Use “Libertar” para gerar as ordens de fabrico.');
+      const saved = await post('/production/sales-orders/save', { id: orderId || null, company_id: state.companyId, header: headerPayload, items });
+      if (releaseAfter) {
+        const result = await post(`/production/sales-orders/${saved.order.id}/release`, {});
+        toast(`${result.created.length} ordem(ns) de fabrico criada(s).`);
+      } else {
+        toast(orderId ? 'Encomenda e grade atualizadas.' : 'Encomenda criada. Pode agora lançá-la em produção.');
+      }
       await renderSalesOrders(panel);
     } catch (error) {
       button.disabled = false;
-      button.textContent = orderId ? 'Guardar encomenda' : 'Criar encomenda';
+      button.textContent = releaseAfter ? 'Lançar em Produção' : (orderId ? 'Guardar alterações' : 'Criar encomenda');
       toast(error.message, 'error');
     }
   }

@@ -31,6 +31,10 @@ class DirectSalesOrderFlowTest(unittest.TestCase):
             "header": {
                 "customer_id": self.customer.id, "order_no": "ENC-1", "status": "confirmed",
                 "currency": "EUR", "delivery_date": "2026-09-15",
+                "custom_data": {
+                    "payment_terms": "30 dias", "incoterm": "DAP", "transport": "customer",
+                    "delivery_address": "Rua da Fábrica, Porto", "vat_rate": 0, "vat_label": "Exportação",
+                },
             },
             "items": [
                 {"style_id": self.style.id, "color": "Preto", "size": "S", "quantity": 30, "unit_price": 8},
@@ -41,6 +45,8 @@ class DirectSalesOrderFlowTest(unittest.TestCase):
     def test_atomic_grade_save_and_idempotent_release(self):
         saved = save_sales_order(self.payload(), db=self.db, user=self.user)
         self.assertEqual(len(saved["lines"]), 2)
+        self.assertEqual(saved["order"]["custom_data"]["incoterm"], "DAP")
+        self.assertEqual(saved["order"]["custom_data"]["delivery_address"], "Rua da Fábrica, Porto")
         order_id = saved["order"]["id"]
         first = release_sales_order(order_id, db=self.db, user=self.user)
         self.assertEqual(len(first["created"]), 2)
