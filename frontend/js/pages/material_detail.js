@@ -1,6 +1,6 @@
 import { crudUpdate, get } from '../api.js';
 import { badge, date, datetime, esc, money, number } from '../format.js?v=20260819-5';
-import { fieldsCard, fieldsMarkup, mergeCustomData, readForm } from '../forms.js?v=20260824-1';
+import { bindPhotoFields, fieldsCard, fieldsMarkup, mergeCustomData, readForm } from '../forms.js?v=20260824-1';
 import { state } from '../state.js';
 import { pageHeader, toast } from '../ui.js?v=20260821-19';
 
@@ -39,28 +39,25 @@ function materialFieldGroups(material) {
     { key: 'lead_time_days', label: 'Prazo (dias)', type: 'number', default: 0 },
   ];
   const notes = [{ key: 'notes', label: 'Observações', type: 'textarea', full: true }];
-  const image = [{ key: 'custom__image_url', label: 'Imagem (URL)', type: 'url', full: true, default: material.custom_data?.image_url || '' }];
+  const image = [{ key: 'custom__photos', label: 'Fotografias', type: 'photo', default: material.custom_data?.photos || [], help: 'Até 6 fotografias, 1,5 MB cada.' }];
   return { identification, textile, costing, notes, image, allFields: [...identification, ...textile, ...costing, ...notes, ...image] };
 }
 
 function generalTabHtml(material) {
   const { identification, textile, costing, notes, image } = materialFieldGroups(material);
   const values = { ...material, active: material.active ? 'true' : 'false' };
-  const imageUrl = material.custom_data?.image_url;
   return `<form data-material-form>
     <div class="grid-2" style="margin-top:0">
       ${fieldsCard('Identificação', identification, values, `Primavera: ${material.sync_status === 'synced' ? 'sincronizado' : 'só local'}${material.primavera_id ? ` · ${material.primavera_id}` : ''}`)}
-      <div class="card">
-        <div class="card-header"><h2>Imagem</h2></div>
-        <div class="form-grid">${fieldsMarkup(image, values)}</div>
-        <div class="style-image-preview">${imageUrl ? `<img src="${esc(imageUrl)}" alt="">` : '<span class="style-image-placeholder">◈</span>'}</div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        ${fieldsCard('Imagem', image, values)}
+        ${fieldsCard('Custos e prazos', costing, values)}
       </div>
     </div>
     <div class="grid-2">
       ${fieldsCard('Têxtil', textile, values)}
-      ${fieldsCard('Custos e prazos', costing, values)}
+      ${fieldsCard('Notas', notes, values)}
     </div>
-    ${fieldsCard('Notas', notes, values)}
     <div class="card style-save-bar">
       <div><strong>Atualizar dados do artigo</strong><p class="muted">As alterações aplicam-se de imediato à ficha e às listagens.</p></div>
       <button type="submit" class="btn primary">Guardar alterações</button>
@@ -154,12 +151,13 @@ export async function renderMaterialDetail(container, materialId, back, activeTa
   const material = data.material;
   const tabs = [['general', 'Geral'], ['purchasing', 'Compras & Fornecedores'], ['stock', 'Stock'], ['usage', 'Aplicação'], ['documents', 'Documentos']];
   container.innerHTML = pageHeader(material.code, material.name, '<button class="btn" data-back>← Voltar aos artigos</button>') + `
-    <div class="detail-hero"><div class="product-image">${material.custom_data?.image_url ? `<img src="${esc(material.custom_data.image_url)}" alt="">` : '◈'}</div><div class="card detail-title">
+    <div class="detail-hero"><div class="product-image">${material.custom_data?.photos?.[0] ? `<img src="${esc(material.custom_data.photos[0])}" alt="">` : '◈'}</div><div class="card detail-title">
       <div class="card-header"><div><h2>${esc(material.name)}</h2><p>${esc(TF_TYPE_LABELS[material.tf_type] || 'Não classificado')}</p></div>${badge(material.active ? 'ativo' : 'inativo')}</div>
       <div class="tag-list"><span class="tag">${esc(material.composition || 'Sem composição')}</span><span class="tag">${esc(material.color || 'Sem cor')}</span><span class="tag">${money(material.unit_cost)} / ${esc(material.unit)}</span></div>
     </div></div>
     <div class="tabs" style="margin-top:14px">${tabs.map(([key, label]) => `<button class="tab ${key === activeTab ? 'active' : ''}" data-detail-tab="${key}">${label}</button>`).join('')}</div>
     <div data-detail-content>${renderTab(activeTab, data)}</div>`;
+  bindPhotoFields(container);
   container.querySelector('[data-back]').addEventListener('click', back);
   container.querySelectorAll('[data-detail-tab]').forEach(button => button.addEventListener('click', () => renderMaterialDetail(container, materialId, back, button.dataset.detailTab)));
   container.querySelector('[data-material-form]')?.addEventListener('submit', async event => {
