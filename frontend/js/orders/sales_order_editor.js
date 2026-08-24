@@ -125,7 +125,6 @@ function articleBlockHtml(block, styles) {
       </div>
     </div>
     <div class="table-wrap grade-table-wrap"><table class="data-table grade-table-full" data-grade-table></table></div>
-    <div class="release-order-grade-summary"><span><small>Cores utilizadas</small><b data-total-colors>0</b></span><span><small>Total de peças</small><b data-total-pieces>0</b></span><span class="grade-summary-value"><small>Subtotal do artigo</small><b data-total-value>0,00 €</b></span></div>
     <div data-requirements></div>
   </section>`;
 }
@@ -152,11 +151,7 @@ function updateBlockTotals(root, block) {
   scope.querySelectorAll('[data-col-total]').forEach((cell, idx) => { cell.textContent = number(colTotals[idx] || 0); });
   const grandCell = scope.querySelector('[data-grand-total]');
   if (grandCell) grandCell.textContent = number(grandQty);
-  const colorsUsed = gradeState.rows.filter(row => gradeState.sizes.some(size => (Number(row.qty[size]) || 0) > 0)).length;
   const currency = root.querySelector('[name="currency"]')?.value || 'EUR';
-  scope.querySelector('[data-total-colors]').textContent = number(colorsUsed);
-  scope.querySelector('[data-total-pieces]').textContent = number(grandQty);
-  scope.querySelector('[data-total-value]').textContent = orderMoney(grandValue, currency);
   scope.querySelector('[data-article-pieces]').textContent = number(grandQty);
   scope.querySelector('[data-article-value]').textContent = orderMoney(grandValue, currency);
   return { qty: grandQty, value: grandValue };
