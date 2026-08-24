@@ -1,6 +1,6 @@
-import { icon } from './icons.js?v=20260824-41';
+import { icon } from './icons.js?v=20260824-43';
 
-const exclusions='.grade-table,.cost-input-table,.wizard-input-table,.invoice-lines,[data-mobile-table="scroll"]';
+const exclusions='.grade-table,.grade-table-full,[data-grade-table],.cost-input-table,.wizard-input-table,.invoice-lines,[data-mobile-table="scroll"]';
 const labels={eye:'Abrir',edit:'Editar',delete:'Eliminar',save:'Guardar',check:'Concluir',close:'Fechar',truck:'Expedir',box:'Embalar',tag:'Etiqueta',document:'Documento',add:'Adicionar',route:'Dar destino',inbox:'Receber',print:'Imprimir',copy:'Duplicar',more:'Mais ações'};
 const rules=[
   ['delete',/delete|eliminar|remover|apagar/],['edit',/edit|editar|alterar/],['eye',/open|abrir|ver\b|ficha|detalhe/],
@@ -29,6 +29,8 @@ function actionName(control){
 }
 
 function enhanceActionRow(row){
+  const table=row.closest('table');
+  if(table?.matches(exclusions)||table?.closest('.mcm-gantt,.pmap-board,.grade-grid'))return;
   const cell=row.lastElementChild;
   if(!cell||cell.tagName!=='TD')return;
   let controls=[...cell.querySelectorAll(':scope > .btn,:scope > .row-actions > .btn')];
@@ -38,7 +40,6 @@ function enhanceActionRow(row){
   holder.classList.add('table-actions');
   cell.classList.add('table-action-cell');
   cell.dataset.label='Ações';
-  const table=cell.closest('table');
   const heading=table?.tHead?.rows?.[0];
   if(heading){while(heading.cells.length<=cell.cellIndex)heading.appendChild(document.createElement('th'));const actionHeading=heading.cells[cell.cellIndex];if(!actionHeading.classList.contains('table-action-header')){actionHeading.className='table-action-header';actionHeading.scope='col';actionHeading.innerHTML=`<span class="sr-only">Ações</span>${icon('more')}`}}
   controls=[...holder.querySelectorAll(':scope > .btn')];

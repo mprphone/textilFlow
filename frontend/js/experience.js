@@ -1,7 +1,7 @@
 import { esc } from './format.js?v=20260819-5';
 import { closeModal, openModal } from './ui.js?v=20260820-5';
-import { icon, initIconSystem } from './icons.js?v=20260824-41';
-import { initResponsiveTables } from './responsive_tables.js?v=20260824-41';
+import { icon, initIconSystem } from './icons.js?v=20260824-43';
+import { initResponsiveTables } from './responsive_tables.js?v=20260824-43';
 
 const commands = [
   {group:'Ir para', icon:'⌂', label:'Centro de comando', detail:'Prioridades, risco e indicadores', route:'dashboard', keywords:'inicio dashboard resumo'},

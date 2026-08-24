@@ -1,7 +1,7 @@
 import { crudDelete, crudList, get, post } from '../api.js';
 import { badge, date, esc, money, number } from '../format.js?v=20260824-2';
 import { state } from '../state.js';
-import { confirmDelete, empty, pageHeader, toast } from '../ui.js?v=20260821-19';
+import { closeModal, confirmDelete, empty, openModal, pageHeader, toast } from '../ui.js?v=20260824-42';
 
 const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 
@@ -29,23 +29,48 @@ function colorSwatch(name) {
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
-function gradeTableMarkup(gradeState) {
+function orderMoney(value, currency = 'EUR') {
+  try {
+    return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: currency || 'EUR' }).format(Number(value) || 0);
+  } catch {
+    return money(value);
+  }
+}
+
+function gradeLabel(value, kind) {
+  if (value && value !== '—') return value;
+  return kind === 'size' ? 'Único' : 'Sem cor';
+}
+
+function deliveryInfo(value) {
+  if (!value) return { label: 'Sem data definida', detail: 'Prazo por definir', tone: 'neutral' };
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const delivery = new Date(`${value}T00:00:00`);
+  const days = Math.ceil((delivery - today) / 86400000);
+  const label = new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' }).format(delivery);
+  if (days < 0) return { label, detail: `${Math.abs(days)} dia(s) em atraso`, tone: 'danger' };
+  if (days === 0) return { label, detail: 'Entrega hoje', tone: 'warning' };
+  if (days <= 7) return { label, detail: `${days} dia(s) até à entrega`, tone: 'warning' };
+  return { label, detail: `${days} dia(s) até à entrega`, tone: 'success' };
+}
+
+function gradeTableMarkup(gradeState, currency = 'EUR') {
   const { rows, sizes } = gradeState;
-  if (!rows.length || !sizes.length) return '';
+  if (!sizes.length) return '';
   return `<thead><tr>
-      <th>Cor</th><th>Preço unitário</th>
-      ${sizes.map(size => `<th>${esc(size)}<button type="button" class="grade-remove-size" data-icon="delete" data-remove-size="${esc(size)}" aria-label="Remover tamanho ${esc(size)}" title="Remover tamanho ${esc(size)}"></button></th>`).join('')}
-      <th>Total</th><th></th>
+      <th class="grade-color-heading">Cor</th><th class="grade-price-heading">Preço / un.</th>
+      ${sizes.map(size => `<th class="grade-size-heading"><span>${esc(gradeLabel(size, 'size'))}</span><button type="button" class="grade-remove-size" data-icon="delete" data-remove-size="${esc(size)}" aria-label="Remover tamanho ${esc(size)}" title="Remover tamanho ${esc(size)}"></button></th>`).join('')}
+      <th class="grade-total-heading">Total</th><th class="grade-action-heading"><span class="sr-only">Ações</span></th>
     </tr></thead>
-    <tbody>${rows.map(row => `
+    <tbody>${rows.length ? rows.map(row => `
       <tr data-grade-row="${row.id}">
-        <td class="grade-color-cell"><span class="grade-swatch" style="background:${colorSwatch(row.color)}"></span><input type="text" data-color-input data-row="${row.id}" value="${esc(row.color)}" placeholder="Cor"></td>
-        <td><div class="grade-price-cell"><input type="number" min="0" step="0.01" data-price-input data-row="${row.id}" value="${row.price || ''}" placeholder="0,00"><span>EUR</span></div></td>
+        <td class="grade-color-cell"><span class="grade-swatch" style="background:${colorSwatch(row.color)}"></span><input type="text" data-color-input data-row="${row.id}" value="${esc(gradeLabel(row.color, 'color'))}" placeholder="Cor"></td>
+        <td><div class="grade-price-cell"><input type="number" min="0" step="0.01" data-price-input data-row="${row.id}" value="${row.price || ''}" placeholder="0,00"><span>${esc(currency)}</span></div></td>
         ${sizes.map(size => `<td><input type="number" min="0" step="1" data-qty-input data-row="${row.id}" data-size="${esc(size)}" value="${row.qty[size] || ''}" placeholder="0"></td>`).join('')}
         <td class="grade-row-total" data-row-total="${row.id}">0</td>
         <td><button type="button" class="btn icon danger" data-icon="delete" data-remove-color="${row.id}" aria-label="Remover cor" title="Remover cor"></button></td>
-      </tr>`).join('')}</tbody>
-    <tfoot><tr><td>Total por tamanho</td><td></td>${sizes.map(() => '<td data-col-total>0</td>').join('')}<td data-grand-total>0</td><td></td></tr></tfoot>`;
+      </tr>`).join('') : `<tr class="grade-empty-row"><td colspan="${sizes.length + 4}"><span data-icon="palette" aria-hidden="true"></span><b>Adicione a primeira cor</b><small>Use o campo acima para construir a grelha deste artigo.</small></td></tr>`}</tbody>
+    <tfoot><tr><td>Totais</td><td class="grade-footer-label">por tamanho</td>${sizes.map(() => '<td data-col-total>0</td>').join('')}<td data-grand-total>0</td><td></td></tr></tfoot>`;
 }
 
 function requirementsHtml(data) {
@@ -69,32 +94,38 @@ function requirementsHtml(data) {
 
 function articleBlockHtml(block, styles) {
   return `<section class="card release-order-card release-order-article-card" data-article-block data-block-id="${block.id}">
-    <div class="card-header">
-      <h2 class="release-order-article-title"><span class="step-badge">${block.index}</span>
-        <select data-style-select>
+    <div class="release-order-article-header">
+      <div class="release-order-article-identity">
+        <span class="step-badge">${String(block.index).padStart(2, '0')}</span>
+        <div><small>ARTIGO ${String(block.index).padStart(2, '0')}</small><select data-style-select aria-label="Modelo ou artigo">
           <option value="">Selecionar modelo / artigo…</option>
           ${styles.map(row => `<option value="${row.id}" ${String(row.id) === String(block.styleId) ? 'selected' : ''}>${esc(row.reference)} · ${esc(row.description)}</option>`).join('')}
-        </select>
-      </h2>
-      <div class="actions">
-        <button type="button" class="btn icon" data-icon="document" data-calc-requirements aria-label="Calcular necessidade de material" title="Calcular necessidade de material"></button>
+        </select></div>
+      </div>
+      <div class="release-order-article-actions">
+        <div class="release-order-article-metric"><small>Peças</small><b data-article-pieces>0</b></div>
+        <div class="release-order-article-metric"><small>Subtotal</small><b data-article-value>0,00 €</b></div>
+        <button type="button" class="btn release-material-button" data-calc-requirements><span data-icon="document" aria-hidden="true"></span><span>Materiais</span></button>
         ${block.removable ? '<button type="button" class="btn icon danger" data-icon="delete" data-remove-article aria-label="Remover artigo" title="Remover artigo"></button>' : ''}
       </div>
     </div>
-    <div class="grade-add-row">
-      <div class="grade-add-group">
+    <div class="release-grade-toolbar">
+      <div class="release-grade-title"><span data-icon="grid" aria-hidden="true"></span><div><b>Grelha comercial</b><small>Cores, tamanhos, quantidades e preço</small></div></div>
+      <div class="grade-add-row">
+      <label class="grade-add-group"><span>Nova cor</span><div>
         <span class="grade-add-icon" data-icon="palette" aria-hidden="true"></span>
-        <input type="text" data-new-color placeholder="Nova cor (ex.: Preto)">
+        <input type="text" data-new-color placeholder="Ex.: Preto">
         <button type="button" class="grade-add-btn" data-icon="add" data-add-color aria-label="Adicionar cor" title="Adicionar cor"></button>
-      </div>
-      <div class="grade-add-group">
+      </div></label>
+      <label class="grade-add-group"><span>Novo tamanho</span><div>
         <span class="grade-add-icon" data-icon="ruler" aria-hidden="true"></span>
-        <input type="text" data-new-size placeholder="Novo tamanho (ex.: 3XL)">
+        <input type="text" data-new-size placeholder="Ex.: 3XL">
         <button type="button" class="grade-add-btn" data-icon="add" data-add-size aria-label="Adicionar tamanho" title="Adicionar tamanho"></button>
+      </div></label>
       </div>
     </div>
     <div class="table-wrap grade-table-wrap"><table class="data-table grade-table-full" data-grade-table></table></div>
-    <p class="release-order-grade-summary">Total de cores: <b data-total-colors>0</b> · Total de peças: <b data-total-pieces>0</b> · Subtotal: <b data-total-value>0,00 €</b></p>
+    <div class="release-order-grade-summary"><span><small>Cores utilizadas</small><b data-total-colors>0</b></span><span><small>Total de peças</small><b data-total-pieces>0</b></span><span class="grade-summary-value"><small>Subtotal do artigo</small><b data-total-value>0,00 €</b></span></div>
     <div data-requirements></div>
   </section>`;
 }
@@ -122,9 +153,12 @@ function updateBlockTotals(root, block) {
   const grandCell = scope.querySelector('[data-grand-total]');
   if (grandCell) grandCell.textContent = number(grandQty);
   const colorsUsed = gradeState.rows.filter(row => gradeState.sizes.some(size => (Number(row.qty[size]) || 0) > 0)).length;
+  const currency = root.querySelector('[name="currency"]')?.value || 'EUR';
   scope.querySelector('[data-total-colors]').textContent = number(colorsUsed);
   scope.querySelector('[data-total-pieces]').textContent = number(grandQty);
-  scope.querySelector('[data-total-value]').textContent = money(grandValue);
+  scope.querySelector('[data-total-value]').textContent = orderMoney(grandValue, currency);
+  scope.querySelector('[data-article-pieces]').textContent = number(grandQty);
+  scope.querySelector('[data-article-value]').textContent = orderMoney(grandValue, currency);
   return { qty: grandQty, value: grandValue };
 }
 
@@ -133,17 +167,64 @@ function updateOrderTotals(root, blocks) {
   blocks.forEach(block => { const t = updateBlockTotals(root, block); qty += t.qty; value += t.value; });
   root.querySelector('[data-summary-pieces]').textContent = number(qty);
   root.querySelector('[data-summary-articles]').textContent = number(blocks.length);
-  root.querySelector('[data-summary-value]').textContent = money(value);
+  root.querySelector('[data-summary-value]').textContent = orderMoney(value, root.querySelector('[name="currency"]')?.value || 'EUR');
 }
 
 function renderBlockGrid(root, block) {
   const scope = root.querySelector(`[data-article-block][data-block-id="${block.id}"]`);
   const table = scope.querySelector('[data-grade-table]');
-  table.innerHTML = gradeTableMarkup(block.gradeState);
+  table.innerHTML = gradeTableMarkup(block.gradeState, root.querySelector('[name="currency"]')?.value || 'EUR');
 }
 
 function blockTotalQty(block) {
   return block.gradeState.rows.reduce((sum, row) => sum + block.gradeState.sizes.reduce((s, size) => s + (Number(row.qty[size]) || 0), 0), 0);
+}
+
+function orderCommunicationData(root, blocks, styles, customers) {
+  const customerId = root.querySelector('[name="customer_id"]')?.value;
+  const customer = customers.find(row => String(row.id) === String(customerId));
+  const currency = root.querySelector('[name="currency"]')?.value || 'EUR';
+  const articles = blocks.map(block => {
+    const style = styles.find(row => String(row.id) === String(block.styleId));
+    const rows = block.gradeState.rows.map(row => {
+      const quantities = block.gradeState.sizes
+        .map(size => ({ size: gradeLabel(size, 'size'), quantity: Number(row.qty[size]) || 0 }))
+        .filter(item => item.quantity > 0);
+      const quantity = quantities.reduce((sum, item) => sum + item.quantity, 0);
+      return { color: gradeLabel(row.color, 'color'), price: Number(row.price) || 0, quantities, quantity };
+    }).filter(row => row.quantity > 0);
+    return {
+      reference: style?.reference || 'Artigo por selecionar', description: style?.description || '', rows,
+      quantity: rows.reduce((sum, row) => sum + row.quantity, 0),
+      value: rows.reduce((sum, row) => sum + row.quantity * row.price, 0),
+    };
+  });
+  return {
+    customer, currency, articles,
+    orderNo: root.querySelector('[name="order_no"]')?.value || 'Nova encomenda',
+    customerPo: root.querySelector('[name="customer_po"]')?.value || '',
+    orderDate: root.querySelector('[name="order_date"]')?.value || '',
+    deliveryDate: root.querySelector('[name="delivery_date"]')?.value || '',
+    notes: root.querySelector('[name="notes"]')?.value || '',
+    quantity: articles.reduce((sum, article) => sum + article.quantity, 0),
+    value: articles.reduce((sum, article) => sum + article.value, 0),
+  };
+}
+
+function orderEmailText(data, message = '') {
+  const articles = data.articles.map(article => {
+    const variants = article.rows.flatMap(row => row.quantities.map(item => `${row.color} / ${item.size}: ${number(item.quantity)}`)).join(', ');
+    return `- ${article.reference}${article.description ? ` · ${article.description}` : ''}: ${number(article.quantity)} peças${variants ? ` (${variants})` : ''}`;
+  }).join('\n');
+  return `${message.trim()}\n\nNota de encomenda ${data.orderNo}\nCliente: ${data.customer?.name || '—'}\nPO cliente: ${data.customerPo || '—'}\nData: ${data.orderDate ? date(data.orderDate) : '—'}\nEntrega: ${data.deliveryDate ? date(data.deliveryDate) : '—'}\n\nArtigos\n${articles || '- Sem quantidades registadas'}\n\nTotal: ${number(data.quantity)} peças · ${orderMoney(data.value, data.currency)}${data.notes ? `\n\nNotas: ${data.notes}` : ''}`.trim();
+}
+
+function orderEmailHtml(data, message = '') {
+  const articleRows = data.articles.map(article => {
+    const variants = article.rows.flatMap(row => row.quantities.map(item => `${row.color} / ${item.size}: ${number(item.quantity)}`)).join(' · ');
+    return `<tr><td style="padding:12px;border-bottom:1px solid #e2e8f0"><b>${esc(article.reference)}</b><br><span style="color:#64748b">${esc(article.description)}</span>${variants ? `<br><small style="color:#64748b">${esc(variants)}</small>` : ''}</td><td style="padding:12px;border-bottom:1px solid #e2e8f0">${esc(number(article.quantity))}</td><td style="padding:12px;border-bottom:1px solid #e2e8f0;text-align:right"><b>${esc(orderMoney(article.value, data.currency))}</b></td></tr>`;
+  }).join('');
+  return `<div style="font-family:Arial,sans-serif;max-width:720px;color:#172033"><p>${esc(message).replace(/\n/g, '<br>')}</p><div style="margin:24px 0;padding:20px;border-radius:12px;background:#122548;color:#fff"><small style="letter-spacing:.12em">NOTA DE ENCOMENDA</small><h1 style="margin:6px 0 4px">${esc(data.orderNo)}</h1><span>${esc(data.customer?.name || '')}</span></div><table style="width:100%;border-collapse:collapse"><tr><td><small>PO CLIENTE</small><br><b>${esc(data.customerPo || '—')}</b></td><td><small>DATA</small><br><b>${esc(data.orderDate ? date(data.orderDate) : '—')}</b></td><td><small>ENTREGA</small><br><b>${esc(data.deliveryDate ? date(data.deliveryDate) : '—')}</b></td></tr></table><table style="width:100%;margin-top:24px;border-collapse:collapse"><thead><tr style="background:#f1f5f9"><th style="padding:10px;text-align:left">Artigo</th><th style="padding:10px;text-align:left">Peças</th><th style="padding:10px;text-align:right">Subtotal</th></tr></thead><tbody>${articleRows || '<tr><td colspan="3" style="padding:16px">Sem quantidades registadas.</td></tr>'}</tbody><tfoot><tr><td style="padding:16px 12px"><b>Total</b></td><td style="padding:16px 12px"><b>${esc(number(data.quantity))}</b></td><td style="padding:16px 12px;text-align:right;font-size:18px"><b>${esc(orderMoney(data.value, data.currency))}</b></td></tr></tfoot></table>${data.notes ? `<div style="margin-top:20px;padding:14px;background:#f8fafc"><b>Notas</b><p>${esc(data.notes).replace(/\n/g, '<br>')}</p></div>` : ''}</div>`;
 }
 
 async function newArticleBlock(index, styleId = '') {
@@ -227,8 +308,8 @@ export async function renderSalesOrderEditor(panel, orderId) {
       const lineIdByVariant = {};
       styleLines.forEach(line => {
         const variant = line.variant_id ? variantById.get(line.variant_id) : null;
-        const color = variant?.color || '—';
-        const size = variant?.size || '—';
+        const color = variant?.color || 'Sem cor';
+        const size = variant?.size || 'Único';
         sizesSet.add(size);
         if (!rowsByColor.has(color)) rowsByColor.set(color, { id: uid(), color, price: line.unit_price || 0, qty: {} });
         rowsByColor.get(color).qty[size] = line.quantity;
@@ -243,28 +324,37 @@ export async function renderSalesOrderEditor(panel, orderId) {
   }
   if (!blocks.length) blocks.push(await newArticleBlock(1));
   blocks.forEach((block, idx) => { block.index = idx + 1; });
+  const initialCustomer = customers.find(row => String(row.id) === String(order.customer_id));
+  const initialDelivery = deliveryInfo(order.delivery_date);
 
   panel.innerHTML = `<div class="release-order-page">
     <header class="release-order-header">
-      <button type="button" class="btn icon" data-icon="back" data-back-order aria-label="Voltar" title="Voltar"></button>
-      <div><h2>${orderId ? `Editar encomenda ${esc(order.order_no)}` : 'Nova encomenda'}</h2><p>Dados da encomenda e grade cor × tamanho por artigo</p></div>
+      <button type="button" class="btn icon release-order-back" data-icon="back" data-back-order aria-label="Voltar às encomendas" title="Voltar às encomendas"></button>
+      <div class="release-order-heading">
+        <span class="release-order-eyebrow">NOTA DE ENCOMENDA</span>
+        <div><h1>${esc(order.order_no || 'Nova encomenda')}</h1><span class="release-order-status-chip" data-order-status>${esc(STATUS_LABELS[order.status] || order.status)}</span></div>
+        <p><span data-order-customer-name>${esc(initialCustomer?.name || 'Cliente por selecionar')}</span><span aria-hidden="true">·</span><span data-order-po>${order.customer_po ? `PO ${esc(order.customer_po)}` : 'Sem PO do cliente'}</span></p>
+      </div>
+      <div class="release-order-deadline ${initialDelivery.tone}" data-order-deadline><span data-icon="clock" aria-hidden="true"></span><div><small>Prazo acordado</small><b>${esc(initialDelivery.label)}</b><span>${esc(initialDelivery.detail)}</span></div></div>
       <div class="release-order-actions">
+        <button type="button" class="btn release-order-output" data-print-order><span data-icon="print" aria-hidden="true"></span><span>PDF / Imprimir</span></button>
+        <button type="button" class="btn release-order-output" data-email-order><span data-icon="mail" aria-hidden="true"></span><span>Enviar por email</span></button>
         <button type="button" class="btn" data-cancel-order>Cancelar</button>
         <button type="button" class="btn primary" data-submit-order>${orderId ? 'Guardar encomenda' : 'Criar encomenda'}</button>
       </div>
     </header>
 
     <section class="card release-order-card">
-      <div class="card-header"><h2>Dados principais</h2></div>
+      <div class="card-header release-order-section-heading"><span data-icon="document" aria-hidden="true"></span><div><h2>Dados comerciais</h2><p>Identificação, referência do cliente e condições da encomenda.</p></div></div>
       <div class="release-order-fields">
-        <label class="field-customer">Cliente *<select name="customer_id" required>${customers.map(row => `<option value="${row.id}" ${String(row.id) === String(order.customer_id) ? 'selected' : ''}>${esc(row.name)}</option>`).join('')}</select></label>
+        <label class="field-customer">Cliente *<select name="customer_id" required><option value="">Selecionar cliente…</option>${customers.map(row => `<option value="${row.id}" ${String(row.id) === String(order.customer_id) ? 'selected' : ''}>${esc(row.name)}</option>`).join('')}</select></label>
         <label class="field-order-no">Número interno<input name="order_no" value="${esc(order.order_no || '')}" readonly></label>
         <label class="field-customer-po">PO cliente<input name="customer_po" value="${esc(order.customer_po || '')}" placeholder="Referência da encomenda do cliente"></label>
         <label class="field-order-date">Data<input type="date" name="order_date" value="${order.order_date || ''}"></label>
         <label class="field-delivery-date">Entrega<input type="date" name="delivery_date" value="${order.delivery_date || ''}"></label>
         <label class="field-status">Estado<select name="status">${Object.entries(EDITABLE_STATUS_LABELS).map(([value, label]) => `<option value="${value}" ${value === order.status ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></label>
         <label class="field-currency">Moeda<input name="currency" value="${esc(order.currency || 'EUR')}"></label>
-        <label class="full">Notas<textarea name="notes">${esc(order.notes || '')}</textarea></label>
+        <label class="full field-notes">Notas e instruções comerciais<textarea name="notes" placeholder="Condições acordadas, instruções de embalagem, observações de entrega…">${esc(order.notes || '')}</textarea></label>
       </div>
     </section>
 
@@ -272,10 +362,10 @@ export async function renderSalesOrderEditor(panel, orderId) {
     <button type="button" class="btn release-order-add-article" data-add-article><span data-icon="add" aria-hidden="true"></span>Adicionar artigo</button>
 
     <aside class="card release-order-summary-card">
-      <h3>Resumo da encomenda</h3>
-      <div><span>Total de peças</span><b data-summary-pieces>0</b></div>
-      <div><span>N.º de artigos</span><b data-summary-articles>0</b></div>
-      <div class="total"><span>Valor total</span><b data-summary-value>0,00 €</b></div>
+      <div class="release-summary-heading"><span data-icon="document" aria-hidden="true"></span><div><h3>Resumo da encomenda</h3><small>Atualizado automaticamente</small></div></div>
+      <div class="release-summary-metric"><span>Total de peças</span><b data-summary-pieces>0</b></div>
+      <div class="release-summary-metric"><span>N.º de artigos</span><b data-summary-articles>0</b></div>
+      <div class="release-summary-metric total"><span>Valor total</span><b data-summary-value>0,00 €</b></div>
     </aside>
 
   </div>`;
@@ -290,12 +380,86 @@ export async function renderSalesOrderEditor(panel, orderId) {
   }
   paintArticles();
 
+  function refreshHeaderMeta() {
+    const customerId = root.querySelector('[name="customer_id"]')?.value;
+    const customer = customers.find(row => String(row.id) === String(customerId));
+    const customerPo = root.querySelector('[name="customer_po"]')?.value.trim();
+    const status = root.querySelector('[name="status"]')?.value;
+    const delivery = deliveryInfo(root.querySelector('[name="delivery_date"]')?.value);
+    root.querySelector('[data-order-customer-name]').textContent = customer?.name || 'Cliente por selecionar';
+    root.querySelector('[data-order-po]').textContent = customerPo ? `PO ${customerPo}` : 'Sem PO do cliente';
+    root.querySelector('[data-order-status]').textContent = STATUS_LABELS[status] || status || 'Sem estado';
+    const deadline = root.querySelector('[data-order-deadline]');
+    deadline.className = `release-order-deadline ${delivery.tone}`;
+    deadline.querySelector('b').textContent = delivery.label;
+    deadline.querySelector('div>span').textContent = delivery.detail;
+  }
+
+  async function openOrderEmailComposer() {
+    const data = orderCommunicationData(root, blocks, styles, customers);
+    let accounts = [];
+    try {
+      const response = await get(`/mailbox/${state.companyId}/accounts`);
+      accounts = (response.items || []).filter(account => account.can_send);
+    } catch { /* O cliente de email continua disponível como alternativa. */ }
+    const hasSmtp = accounts.length > 0;
+    const recipient = data.customer?.email || '';
+    const subject = `Nota de encomenda ${data.orderNo}${data.customerPo ? ` · PO ${data.customerPo}` : ''}`;
+    openModal('Enviar nota de encomenda', `<form class="order-email-form" data-order-email-form>
+      <div class="order-email-intro"><span data-icon="mail" aria-hidden="true"></span><div><b>${hasSmtp ? 'Envio direto pelo TextileFlow' : 'Preparar mensagem no seu email'}</b><p>${hasSmtp ? 'A nota segue no corpo do email com o resumo comercial atualizado.' : 'Não existe uma conta SMTP pronta para envio. Será aberto o programa de email do dispositivo.'}</p></div></div>
+      ${hasSmtp ? `<label class="field">Conta de envio<select name="account_id">${accounts.map(account => `<option value="${account.id}">${esc(account.label || account.email)} · ${esc(account.email)}</option>`).join('')}</select></label>` : ''}
+      <div class="form-grid two"><label class="field">Destinatário *<input type="email" name="to" required value="${esc(recipient)}" placeholder="cliente@empresa.pt"></label><label class="field">Assunto *<input name="subject" required value="${esc(subject)}"></label></div>
+      <label class="field">Mensagem<textarea name="message" rows="6">Exmos. Senhores,
+
+Segue a nota de encomenda ${esc(data.orderNo)} para vossa confirmação.
+
+Com os melhores cumprimentos,</textarea></label>
+      <div class="order-email-note"><span data-icon="print" aria-hidden="true"></span><span>Para anexar um ficheiro, use primeiro <b>PDF / Imprimir</b>, guarde o PDF e anexe-o à mensagem. O resumo completo já segue no corpo do email.</span></div>
+      <div class="form-footer"><button type="button" class="btn" data-close-order-email>Cancelar</button><button type="submit" class="btn primary" data-send-order-email><span data-icon="mail" aria-hidden="true"></span>${hasSmtp ? 'Enviar agora' : 'Abrir no email'}</button></div>
+    </form>`, `${data.customer?.name || 'Cliente por selecionar'} · ${data.orderNo}`);
+    const form = document.querySelector('[data-order-email-form]');
+    form.querySelector('[data-close-order-email]').addEventListener('click', closeModal);
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const button = form.querySelector('[data-send-order-email]');
+      const to = form.elements.to.value.trim();
+      const currentSubject = form.elements.subject.value.trim();
+      const message = form.elements.message.value.trim();
+      if (!to || !currentSubject) { toast('Indique o destinatário e o assunto.', 'error'); return; }
+      const currentData = orderCommunicationData(root, blocks, styles, customers);
+      if (!hasSmtp) {
+        location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(currentSubject)}&body=${encodeURIComponent(orderEmailText(currentData, message))}`;
+        closeModal();
+        return;
+      }
+      button.disabled = true;
+      button.textContent = 'A enviar…';
+      try {
+        await post(`/mailbox/${state.companyId}/accounts/${form.elements.account_id.value}/send`, {
+          to, subject: currentSubject, body: orderEmailText(currentData, message), html: orderEmailHtml(currentData, message),
+        });
+        closeModal();
+        toast(`Nota de encomenda enviada para ${to}.`);
+      } catch (error) {
+        button.disabled = false;
+        button.innerHTML = '<span data-icon="mail" aria-hidden="true"></span>Enviar agora';
+        toast(error.message, 'error');
+      }
+    });
+  }
+
   function findBlock(el) {
     const scope = el.closest('[data-article-block]');
     return scope ? blocks.find(b => b.id === scope.dataset.blockId) : null;
   }
 
   root.addEventListener('input', async event => {
+    if (event.target.matches('[name="customer_id"],[name="customer_po"],[name="delivery_date"],[name="status"]')) refreshHeaderMeta();
+    if (event.target.matches('[name="currency"]')) {
+      blocks.forEach(block => renderBlockGrid(root, block));
+      updateOrderTotals(root, blocks);
+      return;
+    }
     const styleSelect = event.target.closest('[data-style-select]');
     if (styleSelect) {
       const block = findBlock(styleSelect);
@@ -368,6 +532,18 @@ export async function renderSalesOrderEditor(panel, orderId) {
   root.addEventListener('click', async event => {
     if (event.target.closest('[data-back-order]') || event.target.closest('[data-cancel-order]')) {
       await renderSalesOrders(panel);
+      return;
+    }
+    if (event.target.closest('[data-print-order]')) {
+      refreshHeaderMeta();
+      const previousTitle = document.title;
+      document.title = `Nota de encomenda ${root.querySelector('[name="order_no"]')?.value || ''}`.trim();
+      window.print();
+      document.title = previousTitle;
+      return;
+    }
+    if (event.target.closest('[data-email-order]')) {
+      await openOrderEmailComposer();
       return;
     }
     if (event.target.closest('[data-add-article]')) {

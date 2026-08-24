@@ -11,6 +11,7 @@ const paths={
   save:'<path d="M5 3h12l3 3v15H4V3h1Z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/>',
   tag:'<path d="M3 4v7l9 9 8-8-9-9H4a1 1 0 0 0-1 1Z"/><circle cx="8" cy="8" r="1.4"/>',
   inbox:'<path d="M4 4h16v14H4V4Z"/><path d="M4 14h5l2 3h2l2-3h5"/>',
+  mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>',
   print:'<path d="M7 8V3h10v5M7 17H4V9h16v8h-3M7 14h10v7H7v-7Z"/><path d="M17 11h.01"/>',
   copy:'<rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2"/>',
   more:'<circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/>',
