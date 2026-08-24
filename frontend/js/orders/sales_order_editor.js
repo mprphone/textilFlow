@@ -558,8 +558,17 @@ Com os melhores cumprimentos,</textarea></label>
       refreshHeaderMeta();
       const previousTitle = document.title;
       document.title = `Nota de encomenda ${root.querySelector('[name="order_no"]')?.value || ''}`.trim();
-      window.print();
-      document.title = previousTitle;
+      const printScale = Math.max(0.35, Math.min(0.94, 650 / Math.max(root.scrollHeight, 1)));
+      root.style.setProperty('--order-print-scale', printScale.toFixed(3));
+      root.style.setProperty('--order-print-width', `${(100 / printScale).toFixed(2)}%`);
+      document.body.classList.add('printing-sales-order');
+      try { window.print(); }
+      finally {
+        document.body.classList.remove('printing-sales-order');
+        root.style.removeProperty('--order-print-scale');
+        root.style.removeProperty('--order-print-width');
+        document.title = previousTitle;
+      }
       return;
     }
     if (event.target.closest('[data-email-order]')) {
