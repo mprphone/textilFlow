@@ -2,7 +2,6 @@ import { crudCreate, crudDelete, crudList, crudUpdate, get, post } from '../api.
 import { badge, date, esc, money, number } from '../format.js?v=20260819-5';
 import { state } from '../state.js';
 import { confirmDelete, empty, pageHeader, toast } from '../ui.js?v=20260821-19';
-import { prepareFromSales } from '../pages/commercial_docs.js?v=20260822-33';
 
 const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 
@@ -178,10 +177,6 @@ export async function renderSalesOrders(panel) {
         <td>${date(row.delivery_date)}</td>
         <td><span class="badge blue">${esc(STATUS_LABELS[row.status] || row.status)}</span></td>
         <td class="listing-actions"><div class="row-actions">
-          <button class="btn small primary" type="button" data-erp-so="sales_invoice" data-id="${row.id}">Fatura</button>
-          <button class="btn small" type="button" data-erp-so="sales_credit" data-id="${row.id}">NC</button>
-          <button class="btn small" type="button" data-erp-so="sales_debit" data-id="${row.id}">ND</button>
-          <button class="btn small" type="button" data-erp-so="sales_delivery" data-id="${row.id}">Guia</button>
           <button class="btn icon" type="button" data-edit-order="${row.id}" aria-label="Editar">✎</button>
           <button class="btn icon danger" type="button" data-delete-order="${row.id}" aria-label="Eliminar">×</button>
         </div></td>
@@ -192,10 +187,6 @@ export async function renderSalesOrders(panel) {
   panel.querySelectorAll('[data-delete-order]').forEach(button => button.addEventListener('click', async () => {
     if (!confirmDelete('esta encomenda')) return;
     try { await crudDelete('sales-orders', Number(button.dataset.deleteOrder), state.companyId); toast('Encomenda eliminada.'); await renderSalesOrders(panel); }
-    catch (error) { toast(error.message, 'error'); }
-  }));
-  panel.querySelectorAll('[data-erp-so]').forEach(button => button.addEventListener('click', async () => {
-    try { const saved = await prepareFromSales(Number(button.dataset.id), button.dataset.erpSo); toast(`${saved.doc_no} preparado para o Primavera.`); }
     catch (error) { toast(error.message, 'error'); }
   }));
 }
