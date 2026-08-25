@@ -9,6 +9,7 @@ from ..models import (
     SalesOrderLine, StockLot, Style, SubcontractJob, SubcontractService,
 )
 from .costing import recalculate_sheet
+from .cost_sheet_automation import cost_sheet_completeness, ensure_required_cost_lines, pricing_summary
 from .currency import base_currency, convert_to_base
 from .proposal_release import ACCEPTED_STATUSES, annotated_cost_lines, production_preview
 from .serialization import model_to_dict
@@ -38,6 +39,11 @@ def sheet_view(db, sheet: CostSheet) -> dict:
     customer = candidate_customer if candidate_customer and candidate_customer.company_id == sheet.company_id else None
     lines = annotated_cost_lines(db, sheet)
     preview = production_preview(db, sheet)
+    completeness = cost_sheet_completeness(db, sheet)
+    invalid_line_ids = set(completeness["invalid_line_ids"])
+    for line in lines:
+        line["validation_status"] = "incomplete" if line.get("id") in invalid_line_ids else "ready"
+    pricing = pricing_summary(db, sheet)
     result = model_to_dict(sheet)
     sales_order_id = meta.get("sales_order_id")
     sales_order = db.get(SalesOrder, sales_order_id) if sales_order_id else None
@@ -91,6 +97,8 @@ def sheet_view(db, sheet: CostSheet) -> dict:
         "release_blockers": preview["blockers"],
         "release_warnings": preview["warnings"],
         "already_released": preview["already_released"],
+        "completeness": completeness,
+        "pricing": pricing,
     })
     return {
         "sheet": result,
@@ -99,6 +107,8 @@ def sheet_view(db, sheet: CostSheet) -> dict:
         "stock_summary": preview["stock_summary"],
         "requirements": preview["requirements"],
         "cost_variance": preview["cost_variance"],
+        "completeness": completeness,
+        "pricing": pricing,
     }
 
 
@@ -132,6 +142,9 @@ def save_sheet(db, sheet: CostSheet, payload) -> CostSheet:
         "client_notes": getattr(payload, "client_notes", None) if getattr(payload, "client_notes", None) is not None else meta.get("client_notes"),
         "vat_pct": float(getattr(payload, "vat_pct", None) or meta.get("vat_pct") or 23),
         "payment_terms": (getattr(payload, "payment_terms", None) or meta.get("payment_terms") or "30 dias"),
+        "financial_cost_pct": float(getattr(payload, "financial_cost_pct", 2)),
+        "markup_pct": float(getattr(payload, "markup_pct", 35)),
+        "commission_pct": float(getattr(payload, "commission_pct", 0)),
         "cost_source": "entered_and_verified",
     })
     sheet.custom_data = meta
@@ -156,6 +169,8 @@ def save_sheet(db, sheet: CostSheet, payload) -> CostSheet:
             source_id=item.source_id,
         ))
     db.flush()
+    recalculate_sheet(db, sheet)
+    ensure_required_cost_lines(db, sheet)
     return recalculate_sheet(db, sheet)
 
 

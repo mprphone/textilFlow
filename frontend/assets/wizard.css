@@ -27,3 +27,4 @@
 .catalog-select{width:22px;height:22px}
 .wizard-input-table input{padding:4px 6px;min-width:52px}
 @media(max-width:1024px){.wizard-pick{grid-template-columns:1fr}.proposal-wizard{max-height:none}}
+.wizard-use-price{display:block;width:100%;margin-top:5px;border:0;background:transparent;color:#8cc6ff;text-align:left;font-size:12px;font-weight:800;cursor:pointer}.wizard-use-price:hover{text-decoration:underline}.wizard-final-totals small{display:block;margin-top:4px;color:#6f7d91;font-size:12px;line-height:1.3}

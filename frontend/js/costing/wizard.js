@@ -3,24 +3,46 @@ import { esc, money, number } from '../format.js?v=20260819-6';
 import { state as appState } from '../state.js';
 import { pageHeader, toast } from '../ui.js?v=20260820-5';
 import { recordModal } from '../quick_create.js';
-import { articleTypeCards, componentEditor, customCostRows, productionRows, stepper, subcontractRows, totals } from './wizard_components.js?v=20260824-41';
-import { filterCatalog, materialCatalogTable, operationCatalogTable, subcontractCatalogTable } from './wizard_catalogs.js?v=20260824-41';
+import { articleTypeCards, componentEditor, customCostRows, productionRows, stepper, subcontractRows, totals } from './wizard_components.js?v=20260825-55';
+import { filterCatalog, materialCatalogTable, operationCatalogTable, subcontractCatalogTable } from './wizard_catalogs.js?v=20260825-55';
 
 
 function blankState() {
+  const validUntil = new Date();
+  validUntil.setDate(validUntil.getDate() + 30);
   return {
     article_type_id:null, customer_id:null, reference:'', description:'', quantity:1000,
-    selling_price:0, valid_until:'', piece_image_url:'', color:'', notes:'',
+    selling_price:0, valid_until:validUntil.toISOString().slice(0,10), piece_image_url:'', color:'', notes:'',
+    financial_cost_pct:2, markup_pct:35, commission_pct:0,
     materials:[], accessories:[], operations:[], services:[], overheads:[],
   };
 }
 
 function fromMaterial(row) {
-  return {material_id:row.id, description:row.name, quantity:row.category === 'fabric' ? 0.5 : 1, unit:row.unit, unit_cost:row.unit_cost, waste_pct:row.category === 'fabric' ? 5 : 0, image_url:row.image_url || null, color:row.color || ''};
+  const configured = Number(row.custom_data?.default_consumption);
+  return {material_id:row.id, description:row.name, quantity:Number.isFinite(configured) ? configured : (row.category === 'fabric' ? 0.5 : 1), unit:row.unit, unit_cost:Number(row.effective_unit_cost ?? row.unit_cost ?? 0), waste_pct:row.category === 'fabric' ? 5 : 0, image_url:row.image_url || null, color:row.color || ''};
 }
 
 function fromService(row) {
   return {subcontract_service_id:row.id,description:row.name,supplier_name:row.supplier_name,quantity:1,unit:row.unit,unit_cost:row.unit_cost,waste_pct:0,lead_time_days:row.lead_time_days};
+}
+
+function applyCostingTemplate(data, catalog) {
+  const template = catalog.costing_template || {};
+  data.accessories = (template.accessories || []).map(item => ({
+    ...item, waste_pct:0,
+    image_url:catalog.materials.find(row => row.id === item.material_id)?.image_url || null,
+    color:'',
+  }));
+  data.operations = (template.operations || []).map(item => ({...item, waste_pct:0}));
+  data.overheads = (template.overheads || []).map(item => ({...item, waste_pct:0}));
+  Object.assign(data, template.pricing || {});
+}
+
+function suggestedPrice(data) {
+  const base = totals(data).unit;
+  const divisor = 1 - Math.min(99, Math.max(0, Number(data.commission_pct || 0))) / 100;
+  return divisor > 0 ? base * (1 + Number(data.financial_cost_pct || 0) / 100 + Number(data.markup_pct || 0) / 100) / divisor : 0;
 }
 
 function stepContent(step, data, catalog, ui) {
@@ -87,6 +109,7 @@ function stepContent(step, data, catalog, ui) {
   }
 
   const total = totals(data);
+  const suggested = suggestedPrice(data);
   const type = catalog.article_types.find(row => row.id === data.article_type_id);
   const customer = catalog.customers.find(row => row.id === data.customer_id);
   const allComponents = [...data.materials, ...data.accessories];
@@ -94,10 +117,10 @@ function stepContent(step, data, catalog, ui) {
     <div class="proposal-preview">
       <div class="proposal-cover">${data.piece_image_url ? `<img src="${esc(data.piece_image_url)}" alt="${esc(data.description)}">` : `<div class="piece-placeholder">${esc((type?.name || 'P').charAt(0))}</div>`}<span>${esc(data.color || 'Cor por definir')}</span></div>
       <div class="proposal-info"><span class="decision-eyebrow">PROPOSTA EM PREPARAÇÃO</span><h2>${esc(data.description)}</h2><p>${esc(type?.name || '')} · ${esc(customer?.name || '')}</p><div><span><small>Quantidade</small><b>${number(data.quantity)}</b></span><span><small>Componentes</small><b>${allComponents.length}</b></span><span><small>Tempo</small><b>${number(data.operations.reduce((sum,item)=>sum+Number(item.quantity||0),0))} min</b></span></div></div>
-      <div class="proposal-price"><label>Venda por peça *<input data-header="selling_price" type="number" min="0" step="any" value="${data.selling_price}"></label><label>Válida até<input data-header="valid_until" type="date" value="${esc(data.valid_until)}"></label></div>
+      <div class="proposal-price"><label>Venda por peça *<input data-header="selling_price" type="number" min="0" step="any" value="${data.selling_price}"><button type="button" class="wizard-use-price" data-wizard-use-price>Usar recomendado · ${money(suggested)}</button></label><label>Válida até<input data-header="valid_until" type="date" value="${esc(data.valid_until)}"></label></div>
     </div>
     <div class="cost-breakdown-cards"><div><span>Materiais e acessórios</span><strong>${money(total.material)}</strong></div><div><span>Produção</span><strong>${money(total.labor)}</strong></div><div><span>Subcontratos</span><strong>${money(total.services)}</strong></div><div><span>Custos gerais</span><strong>${money(total.overhead)}</strong></div></div>
-    <div class="wizard-final-totals"><div><span>Custo por peça</span><strong data-wizard-unit>${money(total.unit)}</strong></div><div><span>Custo total</span><strong data-wizard-total>${money(total.total)}</strong></div><div><span>Venda total</span><strong data-wizard-sale>${money(total.saleTotal)}</strong></div><div><span>Margem</span><strong class="${total.margin < 20 ? 'cost-bad':'cost-good'}" data-wizard-margin>${number(total.margin)}%</strong></div></div>
+    <div class="wizard-final-totals"><div><span>Custo por peça</span><strong data-wizard-unit>${money(total.unit)}</strong></div><div><span>Preço recomendado</span><strong>${money(suggested)}</strong><small>${number(data.financial_cost_pct)}% encargos · ${number(data.markup_pct)}% acréscimo · ${number(data.commission_pct)}% comissão</small></div><div><span>Venda total</span><strong data-wizard-sale>${money(total.saleTotal)}</strong></div><div><span>Margem</span><strong class="${total.margin < 20 ? 'cost-bad':'cost-good'}" data-wizard-margin>${number(total.margin)}%</strong></div></div>
     <div class="wizard-notes"><label>Notas e condições<textarea data-header="notes" placeholder="Prazos, condições de pagamento, observações para o cliente…">${esc(data.notes)}</textarea></label></div>`;
 }
 
@@ -170,6 +193,7 @@ function validate(step, data) {
 export async function renderProposalWizard(container, onDone, onCancel) {
   const catalog = await get(`/costing/${appState.companyId}/wizard-catalog`);
   const data = blankState();
+  applyCostingTemplate(data, catalog);
   const ui = {
     fabric:{search:'',page:1}, accessory:{search:'',page:1},
     operation:{search:'',page:1}, subcontract:{search:'',page:1},
@@ -180,6 +204,7 @@ export async function renderProposalWizard(container, onDone, onCancel) {
     container.innerHTML = pageHeader('Nova proposta guiada', 'Construa o custo com dados reais, passo a passo.', '<button class="btn" data-cancel-wizard>Cancelar</button>', 'compact') + `<div class="proposal-wizard">${stepper(current)}<div class="wizard-body">${stepContent(current,data,catalog,ui)}</div><footer class="wizard-footer"><span>Passo ${current+1} de 5</span><div>${current ? '<button class="btn" data-wizard-back>← Anterior</button>' : ''}<button class="btn primary" data-wizard-next>${current === 4 ? 'Criar ficha de custo' : 'Continuar →'}</button></div></footer></div>`;
     const root = container.querySelector('.proposal-wizard');
     bindHeader(root,data);
+    root.querySelector('[data-wizard-use-price]')?.addEventListener('click',()=>{data.selling_price=Number(suggestedPrice(data).toFixed(4));render();});
     container.querySelector('[data-cancel-wizard]').addEventListener('click', onCancel);
     container.querySelector('[data-wizard-back]')?.addEventListener('click',()=>{current--;render();});
     root.querySelectorAll('[data-article-type]').forEach(button=>button.addEventListener('click',()=>{data.article_type_id=Number(button.dataset.articleType);const type=catalog.article_types.find(r=>r.id===data.article_type_id);if(!data.description)data.description=type.name;render();}));
@@ -208,7 +233,7 @@ export async function renderProposalWizard(container, onDone, onCancel) {
     root.querySelector('[data-wizard-next]').addEventListener('click',async()=>{
       root.dispatchEvent(new Event('input'));
       const error=validate(current,data);if(error){toast(error,'error');return;}
-      if(current<4){current++;render();return;}
+      if(current<4){current++;if(current===4 && data.selling_price<=0)data.selling_price=Number(suggestedPrice(data).toFixed(4));render();return;}
       try{root.querySelector('[data-wizard-next]').disabled=true;const payload={...data,services:data.services.filter(item=>item.description?.trim()),overheads:data.overheads.filter(item=>item.description?.trim())};const result=await post('/costing/wizard',{company_id:appState.companyId,...payload});toast('Ficha de custo criada. Pode agora rever, imprimir ou aprovar.');await onDone(result);}
       catch(error){root.querySelector('[data-wizard-next]').disabled=false;toast(error.message,'error');}
     });

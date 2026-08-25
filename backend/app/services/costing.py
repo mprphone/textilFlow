@@ -1,19 +1,26 @@
 from sqlalchemy import func
 
-from ..models import BOMItem, CostLine, CostSheet, Material, Operation, ProductOperation
+from ..models import (
+    BOMItem, CostLine, CostSheet, Material, Operation, ProductOperation,
+    ProductionRouteStep, SubcontractService,
+)
+from .cost_sheet_automation import ensure_required_cost_lines, stock_unit_cost
 
 
 def rebuild_product_cost(db, sheet: CostSheet) -> CostSheet:
     db.query(CostLine).filter(
         CostLine.cost_sheet_id == sheet.id,
-        CostLine.source_type.in_(["bom", "operation", "wizard_material", "wizard_accessory", "wizard_operation"]),
+        CostLine.source_type.in_([
+            "bom", "operation", "route_service",
+            "wizard_material", "wizard_accessory", "wizard_operation",
+        ]),
     ).delete(synchronize_session=False)
 
     bom_rows = db.query(BOMItem, Material).join(Material, Material.id == BOMItem.material_id).filter(
         BOMItem.style_id == sheet.style_id
     ).all()
     for bom, material in bom_rows:
-        unit_cost = bom.unit_cost or material.unit_cost or 0
+        unit_cost, _ = stock_unit_cost(db, material, bom.unit_cost or material.unit_cost or 0)
         quantity = (bom.quantity or 0) * (1 + (bom.waste_pct or 0) / 100)
         db.add(CostLine(
             company_id=sheet.company_id, cost_sheet_id=sheet.id, category="material",
@@ -39,6 +46,22 @@ def rebuild_product_cost(db, sheet: CostSheet) -> CostSheet:
                 description=operation.name, quantity=minutes, unit="min",
                 unit_cost=machine_rate, amount=minutes * machine_rate, source_type="operation", source_id=product_operation.id,
             ))
+
+    route_rows = db.query(ProductionRouteStep, SubcontractService).join(
+        SubcontractService, SubcontractService.id == ProductionRouteStep.subcontract_service_id
+    ).filter(
+        ProductionRouteStep.style_id == sheet.style_id,
+        ProductionRouteStep.step_type == "subcontract",
+        ProductionRouteStep.is_required.is_(True),
+        SubcontractService.active.is_(True),
+    ).order_by(ProductionRouteStep.sequence).all()
+    for route, service in route_rows:
+        db.add(CostLine(
+            company_id=sheet.company_id, cost_sheet_id=sheet.id, category="subcontract",
+            description=service.name, quantity=1, unit=service.unit,
+            unit_cost=service.unit_cost, amount=service.unit_cost,
+            source_type="route_service", source_id=service.id,
+        ))
     db.flush()
     return recalculate_sheet(db, sheet)
 
@@ -70,3 +93,4 @@ def refresh_style_costs(db, style_id: int) -> None:
     ).all()
     for sheet in sheets:
         rebuild_product_cost(db, sheet)
+        ensure_required_cost_lines(db, sheet)

@@ -1,27 +1,30 @@
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import func
 
 from ..models import (
     ArticleType, BOMItem, CostLine, CostSheet, Customer, Material, Operation,
-    ProductOperation, StockLot, Style, SubcontractService, Supplier,
+    ProductOperation, Style, SubcontractService, Supplier,
 )
 from .costing import recalculate_sheet
+from .cost_sheet_automation import (
+    default_cost_template, ensure_required_cost_lines, material_stock_snapshot, stock_unit_cost,
+)
 from .serialization import model_to_dict
 
 
 def wizard_catalog(db, company_id: int) -> dict:
     suppliers = {row.id: row for row in db.query(Supplier).filter_by(company_id=company_id).all()}
-    lots = db.query(StockLot).filter_by(company_id=company_id).all()
-    stock = {}
-    for lot in lots:
-        stock[lot.material_id] = stock.get(lot.material_id, 0) + max(0, (lot.quantity or 0) - (lot.reserved or 0))
     materials = []
     for row in db.query(Material).filter_by(company_id=company_id, active=True).order_by(Material.category, Material.name).all():
         supplier = suppliers.get(row.supplier_id)
+        stock = material_stock_snapshot(db, row)
+        effective_cost, cost_origin = stock_unit_cost(db, row, snapshot=stock)
         materials.append({
             **model_to_dict(row),
-            "available_stock": round(stock.get(row.id, 0), 4),
+            "available_stock": stock["free_quantity"],
+            "effective_unit_cost": effective_cost,
+            "cost_origin": cost_origin,
             "supplier_name": supplier.name if supplier else "Sem fornecedor",
             "image_url": (row.custom_data or {}).get("image_url"),
         })
@@ -40,6 +43,7 @@ def wizard_catalog(db, company_id: int) -> dict:
         "operations": [model_to_dict(row) for row in db.query(Operation).filter_by(company_id=company_id, active=True).order_by(Operation.department, Operation.name).all()],
         "suppliers": [model_to_dict(row) for row in suppliers.values()],
         "subcontract_services": subcontract_services,
+        "costing_template": default_cost_template(db, company_id),
     }
 
 
@@ -110,10 +114,13 @@ def create_from_wizard(db, payload) -> tuple[Style, CostSheet]:
         custom_data={
             "customer_id": payload.customer_id,
             "quote_no": None,
-            "valid_until": payload.valid_until.isoformat() if payload.valid_until else None,
+            "valid_until": (payload.valid_until or (date.today() + timedelta(days=30))).isoformat(),
             "notes": payload.notes,
             "vat_pct": 23,
             "payment_terms": "30 dias",
+            "financial_cost_pct": payload.financial_cost_pct,
+            "markup_pct": payload.markup_pct,
+            "commission_pct": payload.commission_pct,
             "cost_source": "interactive_wizard",
             "visuals": {
                 "piece": payload.piece_image_url, "color": payload.color,
@@ -150,4 +157,5 @@ def create_from_wizard(db, payload) -> tuple[Style, CostSheet]:
     add_lines(payload.overheads, "overhead", "wizard_overhead")
     db.flush()
     recalculate_sheet(db, sheet)
+    ensure_required_cost_lines(db, sheet)
     return style, sheet

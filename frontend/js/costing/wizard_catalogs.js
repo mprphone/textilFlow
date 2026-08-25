@@ -29,7 +29,7 @@ export function materialCatalogTable(rows, selectedIds, kind, page) {
       <td><div class="catalog-name"><span>${row.image_url ? `<img src="${esc(row.image_url)}" alt="">` : esc(row.name.charAt(0))}</span><div><b>${esc(row.name)}</b><small>${esc(row.code)}</small></div></div></td>
       <td>${esc(row.composition || row.category || '—')}${row.gsm ? `<small class="table-subline">${number(row.gsm)} g/m²</small>` : ''}</td>
       <td>${esc(row.supplier_name || 'Sem fornecedor')}</td>
-      <td><b>${money(row.unit_cost)} / ${esc(row.unit)}</b></td>
+      <td><b>${money(row.effective_unit_cost ?? row.unit_cost)} / ${esc(row.unit)}</b><small class="table-subline">${row.cost_origin === 'stock_weighted_average' ? 'média dos lotes' : row.cost_origin === 'last_purchase' ? 'última compra' : 'ficha do artigo'}</small></td>
       <td><span class="${row.available_stock > 0 ? 'stock-ok' : 'stock-zero'}">${number(row.available_stock)} ${esc(row.unit)}</span></td>
     </tr>`;
   }).join('') : '<tr><td colspan="6"><div class="empty"><strong>Sem resultados</strong>Altere a pesquisa ou crie um novo registo.</div></td></tr>';

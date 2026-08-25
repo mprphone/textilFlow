@@ -90,6 +90,12 @@ def classify_cost_line(db: Session, sheet: CostSheet, line: CostLine) -> dict:
         ) else "accessories"
         if source_type == "bom":
             source_label = "BOM / ficha tecnica"
+        elif source_type.startswith("auto_accessory_"):
+            source_label = "Preenchido automaticamente"
+        elif source_type.startswith("required_"):
+            source_label = "Por completar"
+        elif source_type.startswith("client_supplied"):
+            source_label = "Fornecido pelo cliente"
         elif source_type == "wizard_accessory":
             source_label = "Acessorio da proposta"
         elif source_type == "wizard_material":
@@ -98,12 +104,17 @@ def classify_cost_line(db: Session, sheet: CostSheet, line: CostLine) -> dict:
             source_label = "Revisao da proposta"
     elif line.category == "labor":
         cost_group = "labor"
-        source_label = "Gama operatoria" if "operation" in source_type else "Mao de obra"
+        if source_type.startswith("required_"):
+            source_label = "Por completar"
+        elif source_type.startswith("auto_labor_"):
+            source_label = "Operacao sugerida"
+        else:
+            source_label = "Gama operatoria" if "operation" in source_type else "Mao de obra"
     elif line.category == "machine":
         cost_group = "machine"
         source_label = "Custo de maquina"
     elif line.category == "subcontract":
-        service = db.get(SubcontractService, line.source_id) if source_type == "subcontract_service" and line.source_id else None
+        service = db.get(SubcontractService, line.source_id) if source_type in {"subcontract_service", "route_service"} and line.source_id else None
         service_category = _normalise(service.category if service else None)
         if (
             source_type in {"manual_dyeing", "dyeing", "dye"}
@@ -118,9 +129,10 @@ def classify_cost_line(db: Session, sheet: CostSheet, line: CostLine) -> dict:
         ):
             cost_group, source_label = "printing", "Estamparia"
         else:
-            cost_group, source_label = "subcontract_other", "Outro subcontrato"
+            cost_group, source_label = "subcontract_other", "Rota produtiva" if source_type == "route_service" else "Outro subcontrato"
     elif line.category == "overhead":
-        cost_group, source_label = "overhead", "Custos indiretos"
+        cost_group = "overhead"
+        source_label = "Por completar" if source_type.startswith("required_") else "Custos indiretos"
     else:
         cost_group, source_label = "other", "Outros custos"
     return {

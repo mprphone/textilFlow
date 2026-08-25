@@ -4,7 +4,7 @@ import { state } from '../state.js';
 import { closeModal, openModal, pageHeader, setHeading, toast } from '../ui.js?v=20260820-5';
 import { renderReleaseOrder } from './release_order.js?v=20260824-41';
 import { numericValue, statusText, todayIso, valueOf } from './shared.js?v=20260825-53';
-import { renderProposalWizard } from './wizard.js?v=20260824-41';
+import { renderProposalWizard } from './wizard.js?v=20260825-55';
 
 const COST_GROUPS = [
   {key:'fabric', label:'Malhas / tecidos', short:'Malhas', icon:'▧', tone:'mint', category:'material', source:'manual_fabric'},
@@ -107,15 +107,16 @@ function stockSummaryFrom(sheet, requirements = []) {
 
 function proposalFlow(row, compact = true) {
   const stage = stageOf(row);
+  const complete = row.completeness?.can_accept === true;
   if (stage === 'rejected') return `<div class="proposal-rejected-flow ${compact ? 'compact' : ''}" aria-label="Proposta recusada, ainda recuperável">
     <span><i>!</i> Recusada</span>
     <button type="button" data-open-sheet="${row.id}">Ver</button>
     ${canEditCosts() ? `<button type="button" class="edit" data-reopen-proposal="${row.id}">Editar proposta</button>` : ''}
-    ${canAcceptCosts() ? `<button type="button" class="accept" data-accept-proposal="${row.id}">Aceitar agora</button>` : ''}
+    ${canAcceptCosts() ? (complete ? `<button type="button" class="accept" data-accept-proposal="${row.id}">Aceitar agora</button>` : `<button type="button" class="edit" data-open-sheet="${row.id}">Completar ficha</button>`) : ''}
   </div>`;
   const index = stageIndex(row);
   const stepClass = position => position < index ? 'done' : position === index ? 'current' : 'next';
-  const acceptAction = stage === 'draft' && canAcceptCosts() ? `data-accept-proposal="${row.id}"` : `data-open-sheet="${row.id}"`;
+  const acceptAction = stage === 'draft' && canAcceptCosts() && complete ? `data-accept-proposal="${row.id}"` : `data-open-sheet="${row.id}"`;
   const productionAction = stage === 'approved' && canAcceptCosts()
     ? `data-release-proposal="${row.id}"`
     : (stage === 'production' || row.sales_order_id) ? `data-open-production="${row.production_order_id || ''}"` : 'disabled';
@@ -123,7 +124,7 @@ function proposalFlow(row, compact = true) {
   return `<div class="proposal-click-flow ${compact ? 'compact' : ''}" aria-label="Estado da proposta">
     <button type="button" class="${stepClass(0)}" data-open-sheet="${row.id}" title="Abrir ficha de custo"><i>${index > 0 ? '✓' : '1'}</i><span>Ficha</span></button>
     <b>›</b>
-    <button type="button" class="${stepClass(1)}" ${acceptAction} title="${stage === 'draft' && canAcceptCosts() ? 'Aceitar proposta' : 'Abrir proposta'}"><i>${index > 1 ? '✓' : '2'}</i><span>Aceite</span></button>
+    <button type="button" class="${stepClass(1)}" ${acceptAction} title="${stage === 'draft' && canAcceptCosts() ? (complete ? 'Aceitar proposta' : 'Completar a ficha antes do aceite') : 'Abrir proposta'}"><i>${index > 1 ? '✓' : (complete ? '2' : '!')}</i><span>${complete || stage !== 'draft' ? 'Aceite' : 'Incompleta'}</span></button>
     <b>›</b>
     <button type="button" class="${stepClass(2)}" ${productionAction} title="${stage === 'approved' && canAcceptCosts() ? 'Lançar em produção' : 'Produção'}"><i>${index > 2 ? '✓' : '3'}</i><span>Produção</span></button>
     <b>›</b>
@@ -132,6 +133,7 @@ function proposalFlow(row, compact = true) {
 }
 
 function stockBadge(row) {
+  if (['draft','rejected','obsolete'].includes(row.status) && row.completeness && !row.completeness.can_accept) return `<span class="stock-state missing"><i>!</i> Ficha ${number(row.completeness.progress_pct)}%</span>`;
   const summary = row.stock_summary || {};
   if (!finiteNumber(summary.total_items)) return '<span class="stock-state neutral"><i>•</i> Por analisar</span>';
   const missing = finiteNumber(summary.shortage_items);
@@ -220,22 +222,29 @@ async function newProposal(container) {
     crudList('styles', state.companyId),
     crudList('customers', state.companyId),
   ]);
+  const defaultValidity = new Date();
+  defaultValidity.setDate(defaultValidity.getDate() + 30);
   openModal('Ficha para artigo existente', `
     <form id="new-proposal-form" class="form-grid">
       <div class="form-section">Cliente e artigo</div>
-      <div class="field full"><label>Artigo existente *<select name="style_id" required><option value="">Selecionar…</option>${styles.map(row => `<option value="${row.id}">${esc(row.reference)} · ${esc(row.description)}</option>`).join('')}</select></label></div>
+      <div class="field full"><label>Artigo existente *<select name="style_id" required><option value="">Selecionar…</option>${styles.map(row => `<option value="${row.id}" data-customer-id="${row.customer_id || ''}">${esc(row.reference)} · ${esc(row.description)}</option>`).join('')}</select></label></div>
       <div class="field"><label>Cliente<select name="customer_id"><option value="">Ficha interna / sem cliente</option>${customers.map(row => `<option value="${row.id}">${esc(row.name)}</option>`).join('')}</select></label></div>
       <div class="field"><label>N.º da proposta<input name="quote_no" placeholder="Gerado automaticamente"></label></div>
       <div class="form-section">Cálculo</div>
       <div class="field"><label>Quantidade prevista *<input name="quantity" type="number" min="1" step="1" value="500" required></label></div>
       <div class="field"><label>Preço de venda por peça<input name="selling_price" type="number" min="0" step="0.0001" value="0"></label></div>
-      <div class="field"><label>Válida até<input name="valid_until" type="date"></label></div>
+      <div class="field"><label>Válida até<input name="valid_until" type="date" value="${defaultValidity.toISOString().slice(0,10)}"></label></div>
       <div class="field full"><label class="cost-check"><input name="import_technical_costs" type="checkbox" checked> Importar BOM, operações e preços atuais do artigo</label><small class="muted">A ligação ao stock é preservada para calcular disponibilidade e custo real.</small></div>
       <div class="field full"><label>Notas<textarea name="notes" placeholder="Condições, transporte, prazos, observações…"></textarea></label></div>
       <div class="form-footer"><button type="button" class="btn" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Criar e calcular</button></div>
     </form>`, 'Não cria um artigo duplicado; usa a ficha técnica já existente.');
   document.querySelector('[data-close-modal]').addEventListener('click', closeModal);
-  document.getElementById('new-proposal-form').addEventListener('submit', async event => {
+  const proposalForm = document.getElementById('new-proposal-form');
+  proposalForm.style_id.addEventListener('change', () => {
+    const customerId = proposalForm.style_id.selectedOptions[0]?.dataset.customerId;
+    if (customerId && !proposalForm.customer_id.value) proposalForm.customer_id.value = customerId;
+  });
+  proposalForm.addEventListener('submit', async event => {
     event.preventDefault();
     const form = event.currentTarget;
     const submit = form.querySelector('[type="submit"]');
@@ -285,10 +294,11 @@ function editorLine(line = {}, locked = false, requirement = null) {
   const source = line.source_type || '';
   const sourceId = line.source_id ?? '';
   const stock = requirement ? requirementValues(requirement) : null;
-  const origin = stock
-    ? `<span class="line-origin stock"><i></i>${stock.shortage > 0 ? `Falta ${number(stock.shortage)}` : 'Stock confirmado'}</span>`
-    : `<span class="line-origin"><i></i>${source ? 'Ficha técnica' : 'Manual'}</span>`;
-  return `<tr data-cost-line data-cost-line-id="${line.id || ''}" data-original-group="${groupKey}" data-source-type="${esc(source)}" data-source-id="${sourceId}">
+  const clientSupplied = source.startsWith('client_supplied');
+  const origin = locked
+    ? `<span class="line-origin ${stock && !clientSupplied ? 'stock' : ''}"><i></i>${esc(clientSupplied ? 'Fornecido pelo cliente' : (line.source_label || (stock ? (stock.shortage > 0 ? `Falta ${number(stock.shortage)}` : 'Stock confirmado') : (source ? 'Ficha técnica' : 'Manual'))))}</span>`
+    : `<label class="line-client-supplied" title="O cliente fornece este componente; o preço pode ficar a zero"><input type="checkbox" data-line="client_supplied" ${clientSupplied ? 'checked' : ''}> Cliente</label>`;
+  return `<tr class="${line.validation_status === 'incomplete' ? 'cost-line-incomplete' : ''}" data-cost-line data-cost-line-id="${line.id || ''}" data-original-group="${groupKey}" data-source-type="${esc(source)}" data-source-id="${sourceId}">
     <td><select data-line="group" ${locked ? 'disabled' : ''}>${groupOptions(groupKey)}</select></td>
     <td><input data-line="description" value="${esc(line.description || '')}" placeholder="Descrição do custo" ${locked ? 'disabled' : ''}></td>
     <td><input data-line="quantity" type="number" min="0" step="any" value="${finiteNumber(line.quantity, 1)}" ${locked ? 'disabled' : ''}></td>
@@ -314,7 +324,7 @@ function readLines(root) {
     const preserveSource = groupKey === row.dataset.originalGroup;
     const description = valueOf(row, '[data-line="description"]').trim();
     if (!description) return null;
-    return {
+    const result = {
       category:group.category,
       description,
       quantity:validNumber(row, '[data-line="quantity"]', `Consumo de ${description}`),
@@ -323,6 +333,8 @@ function readLines(root) {
       source_type:preserveSource ? (row.dataset.sourceType || group.source) : group.source,
       source_id:preserveSource && row.dataset.sourceId ? Number(row.dataset.sourceId) : null,
     };
+    if (row.querySelector('[data-line="client_supplied"]')?.checked) result.source_type = 'client_supplied';
+    return result;
   }).filter(Boolean);
 }
 
@@ -340,7 +352,7 @@ function refreshEditorAlerts(root, {cost, sale, margin, qty} = {}) {
   if (shortage > 0) alerts.push({tone:'sky', text:`${number(shortage)} ${shortage === 1 ? 'material' : 'materiais'} sem cobertura de stock.`, action:'stock'});
   const missingPrice = [...root.querySelectorAll('[data-cost-line]')].some(row => {
     const description = valueOf(row, '[data-line="description"]').trim();
-    return description && numericValue(row, '[data-line="unit_cost"]') <= 0;
+    return description && numericValue(row, '[data-line="unit_cost"]') <= 0 && !row.querySelector('[data-line="client_supplied"]')?.checked;
   });
   if (missingPrice) alerts.push({tone:'amber', text:'Há linhas de custo sem preço unitário.'});
   if (!qty) alerts.push({tone:'sky', text:'Indique a quantidade prevista.'});
@@ -356,10 +368,16 @@ function refreshEditorTotals(root) {
     const key = valueOf(row, '[data-line="group"]');
     groups[key] = finiteNumber(groups[key]) + total;
     cost += total;
+    const clientSupplied = row.querySelector('[data-line="client_supplied"]')?.checked;
+    row.classList.toggle('cost-line-incomplete', numericValue(row, '[data-line="quantity"]') <= 0 || (numericValue(row, '[data-line="unit_cost"]') <= 0 && !clientSupplied));
   });
   const qty = numericValue(root, '[name="quantity"]');
   const sale = numericValue(root, '[name="selling_price"]');
   const vatPct = Math.max(0, numericValue(root, '[name="vat_pct"]') || 23);
+  const financialPct = Math.max(0, numericValue(root, '[name="financial_cost_pct"]'));
+  const markupPct = Math.max(0, numericValue(root, '[name="markup_pct"]'));
+  const commissionPct = Math.max(0, numericValue(root, '[name="commission_pct"]'));
+  const suggested = recommendedPrice(cost, financialPct, markupPct, commissionPct);
   const margin = sale ? (sale - cost) / sale * 100 : 0;
   const saleTotal = sale * qty;
   const vatAmount = saleTotal * vatPct / 100;
@@ -372,6 +390,9 @@ function refreshEditorTotals(root) {
   setAllText(scope, '[data-vat-amount]', money(vatAmount));
   setAllText(scope, '[data-total-sale-vat]', money(saleTotal + vatAmount));
   setAllText(scope, '[data-profit-total]', money((sale - cost) * qty));
+  setAllText(scope, '[data-suggested-price]', preciseMoney(suggested));
+  setAllText(scope, '[data-suggested-inline]', preciseMoney(suggested));
+  root.dataset.suggestedPrice = String(suggested);
   setAllText(scope, '[data-total-margin]', `${number(margin)}%`);
   COST_GROUPS.forEach(group => setAllText(scope, `[data-group-total="${group.key}"]`, preciseMoney(groups[group.key])));
   scope.querySelectorAll('[data-margin-value]').forEach(node => node.classList.toggle('risk', margin < 20));
@@ -390,6 +411,9 @@ async function saveProposal(root, sheetId) {
     currency:valueOf(root, '[name="currency"]') || null,
     payment_terms:valueOf(root, '[name="payment_terms"]') || '30 dias',
     client_notes:valueOf(root, '[name="client_notes"]') || null,
+    financial_cost_pct:validNumber(root, '[name="financial_cost_pct"]', 'Encargos financeiros'),
+    markup_pct:validNumber(root, '[name="markup_pct"]', 'Acréscimo / margem alvo'),
+    commission_pct:validNumber(root, '[name="commission_pct"]', 'Comissão'),
     lines:readLines(root),
   };
   if (!payload.lines.length) throw new Error('Adicione pelo menos uma linha de custo.');
@@ -401,6 +425,28 @@ function familyFilters() {
     <button type="button" class="active" data-cost-group="all">Todas</button>
     ${COST_GROUPS.map(group => `<button type="button" data-cost-group="${group.key}">${esc(group.short)}</button>`).join('')}
   </div>`;
+}
+
+function recommendedPrice(cost, financialPct, markupPct, commissionPct) {
+  const divisor = 1 - Math.min(99, Math.max(0, commissionPct)) / 100;
+  return divisor > 0 ? cost * (1 + Math.max(0, financialPct) / 100 + Math.max(0, markupPct) / 100) / divisor : 0;
+}
+
+function completenessPanel(completeness = {}, locked = false) {
+  const checks = completeness.checks || [];
+  const blockers = completeness.blockers || checks.filter(check => !check.complete);
+  const ready = completeness.can_accept === true;
+  const progress = finiteNumber(completeness.progress_pct);
+  return `<section class="cost-completeness ${ready ? 'ready' : 'incomplete'}">
+    <div class="cost-completeness-summary">
+      <span class="cost-completeness-icon">${ready ? '✓' : '!'}</span>
+      <div><b>${ready ? 'Ficha completa para aceitar' : 'Ficha incompleta'}</b><small>${ready ? 'Todos os custos essenciais estão confirmados.' : `${blockers.length} pontos por confirmar antes do aceite.`}</small></div>
+      <strong>${number(progress)}%</strong>
+      ${locked || ready ? '' : '<button class="btn small" type="button" data-autofill-sheet>Atualizar da ficha técnica</button>'}
+    </div>
+    <div class="cost-completeness-bar"><i style="width:${Math.max(0, Math.min(100, progress))}%"></i></div>
+    <div class="cost-checklist">${checks.map(check => `<button type="button" class="${check.complete ? 'done' : 'missing'}" data-check-group="${esc(check.group || '')}" title="${esc(check.detail || '')}"><i>${check.complete ? '✓' : '!'}</i><span>${esc(check.label)}</span></button>`).join('')}</div>
+  </section>`;
 }
 
 function stockPanel(requirements, summary, {editable = false, variance = null} = {}) {
@@ -605,6 +651,8 @@ export async function renderProposalDetail(container, sheetId) {
     crudList('customers', state.companyId),
   ]);
   const {sheet, lines} = detail;
+  const completeness = detail.completeness || sheet.completeness || {};
+  const pricing = detail.pricing || sheet.pricing || {};
   const requirements = detail.requirements || sheet.requirements || [];
   const stockSummary = detail.stock_summary || sheet.stock_summary || stockSummaryFrom(sheet, requirements);
   stockSummary.quantity = sheet.quantity_basis;
@@ -623,13 +671,17 @@ export async function renderProposalDetail(container, sheetId) {
           <label>N.º proposta<input name="quote_no" value="${esc(sheet.quote_no)}" ${locked ? 'disabled' : ''}></label>
           <label>Quantidade<input name="quantity" type="number" min="1" step="1" value="${finiteNumber(sheet.quantity_basis, 1)}" ${locked ? 'disabled' : ''}></label>
           <label>Cliente<select name="customer_id" ${locked ? 'disabled' : ''}><option value="">Ficha interna</option>${customers.map(row => `<option value="${row.id}" data-payment="${esc(row.payment_terms || '')}" ${String(row.id) === String(sheet.customer_id) ? 'selected' : ''}>${esc(row.name)}</option>`).join('')}</select></label>
-          <label>Venda / peça s/ IVA<input name="selling_price" type="number" min="0" step="any" value="${finiteNumber(sheet.selling_price)}" ${locked ? 'disabled' : ''}></label>
+          <label class="cost-price-field">Venda / peça s/ IVA<input name="selling_price" type="number" min="0" step="any" value="${finiteNumber(sheet.selling_price)}" ${locked ? 'disabled' : ''}>${locked ? '' : `<button type="button" data-use-suggested-price>Usar sugerido · <span data-suggested-inline>${preciseMoney(pricing.recommended_selling_price)}</span></button>`}</label>
           <label>Moeda<select name="currency" ${locked ? 'disabled' : ''}>${['EUR','USD','GBP','CHF'].map(code => `<option value="${code}" ${(sheet.currency || 'EUR') === code ? 'selected' : ''}>${code}</option>`).join('')}</select></label>
           <label>Válida até<input name="valid_until" type="date" value="${esc(sheet.valid_until || '')}" ${locked ? 'disabled' : ''}></label>
           <label>Notas internas<input name="notes" value="${esc(sheet.notes || '')}" placeholder="Só para a fábrica" ${locked ? 'disabled' : ''}></label>
+          <label>Encargos financeiros %<input name="financial_cost_pct" type="number" min="0" max="100" step="0.1" value="${finiteNumber(pricing.financial_cost_pct, 2)}" ${locked ? 'disabled' : ''}></label>
+          <label>Acréscimo / margem alvo %<input name="markup_pct" type="number" min="0" max="500" step="0.1" value="${finiteNumber(pricing.markup_pct, 35)}" ${locked ? 'disabled' : ''}></label>
+          <label>Comissão %<input name="commission_pct" type="number" min="0" max="99" step="0.1" value="${finiteNumber(pricing.commission_pct)}" ${locked ? 'disabled' : ''}></label>
         </div>
         ${sheet.currency && sheet.currency !== sheet.base_currency ? `<p class="muted section-note">${sheet.fx_missing ? `⚠ Sem taxa de câmbio ${esc(sheet.currency)} → ${esc(sheet.base_currency)} configurada em Tabelas → Câmbio — os totais em ${esc(sheet.base_currency)} não são mostrados.` : `≈ ${money(sheet.sales_total_base)} ${esc(sheet.base_currency)} à taxa de ${finiteNumber(sheet.fx_rate).toFixed(4)} (venda) · margem ≈ ${money(sheet.margin_value_base)} ${esc(sheet.base_currency)}`}</p>` : ''}
       </section>
+      ${completenessPanel(completeness, locked)}
       <div class="proposal-alerts" data-proposal-alerts></div>
       <section class="card cost-composition-card">
         <div class="card-header composition-head">
@@ -667,12 +719,13 @@ export async function renderProposalDetail(container, sheetId) {
         <div><span>Venda s/ IVA</span><strong data-sale-unit>${preciseMoney(sheet.selling_price)}</strong></div>
         <div><span>Lucro previsto</span><strong data-profit-total>${money(sheet.margin_value)}</strong></div>
         <div><span>Margem</span><strong data-total-margin data-margin-value class="${finiteNumber(sheet.margin_pct) < 20 ? 'risk' : ''}">${number(sheet.margin_pct)}%</strong></div>
+        <div class="suggested-price"><span>Preço recomendado</span><strong data-suggested-price>${preciseMoney(pricing.recommended_selling_price)}</strong></div>
         <div class="cost-dock-actions">
           ${sheet.status === 'draft' && canEditCosts() ? '<button class="btn" type="submit">Guardar</button>' : ''}
           ${['rejected','obsolete'].includes(sheet.status) && canEditCosts() ? '<button class="btn" type="button" data-reopen-detail><span data-icon="edit" aria-hidden="true"></span> Editar proposta</button>' : ''}
           ${['draft','approved'].includes(sheet.status) && canAcceptCosts() && !sheet.production_order_id ? '<button class="btn danger" type="button" data-reject-detail>Cliente recusou</button>' : ''}
-          ${sheet.status === 'draft' && canAcceptCosts() ? '<button class="btn success" type="button" data-accept-detail>✓ Aceitar proposta</button>' : ''}
-          ${['rejected','obsolete'].includes(sheet.status) && canAcceptCosts() ? '<button class="btn success" type="button" data-accept-detail>✓ Aceitar agora</button>' : ''}
+          ${sheet.status === 'draft' && canAcceptCosts() ? `<button class="btn success" type="button" data-accept-detail ${completeness.can_accept ? '' : 'disabled title="Complete os pontos assinalados antes de aceitar"'}>${completeness.can_accept ? '✓ Aceitar proposta' : 'Ficha incompleta'}</button>` : ''}
+          ${['rejected','obsolete'].includes(sheet.status) && canAcceptCosts() ? `<button class="btn success" type="button" data-accept-detail ${completeness.can_accept ? '' : 'disabled title="Complete a ficha antes de aceitar"'}>${completeness.can_accept ? '✓ Aceitar agora' : 'Ficha incompleta'}</button>` : ''}
           ${sheet.status === 'approved' && canAcceptCosts() ? '<button class="btn primary" type="button" data-release-detail>⚡ Lançar em produção</button>' : ''}
           ${sheet.status === 'production' || sheet.production_order_id ? `<button class="btn primary" type="button" data-open-production="${sheet.production_order_id || ''}">Ver ordem de produção →</button>` : ''}
         </div>
@@ -712,6 +765,11 @@ export async function renderProposalDetail(container, sheetId) {
     container.querySelectorAll('[data-cost-group]').forEach(item => item.classList.toggle('active', item === button));
     editor.querySelectorAll('[data-cost-line]').forEach(row => { row.hidden = selected !== 'all' && valueOf(row, '[data-line="group"]') !== selected; });
   }));
+  container.querySelectorAll('[data-check-group]').forEach(button => button.addEventListener('click', () => {
+    const group = button.dataset.checkGroup;
+    const filter = container.querySelector(`[data-cost-group="${group}"]`);
+    if (filter) { filter.click(); container.querySelector('.cost-composition-card')?.scrollIntoView({block:'nearest'}); }
+  }));
   container.querySelector('[data-proposal-alerts]')?.addEventListener('click', event => {
     if (!event.target.closest('[data-alert-action="stock"]')) return;
     const fold = container.querySelector('.cost-composition-card .proposal-fold');
@@ -720,6 +778,25 @@ export async function renderProposalDetail(container, sheetId) {
   container.querySelectorAll('[data-open-production]').forEach(button => button.addEventListener('click', () => openProductionOrder(Number(button.dataset.openProduction))));
   if (!locked) {
     editor.addEventListener('input', () => refreshEditorTotals(editor));
+    container.querySelector('[data-use-suggested-price]')?.addEventListener('click', () => {
+      const field = editor.querySelector('[name="selling_price"]');
+      field.value = Number(editor.dataset.suggestedPrice || 0).toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+      refreshEditorTotals(editor);
+    });
+    container.querySelector('[data-autofill-sheet]')?.addEventListener('click', async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      button.textContent = 'A atualizar…';
+      try {
+        await post(`/costing/sheets/${sheet.id}/autofill`, {});
+        toast('Ficha atualizada com BOM, operações, preços e estrutura obrigatória.');
+        await renderProposalDetail(container, sheet.id);
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = 'Atualizar da ficha técnica';
+        toast(error.message, 'error');
+      }
+    });
     let stockTimer;
     let stockSequence = 0;
     editor.querySelector('[name="quantity"]').addEventListener('input', () => {

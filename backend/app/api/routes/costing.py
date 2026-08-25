@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func
@@ -14,6 +14,9 @@ from ...schemas import (
 from ...services.audit import record_audit
 from ...services.cost_control import list_sheets, order_control, save_sheet, sheet_view
 from ...services.costing import rebuild_product_cost, recalculate_sheet
+from ...services.cost_sheet_automation import (
+    cost_sheet_completeness, ensure_required_cost_lines, refresh_automatic_costs,
+)
 from ...services.serialization import model_to_dict
 from ...services.proposal_wizard import create_from_wizard, wizard_catalog
 from ...services.proposal_release import (
@@ -97,23 +100,28 @@ def create_sheet(payload: CostSheetCreate, db: Session = Depends(get_db), user: 
     style = db.get(Style, payload.style_id)
     if not style or style.company_id != payload.company_id:
         raise HTTPException(404, "Artigo não encontrado")
-    if payload.customer_id:
-        customer = db.get(Customer, payload.customer_id)
+    customer_id = payload.customer_id or style.customer_id
+    customer = None
+    if customer_id:
+        customer = db.get(Customer, customer_id)
         if not customer or customer.company_id != payload.company_id:
             raise HTTPException(422, "O cliente nao pertence a esta empresa")
     version = (db.query(func.max(CostSheet.version)).filter_by(style_id=style.id).scalar() or 0) + 1
     sheet = CostSheet(
         company_id=payload.company_id, style_id=style.id, version=version, status="draft",
         quantity_basis=payload.quantity, selling_price=payload.selling_price,
-        currency=(customer.currency if payload.customer_id and customer and customer.currency else None),
+        currency=(customer.currency if customer and customer.currency else None),
         custom_data={
-            "customer_id": payload.customer_id,
+            "customer_id": customer_id,
             "quote_no": payload.quote_no,
-            "valid_until": payload.valid_until.isoformat() if payload.valid_until else None,
+            "valid_until": (payload.valid_until or (date.today() + timedelta(days=30))).isoformat(),
             "notes": payload.notes,
             "client_notes": payload.client_notes,
             "vat_pct": float(payload.vat_pct or 23),
-            "payment_terms": payload.payment_terms or "30 dias",
+            "payment_terms": payload.payment_terms or (customer.payment_terms if customer else None) or "30 dias",
+            "financial_cost_pct": float(payload.financial_cost_pct),
+            "markup_pct": float(payload.markup_pct),
+            "commission_pct": float(payload.commission_pct),
             "cost_source": "entered_and_verified",
         },
     )
@@ -126,6 +134,7 @@ def create_sheet(payload: CostSheetCreate, db: Session = Depends(get_db), user: 
         rebuild_product_cost(db, sheet)
     else:
         recalculate_sheet(db, sheet)
+    ensure_required_cost_lines(db, sheet)
     record_audit(db, company_id=sheet.company_id, user_id=user.id, entity="cost-proposal", entity_id=sheet.id, action="create", payload=payload.model_dump(mode="json"))
     db.commit()
     db.refresh(sheet)
@@ -146,6 +155,23 @@ def preview_production(
 ):
     sheet = get_sheet(db, sheet_id, user)
     return production_preview(db, sheet, quantity)
+
+
+@router.post("/sheets/{sheet_id}/autofill")
+def autofill_sheet(sheet_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    sheet = get_sheet(db, sheet_id, user)
+    require_role(db, user, sheet.company_id, WRITE_ROLES)
+    if sheet.status != "draft":
+        raise HTTPException(409, "Apenas rascunhos podem ser atualizados automaticamente")
+    rebuild_product_cost(db, sheet)
+    changed = refresh_automatic_costs(db, sheet)
+    record_audit(
+        db, company_id=sheet.company_id, user_id=user.id, entity="cost-proposal",
+        entity_id=sheet.id, action="autofill", payload={"updated_or_added": changed},
+    )
+    db.commit()
+    db.refresh(sheet)
+    return sheet_view(db, sheet)
 
 
 @router.post("/sheets/{sheet_id}/release", status_code=201)
@@ -262,6 +288,7 @@ def reopen_sheet(sheet_id: int, db: Session = Depends(get_db), user: User = Depe
     meta["decision_history"] = history
     sheet.custom_data = meta
     sheet.status = "draft"
+    ensure_required_cost_lines(db, sheet)
     record_audit(
         db, company_id=sheet.company_id, user_id=user.id, entity="cost-proposal",
         entity_id=sheet.id, action="reopen", payload={"previous_status": previous_status},
@@ -280,10 +307,11 @@ def approve_sheet(sheet_id: int, db: Session = Depends(get_db), user: User = Dep
     if _sheet_has_started_production(db, sheet):
         raise HTTPException(409, "A proposta já está ligada à produção")
     lines = db.query(CostLine).filter_by(cost_sheet_id=sheet.id).all()
-    if not lines or sheet.total_cost <= 0:
-        raise HTTPException(422, "Introduza pelo menos uma linha de custo com valor")
-    if sheet.selling_price <= 0:
-        raise HTTPException(422, "Introduza o preço de venda antes de aprovar")
+    completeness = cost_sheet_completeness(db, sheet)
+    if not completeness["can_accept"]:
+        missing = "; ".join(item["label"] for item in completeness["blockers"][:5])
+        suffix = "…" if len(completeness["blockers"]) > 5 else ""
+        raise HTTPException(422, f"Ficha de custo incompleta: {missing}{suffix}")
     meta = dict(sheet.custom_data or {})
     accepted_at = datetime.now(timezone.utc).isoformat()
     history = list(meta.get("decision_history") or [])
@@ -333,6 +361,7 @@ def duplicate_sheet(sheet_id: int, db: Session = Depends(get_db), user: User = D
         ))
     db.flush()
     recalculate_sheet(db, copy)
+    ensure_required_cost_lines(db, copy)
     record_audit(db, company_id=copy.company_id, user_id=user.id, entity="cost-proposal", entity_id=copy.id, action="duplicate", payload={"source_id": source.id})
     db.commit()
     db.refresh(copy)

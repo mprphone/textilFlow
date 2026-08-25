@@ -25,7 +25,9 @@ async def lifespan(app: FastAPI):
     try:
         seed_database(db)
         from .services.execution import backfill_execution_ledger
+        from .services.cost_sheet_automation import backfill_draft_cost_sheets
         backfill_execution_ledger(db)
+        backfill_draft_cost_sheets(db)
         db.commit()
     except Exception:
         db.rollback()

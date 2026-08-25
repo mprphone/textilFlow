@@ -30,6 +30,9 @@ class CostSheetCreate(CostingModel):
     vat_pct: float = Field(default=23, ge=0, le=100)
     payment_terms: str | None = None
     client_notes: str | None = None
+    financial_cost_pct: float = Field(default=2, ge=0, le=100)
+    markup_pct: float = Field(default=35, ge=0, le=500)
+    commission_pct: float = Field(default=0, ge=0, lt=100)
     import_technical_costs: bool = True
 
 
@@ -44,6 +47,9 @@ class CostSheetSave(CostingModel):
     vat_pct: float = Field(default=23, ge=0, le=100)
     payment_terms: str | None = None
     client_notes: str | None = None
+    financial_cost_pct: float = Field(default=2, ge=0, le=100)
+    markup_pct: float = Field(default=35, ge=0, le=500)
+    commission_pct: float = Field(default=0, ge=0, lt=100)
     lines: list[CostLineInput]
 
 
@@ -83,6 +89,9 @@ class WizardProposalCreate(CostingModel):
     piece_image_url: str | None = None
     color: str | None = None
     notes: str | None = None
+    financial_cost_pct: float = Field(default=2, ge=0, le=100)
+    markup_pct: float = Field(default=35, ge=0, le=500)
+    commission_pct: float = Field(default=0, ge=0, lt=100)
     materials: list[WizardComponentInput] = Field(default_factory=list)
     accessories: list[WizardComponentInput] = Field(default_factory=list)
     operations: list[WizardComponentInput] = Field(default_factory=list)

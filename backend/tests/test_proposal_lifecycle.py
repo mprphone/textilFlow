@@ -7,7 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.api.routes.costing import approve_sheet, reject_sheet, reopen_sheet
 from backend.app.db import Base
-from backend.app.models import Company, CostLine, CostSheet, ProductionOrder, Style, User, UserCompany
+from backend.app.models import Company, CostLine, CostSheet, Customer, ProductionOrder, Style, User, UserCompany
 from backend.app.services.costing import recalculate_sheet
 
 
@@ -21,8 +21,9 @@ class ProposalLifecycleTest(unittest.TestCase):
         self.db.add_all([self.company, self.user])
         self.db.flush()
         self.db.add(UserCompany(user_id=self.user.id, company_id=self.company.id, role="admin", permissions=[]))
+        self.customer = Customer(company_id=self.company.id, code="C1", name="Customer")
         self.style = Style(company_id=self.company.id, reference="ST-1", description="T-shirt")
-        self.db.add(self.style)
+        self.db.add_all([self.customer, self.style])
         self.db.flush()
         self.sheet = CostSheet(
             company_id=self.company.id,
@@ -30,7 +31,7 @@ class ProposalLifecycleTest(unittest.TestCase):
             status="draft",
             quantity_basis=100,
             selling_price=12,
-            custom_data={"quote_no": "PROP-00001"},
+            custom_data={"quote_no": "PROP-00001", "customer_id": self.customer.id},
         )
         self.db.add(self.sheet)
         self.db.flush()
@@ -43,7 +44,22 @@ class ProposalLifecycleTest(unittest.TestCase):
             unit="kg",
             unit_cost=5,
             amount=5,
+            source_type="manual_fabric",
         ))
+        for category, description, quantity, unit, unit_cost, source_type in [
+            ("material", "Linha de confeção", 100, "m", .003, "manual_accessory"),
+            ("material", "Etiqueta de composição", 1, "un", .08, "manual_accessory"),
+            ("material", "Saco de embalagem", 1, "un", .12, "manual_accessory"),
+            ("labor", "Tempo de corte", 1, "min", .15, "required_labor_cutting"),
+            ("labor", "Tempo de confeção", 12, "min", .15, "required_labor_sewing"),
+            ("labor", "Tempo de embalagem", 1, "min", .15, "required_labor_packing"),
+            ("overhead", "Custos gerais / indiretos", 1, "un", .5, "manual_overhead"),
+        ]:
+            self.db.add(CostLine(
+                company_id=self.company.id, cost_sheet_id=self.sheet.id, category=category,
+                description=description, quantity=quantity, unit=unit, unit_cost=unit_cost,
+                amount=quantity * unit_cost, source_type=source_type,
+            ))
         self.db.flush()
         recalculate_sheet(self.db, self.sheet)
         self.db.commit()
