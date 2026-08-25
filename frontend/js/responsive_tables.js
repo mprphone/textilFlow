@@ -3,7 +3,7 @@ import { icon } from './icons.js?v=20260824-43';
 const exclusions='.grade-table,.grade-table-full,[data-grade-table],.cost-input-table,.wizard-input-table,.invoice-lines,[data-mobile-table="scroll"]';
 const labels={eye:'Abrir',edit:'Editar',delete:'Eliminar',save:'Guardar',check:'Concluir',close:'Fechar',truck:'Expedir',box:'Embalar',tag:'Etiqueta',document:'Documento',add:'Adicionar',route:'Dar destino',inbox:'Receber',print:'Imprimir',copy:'Duplicar',more:'Mais ações'};
 const rules=[
-  ['delete',/delete|eliminar|remover|apagar/],['edit',/edit|editar|alterar/],['eye',/open|abrir|ver\b|ficha|detalhe/],
+  ['delete',/delete|eliminar|remover|apagar/],['edit',/edit|editar|alterar/],['eye',/open|abrir|ver\b|ficha|detalhe|analisar|consultar/],
   ['save',/save|guardar|gravar/],['check',/libertar|aprovar|aceitar|concluir|confirmar|marcar.*lida/],['close',/fechar|cancelar/],
   ['truck',/expedir|enviar|shipment/],['box',/embalar|embalagem|pack/],['tag',/etiqueta|label/],['print',/imprimir|print/],
   ['copy',/duplicar|copiar|copy/],['inbox',/receber|receção|reception/],['route',/destino|transferir|movimentar/],

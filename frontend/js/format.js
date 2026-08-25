@@ -18,7 +18,7 @@ export const date = value => safeDate(value, undefined, true);
 export const datetime = value => safeDate(value, { dateStyle: 'short', timeStyle: 'short' });
 
 const labels = {
-  draft:'Rascunho', approved:'Aprovado', obsolete:'Obsoleto', development:'Em desenvolvimento', production:'Em produção', inactive:'Inativo',
+  draft:'Rascunho', approved:'Aprovado', rejected:'Recusado', obsolete:'Recusado', development:'Em desenvolvimento', production:'Em produção', inactive:'Inativo',
   prepared:'Preparado', posted:'Lançado', converted:'Transformado',
   requisition:'Requisição', supplier_transport:'Guia fornecedor', stock_receipt:'Entrada stock',
   purchase_invoice:'Fatura compra', purchase_credit:'NC compra', purchase_debit:'ND compra',

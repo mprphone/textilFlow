@@ -196,3 +196,13 @@ tr.requirement-row-shortage{background:#fff7f7}
   .proposal-board .cost-meta-compact{grid-template-columns:1fr 1fr}
   .proposal-board .cost-family-grid{grid-template-columns:repeat(8,minmax(72px,1fr));overflow-x:auto}
 }
+.cost-state.rejected{background:#fff0f1;color:#b42332}
+.proposal-rejected-flow{display:flex;align-items:center;justify-content:flex-start;gap:6px;min-width:max-content}
+.proposal-rejected-flow>span{display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border-radius:9px;background:#fff0f1;color:#b42332;font-size:12px;font-weight:850}
+.proposal-rejected-flow>span i{display:grid;place-items:center;width:17px;height:17px;border-radius:50%;background:#d93649;color:#fff;font-style:normal;font-size:10px}
+.proposal-rejected-flow button{min-height:30px;padding:5px 9px;border:1px solid #dbe3ef;border-radius:8px;background:#fff;color:#243750;font:inherit;font-size:11px;font-weight:800;cursor:pointer}
+.proposal-rejected-flow button.edit{border-color:#a9c4f6;color:#1555b6}
+.proposal-rejected-flow button.accept{border-color:#98d9bc;background:#eefaf4;color:#087451}
+.proposal-rejected-flow button:hover{box-shadow:0 4px 12px rgba(30,55,90,.1)}
+.proposal-reject-form{display:grid;gap:14px}.proposal-reject-form label{display:grid;gap:6px;color:#42536a;font-size:12px;font-weight:800}.proposal-reject-form textarea{width:100%}
+.cost-transition-confirm.rejected>span{background:#fff0f1;color:#c3283b}

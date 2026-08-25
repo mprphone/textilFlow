@@ -2,27 +2,37 @@ import { get, post } from '../api.js';
 import { badge, esc, money, number, progress } from '../format.js?v=20260819-6';
 import { state } from '../state.js';
 import { closeModal, openModal, pageHeader, toast } from '../ui.js?v=20260820-5';
-import { categoryLabel, categoryOptions, statusText, todayIso } from './shared.js';
+import { categoryLabel, categoryOptions, statusText, todayIso } from './shared.js?v=20260825-53';
+import { renderProposalDetail } from './proposals.js?v=20260825-53';
 
 function variance(value) {
   const numberValue = Number(value || 0);
   return `<span class="variance ${numberValue > 0 ? 'bad' : numberValue < 0 ? 'good' : ''}">${numberValue > 0 ? '+' : ''}${money(numberValue)}</span>`;
 }
 
-function controlRows(rows) {
-  return rows.length ? rows.map(({order, baseline, metrics}) => `
+function editableProposal(order, proposals) {
+  return proposals
+    .filter(row => Number(row.style_id) === Number(order.style_id) && ['draft','rejected','obsolete'].includes(row.status))
+    .sort((left, right) => Number(right.version || 0) - Number(left.version || 0))[0] || null;
+}
+
+function controlRows(rows, proposals) {
+  return rows.length ? rows.map(({order, baseline, metrics}) => {
+    const proposal = baseline ? null : editableProposal(order, proposals);
+    return `
     <tr>
       <td><button class="link-button" data-control="${order.id}">${esc(order.order_no)}</button></td>
       <td><b>${esc(order.style_reference)}</b><small class="cost-subline">${esc(order.style_description)}</small></td>
       <td>${number(order.quantity)}</td>
       <td>${progress(metrics.progress_pct || 0, (metrics.deviation_pct || 0) > 5 ? 'red' : 'green')}</td>
-      <td>${baseline ? `${esc(baseline.quote_no)} · V${baseline.version}` : '<span class="badge red">Sem proposta aprovada</span>'}</td>
+      <td>${baseline ? `${esc(baseline.quote_no)} · V${baseline.version}` : proposal ? `<button class="link-button" data-edit-proposal="${proposal.id}" data-proposal-status="${esc(proposal.status)}">${esc(proposal.quote_no)} · ${['rejected','obsolete'].includes(proposal.status) ? 'Recusada — rever' : 'Em edição'}</button>` : '<span class="badge red">Sem proposta aprovada</span>'}</td>
       <td>${money(metrics.earned_budget || 0)}</td>
       <td>${money(metrics.actual_total || 0)}</td>
       <td>${baseline ? variance(metrics.deviation) : '—'}</td>
       <td>${baseline ? badge(statusText(metrics.status)) : badge('Por configurar')}</td>
-      <td><button class="btn small" data-control="${order.id}">Analisar</button></td>
-    </tr>`).join('') : `<tr><td colspan="10"><div class="empty"><strong>Sem ordens de fabrico</strong>Quando existir produção, o controlo aparecerá aqui.</div></td></tr>`;
+      <td><div class="row-actions">${proposal ? `<button class="btn small" data-edit-proposal="${proposal.id}" data-proposal-status="${esc(proposal.status)}"><span data-icon="edit" aria-hidden="true"></span> Editar proposta</button>` : ''}<button class="btn small" data-control="${order.id}">Analisar</button></div></td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="10"><div class="empty"><strong>Sem ordens de fabrico</strong>Quando existir produção, o controlo aparecerá aqui.</div></td></tr>`;
 }
 
 function openActualCost(container, orderId) {
@@ -95,13 +105,28 @@ export async function renderControlDetail(container, orderId) {
 }
 
 export async function renderControls(container) {
-  const rows = await get(`/costing/${state.companyId}/controls`);
+  const [rows, proposals] = await Promise.all([
+    get(`/costing/${state.companyId}/controls`),
+    get(`/costing/${state.companyId}/sheets`),
+  ]);
   const over = rows.filter(row => row.baseline && (row.metrics.deviation || 0) > 0).length;
   const without = rows.filter(row => !row.baseline).length;
   container.innerHTML = pageHeader('Controlo do custo real', 'A produção alimenta o custo automaticamente; faturas externas podem ser acrescentadas manualmente.') + `
     <div class="cost-control-summary"><div><strong>${rows.length}</strong><span>Ordens acompanhadas</span></div><div class="warning"><strong>${over}</strong><span>Acima do custo permitido</span></div><div class="danger"><strong>${without}</strong><span>Sem proposta aprovada</span></div></div>
-    <div class="table-wrap"><table class="data-table"><thead><tr><th>OF</th><th>Artigo</th><th>Quantidade</th><th>Progresso</th><th>Orçamento-base</th><th>Permitido até hoje</th><th>Custo real</th><th>Desvio</th><th>Estado</th><th></th></tr></thead><tbody>${controlRows(rows)}</tbody></table></div>`;
-  container.onclick = event => {
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>OF</th><th>Artigo</th><th>Quantidade</th><th>Progresso</th><th>Orçamento-base</th><th>Permitido até hoje</th><th>Custo real</th><th>Desvio</th><th>Estado</th><th>Ações</th></tr></thead><tbody>${controlRows(rows, proposals)}</tbody></table></div>`;
+  container.onclick = async event => {
+    const edit = event.target.closest('[data-edit-proposal]');
+    if (edit) {
+      const sheetId = Number(edit.dataset.editProposal);
+      if (['rejected','obsolete'].includes(edit.dataset.proposalStatus)) {
+        try {
+          await post(`/costing/sheets/${sheetId}/reopen`, {});
+          toast('Proposta reaberta para edição.');
+        } catch (error) { toast(error.message, 'error'); return; }
+      }
+      await renderProposalDetail(container, sheetId);
+      return;
+    }
     const button = event.target.closest('[data-control]');
     if (button) renderControlDetail(container, Number(button.dataset.control));
   };

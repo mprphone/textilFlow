@@ -19,7 +19,7 @@ export function categoryOptions(selected = '') {
 }
 
 export function statusText(status) {
-  return ({draft:'Rascunho', approved:'Aceite', production:'Em produção', obsolete:'Obsoleta', on_track:'Dentro do custo', warning:'Atenção', risk:'Acima do custo'})[status] || status;
+  return ({draft:'Rascunho', approved:'Aceite', rejected:'Recusada', production:'Em produção', obsolete:'Recusada', on_track:'Dentro do custo', warning:'Atenção', risk:'Acima do custo'})[status] || status;
 }
 
 export function todayIso() {

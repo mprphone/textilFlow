@@ -27,6 +27,7 @@ from ..deps import current_user, require_module_access, require_role
 router = APIRouter(prefix="/costing", tags=["Propostas e custo real"])
 WRITE_ROLES = {"admin", "manager", "commercial", "planner"}
 ACTUAL_ROLES = {"admin", "manager", "supervisor", "warehouse"}
+REOPENABLE_STATUSES = {"rejected", "obsolete"}
 
 
 def get_sheet(db: Session, sheet_id: int, user: User) -> CostSheet:
@@ -35,6 +36,30 @@ def get_sheet(db: Session, sheet_id: int, user: User) -> CostSheet:
         raise HTTPException(404, "Proposta não encontrada")
     require_module_access(db, user, sheet.company_id, {"commercial"})
     return sheet
+
+
+def _sheet_has_started_production(db: Session, sheet: CostSheet) -> bool:
+    meta = dict(sheet.custom_data or {})
+    if sheet.status == "production" or any(meta.get(key) for key in (
+        "production_order_id", "sales_order_id", "proposal_release_id", "released_at",
+    )):
+        return True
+    for order in db.query(ProductionOrder).filter_by(company_id=sheet.company_id).all():
+        if int((order.custom_data or {}).get("approved_cost_sheet_id") or 0) == sheet.id:
+            return True
+    return False
+
+
+def _decision_event(action: str, user: User, *, reason: str | None = None) -> dict:
+    event = {
+        "action": action,
+        "at": datetime.now(timezone.utc).isoformat(),
+        "user_id": user.id,
+        "user_name": user.full_name,
+    }
+    if reason:
+        event["reason"] = reason
+    return event
 
 
 @router.get("/{company_id}/wizard-catalog")
@@ -186,12 +211,74 @@ def update_sheet(sheet_id: int, payload: CostSheetSave, db: Session = Depends(ge
     return sheet_view(db, sheet)
 
 
+@router.post("/sheets/{sheet_id}/reject")
+def reject_sheet(sheet_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    sheet = get_sheet(db, sheet_id, user)
+    require_role(db, user, sheet.company_id, {"admin", "manager", "commercial"})
+    if sheet.status in REOPENABLE_STATUSES:
+        return sheet_view(db, sheet)
+    if sheet.status not in {"draft", "approved"}:
+        raise HTTPException(409, "A proposta já entrou em produção e não pode ser recusada")
+    if _sheet_has_started_production(db, sheet):
+        raise HTTPException(409, "A proposta já está ligada à produção e não pode ser recusada")
+    reason = str(payload.get("reason") or "").strip() or None
+    meta = dict(sheet.custom_data or {})
+    history = list(meta.get("decision_history") or [])
+    event = _decision_event("rejected", user, reason=reason)
+    history.append(event)
+    meta.update({
+        "decision_history": history,
+        "rejected_at": event["at"],
+        "rejected_by": user.id,
+        "rejection_reason": reason,
+    })
+    sheet.custom_data = meta
+    sheet.status = "rejected"
+    record_audit(
+        db, company_id=sheet.company_id, user_id=user.id, entity="cost-proposal",
+        entity_id=sheet.id, action="reject", payload={"reason": reason},
+    )
+    db.commit()
+    db.refresh(sheet)
+    return sheet_view(db, sheet)
+
+
+@router.post("/sheets/{sheet_id}/reopen")
+def reopen_sheet(sheet_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    sheet = get_sheet(db, sheet_id, user)
+    require_role(db, user, sheet.company_id, WRITE_ROLES)
+    if sheet.status == "draft":
+        return sheet_view(db, sheet)
+    if sheet.status not in REOPENABLE_STATUSES:
+        raise HTTPException(409, "Apenas propostas recusadas podem ser reabertas para edição")
+    if _sheet_has_started_production(db, sheet):
+        raise HTTPException(409, "A proposta já está ligada à produção e não pode ser reaberta")
+    previous_status = sheet.status
+    meta = dict(sheet.custom_data or {})
+    history = list(meta.get("decision_history") or [])
+    history.append(_decision_event("reopened", user))
+    for key in ("approved_at", "approved_by", "accepted_at", "accepted_by", "frozen_lines", "commercial_name"):
+        meta.pop(key, None)
+    meta["decision_history"] = history
+    sheet.custom_data = meta
+    sheet.status = "draft"
+    record_audit(
+        db, company_id=sheet.company_id, user_id=user.id, entity="cost-proposal",
+        entity_id=sheet.id, action="reopen", payload={"previous_status": previous_status},
+    )
+    db.commit()
+    db.refresh(sheet)
+    return sheet_view(db, sheet)
+
+
 @router.post("/sheets/{sheet_id}/approve")
 def approve_sheet(sheet_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     sheet = get_sheet(db, sheet_id, user)
     require_role(db, user, sheet.company_id, {"admin", "manager", "commercial"})
-    if sheet.status != "draft":
-        raise HTTPException(409, "A proposta já não está em rascunho")
+    if sheet.status not in {"draft", *REOPENABLE_STATUSES}:
+        raise HTTPException(409, "A proposta já não está disponível para aceitação")
+    if _sheet_has_started_production(db, sheet):
+        raise HTTPException(409, "A proposta já está ligada à produção")
     lines = db.query(CostLine).filter_by(cost_sheet_id=sheet.id).all()
     if not lines or sheet.total_cost <= 0:
         raise HTTPException(422, "Introduza pelo menos uma linha de custo com valor")
@@ -199,6 +286,8 @@ def approve_sheet(sheet_id: int, db: Session = Depends(get_db), user: User = Dep
         raise HTTPException(422, "Introduza o preço de venda antes de aprovar")
     meta = dict(sheet.custom_data or {})
     accepted_at = datetime.now(timezone.utc).isoformat()
+    history = list(meta.get("decision_history") or [])
+    history.append(_decision_event("accepted", user))
     meta.update({
         "approved_at": accepted_at,
         "approved_by": user.id,
@@ -206,6 +295,7 @@ def approve_sheet(sheet_id: int, db: Session = Depends(get_db), user: User = Dep
         "accepted_by": user.id,
         "frozen_lines": [model_to_dict(row) for row in lines],
         "commercial_name": user.full_name,
+        "decision_history": history,
     })
     sheet.custom_data = meta
     sheet.status = "approved"

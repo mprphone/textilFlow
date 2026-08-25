@@ -3,7 +3,7 @@ import { date, esc, finiteNumber, money, number, preciseMoney } from '../format.
 import { state } from '../state.js';
 import { closeModal, openModal, pageHeader, setHeading, toast } from '../ui.js?v=20260820-5';
 import { renderReleaseOrder } from './release_order.js?v=20260824-41';
-import { numericValue, statusText, todayIso, valueOf } from './shared.js';
+import { numericValue, statusText, todayIso, valueOf } from './shared.js?v=20260825-53';
 import { renderProposalWizard } from './wizard.js?v=20260824-41';
 
 const COST_GROUPS = [
@@ -80,7 +80,7 @@ function lineGroupKey(line, requirement = null) {
 function stageOf(row) {
   if (row.status === 'production' || row.production_order_id) return 'production';
   if (row.status === 'approved') return 'approved';
-  if (row.status === 'obsolete') return 'obsolete';
+  if (['rejected', 'obsolete'].includes(row.status)) return 'rejected';
   return 'draft';
 }
 
@@ -107,6 +107,12 @@ function stockSummaryFrom(sheet, requirements = []) {
 
 function proposalFlow(row, compact = true) {
   const stage = stageOf(row);
+  if (stage === 'rejected') return `<div class="proposal-rejected-flow ${compact ? 'compact' : ''}" aria-label="Proposta recusada, ainda recuperável">
+    <span><i>!</i> Recusada</span>
+    <button type="button" data-open-sheet="${row.id}">Ver</button>
+    ${canEditCosts() ? `<button type="button" class="edit" data-reopen-proposal="${row.id}">Editar proposta</button>` : ''}
+    ${canAcceptCosts() ? `<button type="button" class="accept" data-accept-proposal="${row.id}">Aceitar agora</button>` : ''}
+  </div>`;
   const index = stageIndex(row);
   const stepClass = position => position < index ? 'done' : position === index ? 'current' : 'next';
   const acceptAction = stage === 'draft' && canAcceptCosts() ? `data-accept-proposal="${row.id}"` : `data-open-sheet="${row.id}"`;
@@ -117,7 +123,7 @@ function proposalFlow(row, compact = true) {
   return `<div class="proposal-click-flow ${compact ? 'compact' : ''}" aria-label="Estado da proposta">
     <button type="button" class="${stepClass(0)}" data-open-sheet="${row.id}" title="Abrir ficha de custo"><i>${index > 0 ? '✓' : '1'}</i><span>Ficha</span></button>
     <b>›</b>
-    <button type="button" class="${stepClass(1)}" ${acceptAction} ${stage === 'obsolete' ? 'disabled' : ''} title="${stage === 'draft' && canAcceptCosts() ? 'Aceitar proposta' : 'Abrir proposta'}"><i>${index > 1 ? '✓' : '2'}</i><span>Aceite</span></button>
+    <button type="button" class="${stepClass(1)}" ${acceptAction} title="${stage === 'draft' && canAcceptCosts() ? 'Aceitar proposta' : 'Abrir proposta'}"><i>${index > 1 ? '✓' : '2'}</i><span>Aceite</span></button>
     <b>›</b>
     <button type="button" class="${stepClass(2)}" ${productionAction} title="${stage === 'approved' && canAcceptCosts() ? 'Lançar em produção' : 'Produção'}"><i>${index > 2 ? '✓' : '3'}</i><span>Produção</span></button>
     <b>›</b>
@@ -176,7 +182,7 @@ export async function renderCostOverview(container) {
     get(`/costing/${state.companyId}/sheets`),
     get(`/costing/${state.companyId}/controls`).catch(() => []),
   ]);
-  const stages = {draft:0, approved:0, production:0, obsolete:0};
+  const stages = {draft:0, approved:0, rejected:0, production:0};
   rows.forEach(row => { stages[stageOf(row)]++; });
   const salesValue = rows.reduce((sum, row) => sum + finiteNumber(row.sales_total), 0);
   const shortages = rows.reduce((sum, row) => sum + finiteNumber(row.stock_summary?.shortage_items), 0);
@@ -196,6 +202,7 @@ export async function renderCostOverview(container) {
     <div class="cost-pipeline" aria-label="Filtrar por fase">
       <button data-overview-filter="all"><i>${rows.length}</i><span>Todas</span><small>Visão completa</small></button>
       <b>›</b><button data-overview-filter="draft"><i>${stages.draft}</i><span>Rascunhos</span><small>A calcular</small></button>
+      <b>›</b><button data-overview-filter="rejected"><i>${stages.rejected}</i><span>Recusadas</span><small>Podem ser revistas</small></button>
       <b>›</b><button data-overview-filter="approved"><i>${stages.approved}</i><span>Aceites</span><small>Prontas para lançar</small></button>
       <b>›</b><button data-overview-filter="production"><i>${stages.production}</i><span>Em produção</span><small>Com consumos gerados</small></button>
     </div>
@@ -455,6 +462,36 @@ function acceptModal(container, sheet, beforeAccept, afterAccept) {
   });
 }
 
+function rejectModal(container, sheet, afterReject) {
+  openModal('Registar recusa do cliente', `
+    <form class="proposal-reject-form" data-reject-form>
+      <div class="cost-transition-confirm rejected"><span>!</span><h3>${esc(sheet.quote_no)} fica marcada como recusada</h3><p>A proposta não é eliminada. Pode ser reaberta, editada e aceite mais tarde se o cliente mudar de decisão.</p></div>
+      <label>Motivo ou observação<textarea name="reason" rows="3" placeholder="Opcional — preço, prazo, condições comerciais…"></textarea></label>
+      <footer class="form-footer"><button class="btn" type="button" data-close-transition>Cancelar</button><button class="btn danger" type="submit">Marcar como recusada</button></footer>
+    </form>`, 'A decisão fica guardada no histórico comercial.');
+  document.querySelector('[data-close-transition]').addEventListener('click', closeModal);
+  document.querySelector('[data-reject-form]').addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = event.currentTarget.querySelector('[type="submit"]');
+    button.disabled = true;
+    try {
+      await post(`/costing/sheets/${sheet.id}/reject`, {reason:event.currentTarget.reason.value || null});
+      closeModal();
+      toast('Proposta marcada como recusada. Continua disponível para edição ou aceitação.');
+      await afterReject();
+    } catch (error) { button.disabled = false; toast(error.message, 'error'); }
+  });
+}
+
+async function reopenProposal(container, sheetId, afterReopen = null) {
+  try {
+    await post(`/costing/sheets/${sheetId}/reopen`, {});
+    toast('Proposta reaberta. Já pode alterar os valores e condições.');
+    if (afterReopen) await afterReopen();
+    else await renderProposalDetail(container, sheetId);
+  } catch (error) { toast(error.message, 'error'); }
+}
+
 export function releaseRequirements(preview, lines, quantity, hasCustomer = false) {
   const requirements = preview.requirements || preview.consumptions || [];
   const summary = preview.stock_summary || stockSummaryFrom({stock_summary:{}}, requirements);
@@ -632,7 +669,10 @@ export async function renderProposalDetail(container, sheetId) {
         <div><span>Margem</span><strong data-total-margin data-margin-value class="${finiteNumber(sheet.margin_pct) < 20 ? 'risk' : ''}">${number(sheet.margin_pct)}%</strong></div>
         <div class="cost-dock-actions">
           ${sheet.status === 'draft' && canEditCosts() ? '<button class="btn" type="submit">Guardar</button>' : ''}
+          ${['rejected','obsolete'].includes(sheet.status) && canEditCosts() ? '<button class="btn" type="button" data-reopen-detail><span data-icon="edit" aria-hidden="true"></span> Editar proposta</button>' : ''}
+          ${['draft','approved'].includes(sheet.status) && canAcceptCosts() && !sheet.production_order_id ? '<button class="btn danger" type="button" data-reject-detail>Cliente recusou</button>' : ''}
           ${sheet.status === 'draft' && canAcceptCosts() ? '<button class="btn success" type="button" data-accept-detail>✓ Aceitar proposta</button>' : ''}
+          ${['rejected','obsolete'].includes(sheet.status) && canAcceptCosts() ? '<button class="btn success" type="button" data-accept-detail>✓ Aceitar agora</button>' : ''}
           ${sheet.status === 'approved' && canAcceptCosts() ? '<button class="btn primary" type="button" data-release-detail>⚡ Lançar em produção</button>' : ''}
           ${sheet.status === 'production' || sheet.production_order_id ? `<button class="btn primary" type="button" data-open-production="${sheet.production_order_id || ''}">Ver ordem de produção →</button>` : ''}
         </div>
@@ -664,6 +704,9 @@ export async function renderProposalDetail(container, sheetId) {
     try { const result = await post(`/costing/sheets/${sheet.id}/duplicate`, {}); toast('Nova revisão criada.'); await renderProposalDetail(container, result.sheet.id); }
     catch (error) { toast(error.message, 'error'); }
   });
+  container.querySelector('[data-reopen-detail]')?.addEventListener('click', () => reopenProposal(container, sheet.id));
+  container.querySelector('[data-reopen-proposal]')?.addEventListener('click', () => reopenProposal(container, sheet.id));
+  container.querySelector('[data-reject-detail]')?.addEventListener('click', () => rejectModal(container, sheet, () => renderProposalDetail(container, sheet.id)));
   container.querySelectorAll('[data-cost-group]').forEach(button => button.addEventListener('click', () => {
     const selected = button.dataset.costGroup;
     container.querySelectorAll('[data-cost-group]').forEach(item => item.classList.toggle('active', item === button));
@@ -717,10 +760,15 @@ export async function renderProposalDetail(container, sheetId) {
       try { await saveProposal(editor, sheet.id); toast('Ficha guardada com os custos confirmados.'); await renderProposalDetail(container, sheet.id); }
       catch (error) { toast(error.message, 'error'); }
     });
-    const openAccept = () => acceptModal(container, sheet, () => saveProposal(editor, sheet.id), () => renderReleaseOrder(container, sheet.id, () => renderProposalDetail(container, sheet.id)));
-    container.querySelector('[data-accept-detail]')?.addEventListener('click', openAccept);
-    container.querySelector('[data-accept-proposal]')?.addEventListener('click', openAccept);
   }
+  const openAccept = () => acceptModal(
+    container,
+    sheet,
+    sheet.status === 'draft' ? () => saveProposal(editor, sheet.id) : null,
+    () => renderReleaseOrder(container, sheet.id, () => renderProposalDetail(container, sheet.id)),
+  );
+  container.querySelector('[data-accept-detail]')?.addEventListener('click', openAccept);
+  container.querySelector('[data-accept-proposal]')?.addEventListener('click', openAccept);
   const openRelease = async () => {
     try { await renderReleaseOrder(container, sheet.id, () => renderProposalDetail(container, sheet.id)); }
     catch (error) { toast(error.message, 'error'); }
@@ -738,6 +786,11 @@ function bindListActions(container, refresh) {
     if (event.target.closest('[data-view-all]')) { await renderProposals(container); return; }
     const filter = event.target.closest('[data-overview-filter]');
     if (filter) { await renderProposals(container, filter.dataset.overviewFilter); return; }
+    const reopen = event.target.closest('[data-reopen-proposal]');
+    if (reopen) {
+      await reopenProposal(container, Number(reopen.dataset.reopenProposal));
+      return;
+    }
     const accept = event.target.closest('[data-accept-proposal]');
     if (accept) {
       const sheetId = Number(accept.dataset.acceptProposal);
@@ -761,7 +814,7 @@ function bindListActions(container, refresh) {
 
 export async function renderProposals(container, initialFilter = 'all') {
   const rows = await get(`/costing/${state.companyId}/sheets`);
-  const counts = {all:rows.length, draft:0, approved:0, production:0};
+  const counts = {all:rows.length, draft:0, rejected:0, approved:0, production:0};
   rows.forEach(row => { const stage = stageOf(row); if (stage in counts) counts[stage]++; });
   const newAction = canEditCosts() ? '<button class="btn primary" data-new-proposal>+ Nova ficha de custo</button>' : '';
   container.innerHTML = pageHeader('Propostas e fichas de custo', 'Uma lista compacta com custo, margem, materiais e próximo passo.', newAction) + `
@@ -769,6 +822,7 @@ export async function renderProposals(container, initialFilter = 'all') {
       <div class="proposal-stage-filters">
         <button data-proposal-filter="all" class="${initialFilter === 'all' ? 'active' : ''}">Todas <b>${counts.all}</b></button>
         <button data-proposal-filter="draft" class="${initialFilter === 'draft' ? 'active' : ''}">Rascunhos <b>${counts.draft}</b></button>
+        <button data-proposal-filter="rejected" class="${initialFilter === 'rejected' ? 'active' : ''}">Recusadas <b>${counts.rejected}</b></button>
         <button data-proposal-filter="approved" class="${initialFilter === 'approved' ? 'active' : ''}">Aceites <b>${counts.approved}</b></button>
         <button data-proposal-filter="production" class="${initialFilter === 'production' ? 'active' : ''}">Em produção <b>${counts.production}</b></button>
       </div>
