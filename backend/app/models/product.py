@@ -18,6 +18,29 @@ class ArticleType(Base, TimestampMixin):
     __table_args__ = (UniqueConstraint("company_id", "code"),)
 
 
+class ArticleTypeCost(Base, TimestampMixin):
+    """Linha do modelo de custos carregado ao escolher um tipo de peça."""
+
+    __tablename__ = "article_type_costs"
+    id = Column(Integer, primary_key=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    article_type_id = Column(Integer, ForeignKey("article_types.id"), nullable=False, index=True)
+    cost_group = Column(String(30), nullable=False)
+    role_key = Column(String(40))
+    material_id = Column(Integer, ForeignKey("materials.id"))
+    operation_id = Column(Integer, ForeignKey("operations.id"))
+    subcontract_service_id = Column(Integer, ForeignKey("subcontract_services.id"))
+    description = Column(String(200), nullable=False)
+    quantity = Column(Float, default=0, nullable=False)
+    unit = Column(String(20), default="un", nullable=False)
+    waste_pct = Column(Float, default=0, nullable=False)
+    unit_cost = Column(Float, default=0, nullable=False)
+    use_live_price = Column(Boolean, default=True, nullable=False)
+    required = Column(Boolean, default=True, nullable=False)
+    sequence = Column(Integer, default=10, nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
+
+
 class Style(Base, TimestampMixin):
     __tablename__ = "styles"
     id = Column(Integer, primary_key=True)

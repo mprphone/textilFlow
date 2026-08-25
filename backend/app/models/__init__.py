@@ -16,7 +16,7 @@ from .manufacturing import (
 )
 from .partners import Bank, Certification, Customer, PaymentTerm, Supplier, SupplierOccurrence
 from .process import ProcessJob
-from .product import ArticleType, BOMItem, Material, Operation, ProductOperation, Sample, Style, StyleRevision, StyleVariant
+from .product import ArticleType, ArticleTypeCost, BOMItem, Material, Operation, ProductOperation, Sample, Style, StyleRevision, StyleVariant
 from .quality import CorrectiveAction, QualityInspection, Shipment, ShipmentLine
 from .subcontracting import ProductionRouteStep, ServiceStage, SubcontractJob, SubcontractService
 

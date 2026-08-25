@@ -2,9 +2,9 @@ import { crudList, get, post, put } from '../api.js';
 import { date, esc, finiteNumber, money, number, preciseMoney } from '../format.js?v=20260819-8';
 import { state } from '../state.js';
 import { closeModal, openModal, pageHeader, setHeading, toast } from '../ui.js?v=20260820-5';
-import { renderReleaseOrder } from './release_order.js?v=20260824-41';
+import { renderReleaseOrder } from './release_order.js?v=20260825-56';
 import { numericValue, statusText, todayIso, valueOf } from './shared.js?v=20260825-53';
-import { renderProposalWizard } from './wizard.js?v=20260825-55';
+import { renderProposalWizard } from './wizard.js?v=20260825-56';
 
 const COST_GROUPS = [
   {key:'fabric', label:'Malhas / tecidos', short:'Malhas', icon:'▧', tone:'mint', category:'material', source:'manual_fabric'},

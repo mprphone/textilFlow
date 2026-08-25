@@ -6,8 +6,8 @@ import unicodedata
 from sqlalchemy.orm import Session
 
 from ..models import (
-    BOMItem, Company, CostLine, CostSheet, Customer, Material, Operation,
-    ProductOperation, StockLot, Style,
+    ArticleType, ArticleTypeCost, BOMItem, Company, CostLine, CostSheet, Customer,
+    Material, Operation, ProductOperation, StockLot, Style, SubcontractService,
 )
 
 
@@ -23,6 +23,11 @@ LABOR_BASELINES = (
     ("packing", ("embalag", "packing", "pack"), "Tempo de embalagem"),
 )
 AVAILABLE_LOT_STATUSES = {"available", "active", "open"}
+TEMPLATE_GROUP_CATEGORIES = {
+    "fabric": "material", "accessory": "material", "labor": "labor",
+    "machine": "machine", "dyeing": "subcontract", "printing": "subcontract",
+    "subcontract": "subcontract", "overhead": "overhead",
+}
 
 
 def _normalise(value: str | None) -> str:
@@ -221,6 +226,252 @@ def default_cost_template(db: Session, company_id: int) -> dict:
     }
 
 
+def suggested_article_type_costs(db: Session, article_type: ArticleType) -> list[dict]:
+    """Modelo inicial seguro; o tipo pode depois acrescentar fechos, bordados, lavagens, etc."""
+    base = default_cost_template(db, article_type.company_id)
+    rows = [{
+        "id": None,
+        "article_type_id": article_type.id,
+        "cost_group": "fabric",
+        "role_key": "main_fabric",
+        "material_id": None,
+        "operation_id": None,
+        "subcontract_service_id": None,
+        "description": "Malha / tecido principal",
+        "quantity": 0.5,
+        "unit": "kg",
+        "waste_pct": 5.0,
+        "unit_cost": 0.0,
+        "use_live_price": True,
+        "required": True,
+        "sequence": 10,
+        "active": True,
+    }]
+    sequence = 20
+    for item in base["accessories"]:
+        rows.append({
+            "id": None, "article_type_id": article_type.id, "cost_group": "accessory",
+            "role_key": item["baseline"], "material_id": item.get("material_id"),
+            "operation_id": None, "subcontract_service_id": None,
+            "description": item["description"].replace(" — selecionar artigo", ""),
+            "quantity": item["quantity"], "unit": item["unit"], "waste_pct": 0.0,
+            "unit_cost": item["unit_cost"], "use_live_price": True,
+            "required": True, "sequence": sequence, "active": True,
+        })
+        sequence += 10
+    for item in base["operations"]:
+        rows.append({
+            "id": None, "article_type_id": article_type.id, "cost_group": "labor",
+            "role_key": item["stage"], "material_id": None,
+            "operation_id": item.get("operation_id"), "subcontract_service_id": None,
+            "description": item["description"], "quantity": item["quantity"],
+            "unit": "min", "waste_pct": 0.0, "unit_cost": item["unit_cost"],
+            "use_live_price": True, "required": True, "sequence": sequence, "active": True,
+        })
+        sequence += 10
+    overhead = base["overheads"][0]
+    rows.append({
+        "id": None, "article_type_id": article_type.id, "cost_group": "overhead",
+        "role_key": "factory_overhead", "material_id": None, "operation_id": None,
+        "subcontract_service_id": None, "description": overhead["description"],
+        "quantity": overhead["quantity"], "unit": overhead["unit"], "waste_pct": 0.0,
+        "unit_cost": overhead["unit_cost"], "use_live_price": False,
+        "required": True, "sequence": sequence, "active": True,
+    })
+    return rows
+
+
+def _template_unit_cost(db: Session, row) -> tuple[float, str]:
+    if not row.get("use_live_price", True):
+        return _round(row.get("unit_cost")), "fixed_template"
+    if row.get("material_id"):
+        material = db.get(Material, row["material_id"])
+        if material:
+            return stock_unit_cost(db, material, row.get("unit_cost", 0))
+    if row.get("operation_id"):
+        operation = db.get(Operation, row["operation_id"])
+        if operation:
+            field = "machine_cost_per_minute" if row.get("cost_group") == "machine" else "cost_per_minute"
+            return _round(getattr(operation, field, 0) or row.get("unit_cost", 0)), "operation_rate"
+    if row.get("subcontract_service_id"):
+        service = db.get(SubcontractService, row["subcontract_service_id"])
+        if service:
+            return _round(service.unit_cost or row.get("unit_cost", 0)), "service_price"
+    return _round(row.get("unit_cost")), "template_price"
+
+
+def article_type_cost_template_view(db: Session, article_type: ArticleType) -> dict:
+    stored = db.query(ArticleTypeCost).filter_by(
+        company_id=article_type.company_id, article_type_id=article_type.id,
+    ).order_by(ArticleTypeCost.sequence, ArticleTypeCost.id).all()
+    raw = [{
+        "id": row.id, "article_type_id": row.article_type_id, "cost_group": row.cost_group,
+        "role_key": row.role_key, "material_id": row.material_id, "operation_id": row.operation_id,
+        "subcontract_service_id": row.subcontract_service_id, "description": row.description,
+        "quantity": row.quantity, "unit": row.unit, "waste_pct": row.waste_pct,
+        "unit_cost": row.unit_cost, "use_live_price": row.use_live_price,
+        "required": row.required, "sequence": row.sequence, "active": row.active,
+    } for row in stored] if stored else suggested_article_type_costs(db, article_type)
+    lines = []
+    for row in raw:
+        effective, origin = _template_unit_cost(db, row)
+        reference = None
+        if row.get("material_id"):
+            reference = db.get(Material, row["material_id"])
+        elif row.get("operation_id"):
+            reference = db.get(Operation, row["operation_id"])
+        elif row.get("subcontract_service_id"):
+            reference = db.get(SubcontractService, row["subcontract_service_id"])
+        lines.append({
+            **row,
+            "effective_unit_cost": effective,
+            "price_origin": origin,
+            "reference_label": getattr(reference, "name", None),
+            "unit_cost_total": _round(_float(row.get("quantity")) * (1 + _float(row.get("waste_pct")) / 100) * effective),
+        })
+    return {
+        "article_type": {
+            "id": article_type.id, "company_id": article_type.company_id, "code": article_type.code,
+            "name": article_type.name, "category": article_type.category,
+            "default_unit": article_type.default_unit, "active": article_type.active,
+        },
+        "configured": bool(stored),
+        "lines": lines,
+        "suggested_lines": suggested_article_type_costs(db, article_type),
+    }
+
+
+def replace_article_type_cost_template(db: Session, article_type: ArticleType, items) -> list[ArticleTypeCost]:
+    db.query(ArticleTypeCost).filter_by(
+        company_id=article_type.company_id, article_type_id=article_type.id,
+    ).delete(synchronize_session=False)
+    rows = []
+    for index, item in enumerate(items, 1):
+        group = _normalise(item.cost_group).replace(" ", "_")
+        if group not in TEMPLATE_GROUP_CATEGORIES:
+            raise ValueError(f"Família de custo inválida: {item.cost_group}")
+        links = [item.material_id, item.operation_id, item.subcontract_service_id]
+        if sum(value is not None for value in links) > 1:
+            raise ValueError(f"{item.description}: escolha apenas um artigo, operação ou serviço")
+        if item.material_id:
+            material = db.get(Material, item.material_id)
+            if not material or material.company_id != article_type.company_id:
+                raise ValueError(f"{item.description}: artigo de custo inválido")
+            if group not in {"fabric", "accessory"}:
+                raise ValueError(f"{item.description}: um artigo só pode ser malha ou acessório")
+        if item.operation_id:
+            operation = db.get(Operation, item.operation_id)
+            if not operation or operation.company_id != article_type.company_id:
+                raise ValueError(f"{item.description}: operação inválida")
+            if group not in {"labor", "machine"}:
+                raise ValueError(f"{item.description}: uma operação só pode ser mão de obra ou máquina")
+        if item.subcontract_service_id:
+            service = db.get(SubcontractService, item.subcontract_service_id)
+            if not service or service.company_id != article_type.company_id:
+                raise ValueError(f"{item.description}: serviço inválido")
+            if group not in {"dyeing", "printing", "subcontract"}:
+                raise ValueError(f"{item.description}: o serviço deve ficar num grupo de subcontratação")
+        role = _normalise(item.role_key).replace(" ", "_")[:40] or f"{group}_{index}"
+        row = ArticleTypeCost(
+            company_id=article_type.company_id, article_type_id=article_type.id,
+            cost_group=group, role_key=role, material_id=item.material_id,
+            operation_id=item.operation_id, subcontract_service_id=item.subcontract_service_id,
+            description=item.description.strip(), quantity=item.quantity, unit=item.unit.strip(),
+            waste_pct=item.waste_pct, unit_cost=item.unit_cost,
+            use_live_price=item.use_live_price, required=item.required,
+            sequence=item.sequence or index * 10, active=item.active,
+        )
+        db.add(row)
+        rows.append(row)
+    db.flush()
+    return rows
+
+
+def _template_rows_for_sheet(db: Session, sheet: CostSheet) -> list[ArticleTypeCost]:
+    style = db.get(Style, sheet.style_id)
+    if not style or not style.article_type_id:
+        return []
+    return db.query(ArticleTypeCost).filter_by(
+        company_id=sheet.company_id, article_type_id=style.article_type_id, active=True,
+    ).order_by(ArticleTypeCost.sequence, ArticleTypeCost.id).all()
+
+
+def _operation_id_for_line(db: Session, line: CostLine) -> int | None:
+    source = _normalise(line.source_type)
+    if line.category not in {"labor", "machine"} or not line.source_id:
+        return None
+    if source == "operation":
+        product_operation = db.get(ProductOperation, line.source_id)
+        return product_operation.operation_id if product_operation else None
+    if source.startswith("auto_labor_") or source.startswith("article_type_cost:"):
+        return line.source_id
+    return None
+
+
+def _cost_group_for_line(db: Session, sheet: CostSheet, line: CostLine) -> str:
+    if line.category == "material":
+        return "fabric" if _material_group(_material_for_line(db, sheet, line), line) == "fabric" else "accessory"
+    if line.category in {"labor", "machine", "overhead"}:
+        return line.category
+    if line.category == "subcontract":
+        text = _normalise(line.description)
+        if any(token in text for token in ("tintur", "tingimento", "dye")):
+            return "dyeing"
+        if any(token in text for token in ("estamp", "print", "serigraf")):
+            return "printing"
+        return "subcontract"
+    return "overhead"
+
+
+def _line_matches_template(db: Session, sheet: CostSheet, line: CostLine, template: ArticleTypeCost) -> bool:
+    if _normalise(line.source_type) == f"article_type_cost:{template.id}":
+        return True
+    if template.material_id:
+        material = _material_for_line(db, sheet, line)
+        return bool(material and material.id == template.material_id)
+    if template.operation_id:
+        return _operation_id_for_line(db, line) == template.operation_id
+    if template.subcontract_service_id:
+        return line.category == "subcontract" and line.source_id == template.subcontract_service_id
+    if _cost_group_for_line(db, sheet, line) != template.cost_group:
+        return False
+    role = _normalise(template.role_key)
+    if template.cost_group == "accessory" and role in {"thread", "label", "packaging"}:
+        return _accessory_baseline(_material_for_line(db, sheet, line), line) == role
+    if template.cost_group == "labor" and role in {"cutting", "sewing", "packing"}:
+        return _labor_stage(db, line) == role
+    if template.cost_group == "fabric" and role == "main_fabric":
+        return True
+    return _normalise(line.description) == _normalise(template.description)
+
+
+def ensure_article_type_cost_lines(db: Session, sheet: CostSheet) -> int:
+    templates = _template_rows_for_sheet(db, sheet)
+    if not templates:
+        return 0
+    lines = db.query(CostLine).filter_by(cost_sheet_id=sheet.id).order_by(CostLine.id).all()
+    added = 0
+    for template in templates:
+        if any(_line_matches_template(db, sheet, line, template) for line in lines):
+            continue
+        row = {
+            "cost_group": template.cost_group, "material_id": template.material_id,
+            "operation_id": template.operation_id, "subcontract_service_id": template.subcontract_service_id,
+            "unit_cost": template.unit_cost, "use_live_price": template.use_live_price,
+        }
+        unit_cost, _ = _template_unit_cost(db, row)
+        quantity = _float(template.quantity) * (1 + _float(template.waste_pct) / 100)
+        source_id = template.material_id or template.operation_id or template.subcontract_service_id
+        line = _add_line(
+            db, sheet, category=TEMPLATE_GROUP_CATEGORIES.get(template.cost_group, "other"),
+            description=template.description, quantity=quantity, unit=template.unit,
+            unit_cost=unit_cost, source_type=f"article_type_cost:{template.id}", source_id=source_id,
+        )
+        lines.append(line)
+        added += 1
+    return added
+
+
 def _add_line(
     db: Session, sheet: CostSheet, *, category: str, description: str, quantity: float,
     unit: str, unit_cost: float, source_type: str, source_id: int | None = None,
@@ -254,8 +505,10 @@ def ensure_required_cost_lines(db: Session, sheet: CostSheet) -> int:
         meta["valid_until"] = (date.today() + timedelta(days=30)).isoformat()
         sheet.custom_data = meta
     db.flush()
+    added = ensure_article_type_cost_lines(db, sheet)
+    if added:
+        db.flush()
     lines = db.query(CostLine).filter_by(cost_sheet_id=sheet.id).order_by(CostLine.id).all()
-    added = 0
 
     material_rows = [(line, _material_for_line(db, sheet, line)) for line in lines if line.category == "material"]
     if not any(_material_group(material, line) == "fabric" for line, material in material_rows):
@@ -356,7 +609,7 @@ def cost_sheet_completeness(db: Session, sheet: CostSheet) -> dict:
     lines = db.query(CostLine).filter_by(cost_sheet_id=sheet.id).order_by(CostLine.id).all()
     meta = dict(sheet.custom_data or {})
     grouped = {"fabric": [], "accessory": [], "labor": [], "overhead": []}
-    invalid_line_ids: list[int] = []
+    raw_invalid_line_ids: list[int] = []
 
     for line in lines:
         if line.category == "material":
@@ -368,7 +621,24 @@ def cost_sheet_completeness(db: Session, sheet: CostSheet) -> dict:
             grouped["overhead"].append(line)
         client_supplied = _normalise(line.source_type).startswith("client_supplied")
         if _float(line.quantity) <= 0 or (_float(line.unit_cost) <= 0 and not client_supplied):
-            invalid_line_ids.append(line.id)
+            raw_invalid_line_ids.append(line.id)
+
+    type_templates = _template_rows_for_sheet(db, sheet)
+    optional_line_ids = {
+        line.id for template in type_templates if not template.required
+        for line in lines if _line_matches_template(db, sheet, line, template)
+    }
+    # Uma linha opcional vazia não deve ficar vermelha nem bloquear a proposta.
+    # No entanto, se ela tentar ocupar um requisito universal (por exemplo a etiqueta),
+    # o requisito continua incompleto e usa a lista bruta abaixo.
+    invalid_line_ids = [line_id for line_id in raw_invalid_line_ids if line_id not in optional_line_ids]
+    type_missing = []
+    for template in type_templates:
+        if not template.required:
+            continue
+        matches = [line for line in lines if _line_matches_template(db, sheet, line, template)]
+        if not matches or not any(line.id not in raw_invalid_line_ids for line in matches):
+            type_missing.append(template.description)
 
     labor_stages = {stage for line in grouped["labor"] for stage in [_labor_stage(db, line)] if stage}
     accessory_stages = {
@@ -383,28 +653,41 @@ def cost_sheet_completeness(db: Session, sheet: CostSheet) -> dict:
 
     add_check("customer", "Cliente associado", bool(meta.get("customer_id")), "Necessário para aceitar e emitir a proposta.", "commercial")
     add_check("valid_until", "Validade da proposta", bool(meta.get("valid_until")), "Preenchida automaticamente a 30 dias; pode alterar.", "commercial")
+    if type_templates:
+        add_check(
+            "article_type_template", "Modelo de custos do tipo de peça", not type_missing,
+            "Todos os custos obrigatórios configurados no tipo de peça estão preenchidos."
+            if not type_missing else "Falta confirmar: " + ", ".join(type_missing[:4]),
+            "all",
+        )
+    add_check(
+        "cost_lines", "Custos obrigatórios por preencher", not invalid_line_ids,
+        "Todas as linhas obrigatórias têm consumo e preço."
+        if not invalid_line_ids else f"Existem {len(invalid_line_ids)} linha(s) obrigatória(s) ainda a zero.",
+        "all",
+    )
     add_check(
         "fabric", "Malha / tecido com consumo e preço",
-        bool(grouped["fabric"]) and all(line.id not in invalid_line_ids for line in grouped["fabric"]),
+        any(line.id not in raw_invalid_line_ids for line in grouped["fabric"]),
         "Consumo com quebra e preço corrente do material.", "fabric",
     )
     for key, _, label, _ in ACCESSORY_BASELINES:
         related = [line for line in grouped["accessory"] if _accessory_baseline(_material_for_line(db, sheet, line), line) == key]
         add_check(
             f"accessory_{key}", label,
-            key in accessory_stages and all(line.id not in invalid_line_ids for line in related),
+            key in accessory_stages and any(line.id not in raw_invalid_line_ids for line in related),
             "Vem da BOM; indique apenas o consumo se ainda estiver a zero.", "accessory",
         )
     for key, _, label in LABOR_BASELINES:
         related = [line for line in grouped["labor"] if _labor_stage(db, line) == key]
         add_check(
             f"labor_{key}", label,
-            key in labor_stages and all(line.id not in invalid_line_ids for line in related),
+            key in labor_stages and any(line.id not in raw_invalid_line_ids for line in related),
             "Tempo por peça e custo por minuto.", "labor",
         )
     add_check(
         "overhead", "Custos gerais / indiretos",
-        bool(grouped["overhead"]) and all(line.id not in invalid_line_ids for line in grouped["overhead"]),
+        any(line.id not in raw_invalid_line_ids for line in grouped["overhead"]),
         "Rateio fabril por peça; não deve ficar implicitamente a zero.", "overhead",
     )
     add_check("selling_price", "Preço de venda", _float(sheet.selling_price) > 0, "Pode usar o preço recomendado calculado.", "commercial")
@@ -436,20 +719,33 @@ def refresh_automatic_costs(db: Session, sheet: CostSheet) -> int:
     for line in lines:
         material = _material_for_line(db, sheet, line)
         source = _normalise(line.source_type)
-        if material and (source == "bom" or source.startswith("auto_accessory_")):
+        template = None
+        if source.startswith("article_type_cost:"):
+            try:
+                template = db.get(ArticleTypeCost, int(source.rsplit(":", 1)[-1]))
+            except (TypeError, ValueError):
+                template = None
+        live_template = not template or template.use_live_price
+        if material and live_template and (source == "bom" or source.startswith("auto_accessory_") or source.startswith("article_type_cost:")):
             value = _material_cost(db, material, line.unit_cost)
             if value > 0 and abs(value - _float(line.unit_cost)) > 0.000001:
                 line.unit_cost = value
                 changed += 1
-        elif line.category == "labor" and line.source_id and ("operation" in source or source.startswith("auto_labor_")):
+        elif live_template and line.category in {"labor", "machine"} and line.source_id and ("operation" in source or source.startswith("auto_labor_") or source.startswith("article_type_cost:")):
             operation = None
             if source == "operation":
                 product_operation = db.get(ProductOperation, line.source_id)
                 operation = db.get(Operation, product_operation.operation_id) if product_operation else None
             else:
                 operation = db.get(Operation, line.source_id)
-            if operation and _float(operation.cost_per_minute) > 0 and abs(_float(operation.cost_per_minute) - _float(line.unit_cost)) > 0.000001:
-                line.unit_cost = operation.cost_per_minute
+            rate = _float(operation.machine_cost_per_minute if line.category == "machine" else operation.cost_per_minute) if operation else 0
+            if rate > 0 and abs(rate - _float(line.unit_cost)) > 0.000001:
+                line.unit_cost = rate
+                changed += 1
+        elif live_template and line.category == "subcontract" and line.source_id and source.startswith("article_type_cost:"):
+            service = db.get(SubcontractService, line.source_id)
+            if service and _float(service.unit_cost) > 0 and abs(_float(service.unit_cost) - _float(line.unit_cost)) > 0.000001:
+                line.unit_cost = service.unit_cost
                 changed += 1
     added = ensure_required_cost_lines(db, sheet)
     if changed:

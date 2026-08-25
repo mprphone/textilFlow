@@ -10,6 +10,7 @@
 @import url("./design.css?v=20260824-41") layer(legacy);
 @import url("./supplier.css?v=20260824-41") layer(legacy);
 @import url("./shipping.css?v=20260825-54") layer(pages);
+@import url("./article-types.css?v=20260825-56") layer(pages);
 @import url("./system/tokens.css?v=20260824-41") layer(tokens);
 @import url("./system/base.css?v=20260824-41") layer(base);
 @import url("./system/components.css?v=20260824-41") layer(components);

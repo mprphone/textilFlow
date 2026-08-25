@@ -7,7 +7,7 @@ import * as dashboard from './pages/dashboard.js?v=20260822-10';
 import * as live from './pages/live.js?v=20260819-7';
 import * as styles from './pages/styles.js?v=20260824-41';
 import * as samples from './pages/samples.js?v=20260822-30';
-import * as costing from './pages/costing.js?v=20260825-55';
+import * as costing from './pages/costing.js?v=20260825-56';
 import * as orders from './pages/orders.js?v=20260825-52';
 import * as floor from './pages/floor.js?v=20260822-30';
 import * as cutting from './pages/cutting.js?v=20260825-51';
@@ -26,11 +26,12 @@ import * as subcontracts from './pages/subcontracts.js?v=20260824-41';
 import * as reports from './pages/reports.js?v=20260819-7';
 import * as partners from './pages/partners.js?v=20260824-41';
 import * as tables from './pages/tables.js?v=20260824-41';
+import * as articleTypes from './pages/article_types.js?v=20260825-56';
 import * as shipping from './pages/shipping.js?v=20260825-54';
 import * as commercialDocs from './pages/commercial_docs.js?v=20260824-41';
 import * as erpOrders from './pages/erp_orders.js?v=20260824-1';
-import * as settings from './pages/settings.js?v=20260822-27';
-import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260825-54';
+import * as settings from './pages/settings.js?v=20260825-56';
+import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260825-56';
 
 async function renderDesign(container, view) {
   const { render } = await import('./pages/design.js?v=20260824-41');
@@ -78,6 +79,7 @@ const routes={dashboard,planning:tracking,live,styles,samples,costing,orders,con
   'settings-primavera':{render:container=>settings.render(container,7,false)},
   'tables-customers':{render:container=>tables.render(container,'customers')},
   'tables-suppliers':{render:container=>tables.render(container,'suppliers')},
+  'tables-article-types':articleTypes,
   'tables-service-stages':{render:container=>tables.render(container,'service-stages')},
   'tables-items':{render:container=>tables.render(container,'items')},
   'tables-banks':{render:container=>tables.render(container,'banks')},

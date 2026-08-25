@@ -7,7 +7,7 @@ import unicodedata
 from sqlalchemy.orm import Session
 
 from ..models import (
-    BOMItem, CostLine, CostSheet, Customer, Material, ProductionLine,
+    ArticleTypeCost, BOMItem, CostLine, CostSheet, Customer, Material, ProductionLine,
     ProductionMaterialRequirement, ProductionOrder, ProductionOrderVariant, ProposalProductionRelease,
     SalesOrder, SalesOrderLine, StockLot, Style, StyleVariant, SubcontractService,
 )
@@ -76,6 +76,12 @@ def _material_for_line(
 
 def classify_cost_line(db: Session, sheet: CostSheet, line: CostLine) -> dict:
     source_type = (line.source_type or "manual").lower()
+    template = None
+    if source_type.startswith("article_type_cost:"):
+        try:
+            template = db.get(ArticleTypeCost, int(source_type.rsplit(":", 1)[-1]))
+        except (TypeError, ValueError):
+            template = None
     material = _material_for_line(db, sheet, line)
     material_category = (material.category or "other").lower() if material else None
     description = _normalise(line.description)
@@ -83,8 +89,8 @@ def classify_cost_line(db: Session, sheet: CostSheet, line: CostLine) -> dict:
 
     if line.category == "material":
         fabric_categories = {"fabric", "knit", "woven", "malha", "tecido"}
-        explicit_fabric = source_type in {"manual_fabric", "fabric"}
-        explicit_accessory = source_type in {"manual_accessory", "accessory", "accessories"}
+        explicit_fabric = source_type in {"manual_fabric", "fabric"} or bool(template and template.cost_group == "fabric")
+        explicit_accessory = source_type in {"manual_accessory", "accessory", "accessories"} or bool(template and template.cost_group == "accessory")
         cost_group = "fabric" if explicit_fabric or (
             not explicit_accessory and material_category in fabric_categories
         ) else "accessories"
@@ -102,34 +108,38 @@ def classify_cost_line(db: Session, sheet: CostSheet, line: CostLine) -> dict:
             source_label = "Material da proposta"
         elif source_type == "revision":
             source_label = "Revisao da proposta"
+        elif template:
+            source_label = "Modelo do tipo de peca"
     elif line.category == "labor":
         cost_group = "labor"
         if source_type.startswith("required_"):
             source_label = "Por completar"
         elif source_type.startswith("auto_labor_"):
             source_label = "Operacao sugerida"
+        elif template:
+            source_label = "Modelo do tipo de peca"
         else:
             source_label = "Gama operatoria" if "operation" in source_type else "Mao de obra"
     elif line.category == "machine":
         cost_group = "machine"
         source_label = "Custo de maquina"
     elif line.category == "subcontract":
-        service = db.get(SubcontractService, line.source_id) if source_type in {"subcontract_service", "route_service"} and line.source_id else None
+        service = db.get(SubcontractService, line.source_id) if (source_type in {"subcontract_service", "route_service"} or template) and line.source_id else None
         service_category = _normalise(service.category if service else None)
         if (
             source_type in {"manual_dyeing", "dyeing", "dye"}
             or service_category in {"dyeing", "dye", "tinturaria", "tingimento"}
             or any(token in description for token in ("ting", "tintur", "dye"))
         ):
-            cost_group, source_label = "dyeing", "Tinturaria"
+            cost_group, source_label = "dyeing", "Modelo do tipo de peca" if template else "Tinturaria"
         elif (
             source_type in {"manual_printing", "printing", "print"}
             or service_category in {"printing", "print", "estamparia", "screen_printing"}
             or any(token in description for token in ("estamp", "print", "serigraf"))
         ):
-            cost_group, source_label = "printing", "Estamparia"
+            cost_group, source_label = "printing", "Modelo do tipo de peca" if template else "Estamparia"
         else:
-            cost_group, source_label = "subcontract_other", "Rota produtiva" if source_type == "route_service" else "Outro subcontrato"
+            cost_group, source_label = "subcontract_other", "Modelo do tipo de peca" if template else ("Rota produtiva" if source_type == "route_service" else "Outro subcontrato")
     elif line.category == "overhead":
         cost_group = "overhead"
         source_label = "Por completar" if source_type.startswith("required_") else "Custos indiretos"

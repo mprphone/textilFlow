@@ -3,7 +3,7 @@ import { esc, money, number } from '../format.js?v=20260819-6';
 import { state as appState } from '../state.js';
 import { pageHeader, toast } from '../ui.js?v=20260820-5';
 import { recordModal } from '../quick_create.js';
-import { articleTypeCards, componentEditor, customCostRows, productionRows, stepper, subcontractRows, totals } from './wizard_components.js?v=20260825-55';
+import { articleTypeCards, componentEditor, customCostRows, productionRows, stepper, subcontractRows, totals } from './wizard_components.js?v=20260825-56';
 import { filterCatalog, materialCatalogTable, operationCatalogTable, subcontractCatalogTable } from './wizard_catalogs.js?v=20260825-55';
 
 
@@ -27,16 +27,28 @@ function fromService(row) {
   return {subcontract_service_id:row.id,description:row.name,supplier_name:row.supplier_name,quantity:1,unit:row.unit,unit_cost:row.unit_cost,waste_pct:0,lead_time_days:row.lead_time_days};
 }
 
-function applyCostingTemplate(data, catalog) {
-  const template = catalog.costing_template || {};
-  data.accessories = (template.accessories || []).map(item => ({
-    ...item, waste_pct:0,
+function applyCostingTemplate(data, catalog, articleTypeId) {
+  const template = catalog.article_type_templates?.[String(articleTypeId)];
+  const lines = template?.lines || [];
+  const component = item => ({
+    template_cost_id:item.id || null, cost_group:item.cost_group,
+    material_id:item.material_id || null, operation_id:item.operation_id || null,
+    subcontract_service_id:item.subcontract_service_id || null,
+    description:item.description, quantity:Number(item.quantity || 0), unit:item.unit || 'un',
+    unit_cost:Number(item.effective_unit_cost ?? item.unit_cost ?? 0), waste_pct:Number(item.waste_pct || 0),
     image_url:catalog.materials.find(row => row.id === item.material_id)?.image_url || null,
-    color:'',
+    color:'', required:item.required !== false,
+  });
+  data.materials = lines.filter(item => item.cost_group === 'fabric' && item.material_id).map(component);
+  data.accessories = lines.filter(item => item.cost_group === 'accessory').map(component);
+  data.operations = lines.filter(item => ['labor','machine'].includes(item.cost_group)).map(component);
+  data.services = lines.filter(item => ['dyeing','printing','subcontract'].includes(item.cost_group)).map(item => ({
+    ...component(item),
+    supplier_name:catalog.subcontract_services.find(row => row.id === item.subcontract_service_id)?.supplier_name || '',
+    lead_time_days:catalog.subcontract_services.find(row => row.id === item.subcontract_service_id)?.lead_time_days || 0,
   }));
-  data.operations = (template.operations || []).map(item => ({...item, waste_pct:0}));
-  data.overheads = (template.overheads || []).map(item => ({...item, waste_pct:0}));
-  Object.assign(data, template.pricing || {});
+  data.overheads = lines.filter(item => item.cost_group === 'overhead').map(component);
+  Object.assign(data, catalog.costing_template?.pricing || {});
 }
 
 function suggestedPrice(data) {
@@ -46,8 +58,8 @@ function suggestedPrice(data) {
 }
 
 function stepContent(step, data, catalog, ui) {
-  if (step === 0) return `<div class="wizard-intro"><span>1</span><div><h2>Que peça vamos orçamentar?</h2><p>Escolha o tipo, o cliente e identifique o novo modelo. Os tipos de peça podem ser alterados nas configurações.</p></div></div>
-    ${articleTypeCards(catalog.article_types, data.article_type_id)}
+  if (step === 0) return `<div class="wizard-intro"><span>1</span><div><h2>Que peça vamos orçamentar?</h2><p>Ao escolher o tipo, o programa carrega malhas, acessórios, operações, serviços e custos indiretos definidos em <a href="#/tables-article-types">Tabelas → Tipos de peças</a>.</p></div></div>
+    ${articleTypeCards(catalog.article_types, data.article_type_id, catalog.article_type_templates)}
     <div class="wizard-form card"><div class="cost-meta-grid">
       <label>Cliente *<select data-header="customer_id"><option value="">Selecionar cliente…</option>${catalog.customers.map(row => `<option value="${row.id}" ${row.id===data.customer_id?'selected':''}>${esc(row.name)}</option>`).join('')}</select></label>
       <label>Referência do modelo<input data-header="reference" value="${esc(data.reference)}" placeholder="Ex.: POLO-2027-01"></label>
@@ -193,7 +205,6 @@ function validate(step, data) {
 export async function renderProposalWizard(container, onDone, onCancel) {
   const catalog = await get(`/costing/${appState.companyId}/wizard-catalog`);
   const data = blankState();
-  applyCostingTemplate(data, catalog);
   const ui = {
     fabric:{search:'',page:1}, accessory:{search:'',page:1},
     operation:{search:'',page:1}, subcontract:{search:'',page:1},
@@ -207,7 +218,7 @@ export async function renderProposalWizard(container, onDone, onCancel) {
     root.querySelector('[data-wizard-use-price]')?.addEventListener('click',()=>{data.selling_price=Number(suggestedPrice(data).toFixed(4));render();});
     container.querySelector('[data-cancel-wizard]').addEventListener('click', onCancel);
     container.querySelector('[data-wizard-back]')?.addEventListener('click',()=>{current--;render();});
-    root.querySelectorAll('[data-article-type]').forEach(button=>button.addEventListener('click',()=>{data.article_type_id=Number(button.dataset.articleType);const type=catalog.article_types.find(r=>r.id===data.article_type_id);if(!data.description)data.description=type.name;render();}));
+    root.querySelectorAll('[data-article-type]').forEach(button=>button.addEventListener('click',()=>{const nextType=Number(button.dataset.articleType);if(nextType!==data.article_type_id)applyCostingTemplate(data,catalog,nextType);data.article_type_id=nextType;const type=catalog.article_types.find(r=>r.id===data.article_type_id);if(!data.description)data.description=type.name;render();}));
     root.querySelectorAll('[data-catalog-search]').forEach(input=>input.addEventListener('input',event=>{const kind=event.target.dataset.catalogSearch;ui[kind].search=event.target.value;ui[kind].page=1;render();requestAnimationFrame(()=>{const next=container.querySelector(`[data-catalog-search="${kind}"]`);next?.focus();next?.setSelectionRange(next.value.length,next.value.length);});}));
     root.querySelectorAll('[data-catalog-page]').forEach(button=>button.addEventListener('click',()=>{ui[button.dataset.catalogKind].page=Number(button.dataset.catalogPage);render();}));
     root.querySelectorAll('[data-add-fabric]').forEach(button=>button.addEventListener('click',()=>{const row=catalog.materials.find(r=>r.id===Number(button.dataset.addFabric));if(!data.materials.some(i=>i.material_id===row.id))data.materials.push(fromMaterial(row));render();}));

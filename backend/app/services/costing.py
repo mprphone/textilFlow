@@ -1,4 +1,4 @@
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from ..models import (
     BOMItem, CostLine, CostSheet, Material, Operation, ProductOperation,
@@ -10,10 +10,13 @@ from .cost_sheet_automation import ensure_required_cost_lines, stock_unit_cost
 def rebuild_product_cost(db, sheet: CostSheet) -> CostSheet:
     db.query(CostLine).filter(
         CostLine.cost_sheet_id == sheet.id,
-        CostLine.source_type.in_([
-            "bom", "operation", "route_service",
-            "wizard_material", "wizard_accessory", "wizard_operation",
-        ]),
+        or_(
+            CostLine.source_type.in_([
+                "bom", "operation", "route_service",
+                "wizard_material", "wizard_accessory", "wizard_operation",
+            ]),
+            CostLine.source_type.like("article_type_cost:%"),
+        ),
     ).delete(synchronize_session=False)
 
     bom_rows = db.query(BOMItem, Material).join(Material, Material.id == BOMItem.material_id).filter(

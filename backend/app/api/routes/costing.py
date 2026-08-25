@@ -6,16 +6,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ...db import get_db
-from ...models import ActualCostEntry, CostLine, CostSheet, Customer, ProductionOrder, Style, User
+from ...models import ArticleType, ActualCostEntry, CostLine, CostSheet, Customer, ProductionOrder, Style, User
 from ...schemas import (
-    ActualCostInput, CostSheetCreate, CostSheetSave, ProposalReleaseRequest,
+    ActualCostInput, ArticleTypeCostTemplateSave, CostSheetCreate, CostSheetSave, ProposalReleaseRequest,
     WizardProposalCreate,
 )
 from ...services.audit import record_audit
 from ...services.cost_control import list_sheets, order_control, save_sheet, sheet_view
 from ...services.costing import rebuild_product_cost, recalculate_sheet
 from ...services.cost_sheet_automation import (
-    cost_sheet_completeness, ensure_required_cost_lines, refresh_automatic_costs,
+    article_type_cost_template_view, cost_sheet_completeness, ensure_required_cost_lines,
+    refresh_automatic_costs, replace_article_type_cost_template,
 )
 from ...services.serialization import model_to_dict
 from ...services.proposal_wizard import create_from_wizard, wizard_catalog
@@ -67,8 +68,43 @@ def _decision_event(action: str, user: User, *, reason: str | None = None) -> di
 
 @router.get("/{company_id}/wizard-catalog")
 def catalog(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    require_module_access(db, user, company_id, {"commercial"})
+    require_module_access(db, user, company_id, {"commercial", "tables", "design"})
     return wizard_catalog(db, company_id)
+
+
+@router.get("/article-types/{article_type_id}/cost-template")
+def article_type_cost_template(
+    article_type_id: int, db: Session = Depends(get_db), user: User = Depends(current_user),
+):
+    article_type = db.get(ArticleType, article_type_id)
+    if not article_type:
+        raise HTTPException(404, "Tipo de peça não encontrado")
+    require_module_access(db, user, article_type.company_id, {"commercial", "tables", "design"})
+    return article_type_cost_template_view(db, article_type)
+
+
+@router.put("/article-types/{article_type_id}/cost-template")
+def save_article_type_cost_template(
+    article_type_id: int, payload: ArticleTypeCostTemplateSave,
+    db: Session = Depends(get_db), user: User = Depends(current_user),
+):
+    article_type = db.get(ArticleType, article_type_id)
+    if not article_type:
+        raise HTTPException(404, "Tipo de peça não encontrado")
+    require_role(db, user, article_type.company_id, WRITE_ROLES)
+    if not payload.lines:
+        raise HTTPException(422, "O modelo deve ter pelo menos um custo")
+    try:
+        replace_article_type_cost_template(db, article_type, payload.lines)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(422, str(exc)) from exc
+    record_audit(
+        db, company_id=article_type.company_id, user_id=user.id, entity="article-type-cost-template",
+        entity_id=article_type.id, action="replace", payload={"line_count": len(payload.lines)},
+    )
+    db.commit()
+    return article_type_cost_template_view(db, article_type)
 
 
 @router.post("/wizard", status_code=201)

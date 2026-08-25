@@ -37,6 +37,8 @@ def require_role(db: Session, user: User, company_id: int, roles: set[str]) -> U
 
 
 RESOURCE_WRITE_ROLES = {
+    "article-types": {"admin", "manager", "commercial", "planner"},
+    "article-type-costs": {"admin", "manager", "commercial", "planner"},
     "styles": {"admin", "manager", "designer"},
     "style-variants": {"admin", "manager", "designer"},
     "bom-items": {"admin", "manager", "designer"},
@@ -95,7 +97,7 @@ ROLE_MODULES = {
 
 RESOURCE_MODULES = {
     "styles": {"design", "commercial"}, "style-revisions": {"design"}, "style-variants": {"design", "commercial", "production", "shipping"},
-    "article-types": {"design"}, "bom-items": {"design", "commercial"}, "product-operations": {"design", "production", "commercial"},
+    "article-types": {"design", "commercial", "tables"}, "article-type-costs": {"design", "commercial", "tables"}, "bom-items": {"design", "commercial"}, "product-operations": {"design", "production", "commercial"},
     "samples": {"design"}, "developments": {"design"}, "certifications": {"design"}, "materials": {"design", "commercial", "shipping", "erp", "tables"},
     "cost-sheets": {"commercial"}, "cost-lines": {"commercial"}, "customers": {"commercial", "erp", "tables"}, "suppliers": {"commercial", "subcontracting", "shipping", "erp", "tables", "confection"},
     "banks": {"tables", "erp", "commercial", "management"}, "skill-types": {"confection", "production"}, "machine-types": {"confection", "production"},

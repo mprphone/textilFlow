@@ -75,6 +75,29 @@ class WizardComponentInput(CostingModel):
     waste_pct: float = Field(default=0, ge=0, le=100)
     image_url: str | None = None
     color: str | None = None
+    cost_group: str | None = Field(default=None, max_length=30)
+    template_cost_id: int | None = None
+
+
+class ArticleTypeCostInput(CostingModel):
+    cost_group: str = Field(min_length=1, max_length=30)
+    role_key: str | None = Field(default=None, max_length=40)
+    material_id: int | None = None
+    operation_id: int | None = None
+    subcontract_service_id: int | None = None
+    description: str = Field(min_length=1, max_length=200)
+    quantity: float = Field(default=0, ge=0)
+    unit: str = Field(default="un", min_length=1, max_length=20)
+    waste_pct: float = Field(default=0, ge=0, le=100)
+    unit_cost: float = Field(default=0, ge=0)
+    use_live_price: bool = True
+    required: bool = True
+    sequence: int = Field(default=10, ge=0, le=10000)
+    active: bool = True
+
+
+class ArticleTypeCostTemplateSave(CostingModel):
+    lines: list[ArticleTypeCostInput]
 
 
 class WizardProposalCreate(CostingModel):

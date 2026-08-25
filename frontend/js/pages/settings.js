@@ -6,9 +6,10 @@ import { bindPasswordToggles } from '../forms.js?v=20260821-19';
 import { recordModal } from '../quick_create.js?v=20260821-19';
 import { setCompany, setSession, state } from '../state.js';
 import { closeModal, openModal, pageHeader, toast } from '../ui.js?v=20260821-19';
-import { CORE_MODULE_IDS, MODULE_ACCESS_OPTIONS, MODULES, PLANT_MODULE_IDS } from '../navigation.js?v=20260822-11';
+import { CORE_MODULE_IDS, MODULE_ACCESS_OPTIONS, MODULES, PLANT_MODULE_IDS } from '../navigation.js?v=20260825-56';
+import { render as renderArticleTypes } from './article_types.js?v=20260825-56';
 
-const tabs=['Campos adaptativos','Modelos de ficha','Fluxos','Tipos de artigo','Utilizadores','Auditoria','Empresas','Integrações'];
+const tabs=['Campos adaptativos','Modelos de ficha','Fluxos','Tipos de peças','Utilizadores','Auditoria','Empresas','Integrações'];
 
 export async function render(container,active=0,showTabs=true){
   container.innerHTML=`${showTabs?`<div class="tabs">${tabs.map((label,index)=>`<button class="tab ${index===active?'active':''}" data-settings-tab="${index}">${label}</button>`).join('')}</div>`:''}<div data-settings-panel></div>`;
@@ -18,6 +19,7 @@ export async function render(container,active=0,showTabs=true){
 }
 
 async function renderTab(panel,index){
+  if(index===3)return renderArticleTypes(panel);
   if(index===0)return renderEntityPage(panel,{resource:'field-definitions',title:'Campos adaptativos',subtitle:'Adicione campos sem alterar código; as versões antigas permanecem preservadas.',singular:'campo',newLabel:'Novo campo',fields:[
     {key:'entity_type',label:'Entidade',type:'select',required:true,options:['style','customer','supplier','employee','machine','order']},{key:'field_key',label:'Chave técnica',required:true},{key:'label',label:'Etiqueta',required:true},
     {key:'data_type',label:'Tipo',type:'select',options:['text','number','date','select','textarea','boolean','json'],default:'text'},{key:'section',label:'Secção',default:'Geral'},{key:'display_order',label:'Ordem',type:'number',default:0},
@@ -29,10 +31,6 @@ async function renderTab(panel,index){
   if(index===2)return renderEntityPage(panel,{resource:'workflows',title:'Fluxos configuráveis',subtitle:'Etapas de desenvolvimento, produção ou aprovação sem regras rígidas.',singular:'fluxo',newLabel:'Novo fluxo',fields:[
     {key:'entity_type',label:'Entidade',required:true},{key:'name',label:'Nome',required:true},{key:'version',label:'Versão',type:'number',default:1},{key:'stages',label:'Etapas (JSON)',type:'json',default:['novo','em_curso','concluído'],full:true},{key:'active',label:'Ativo',type:'checkbox',default:true},
   ],columns:[{key:'entity_type',label:'Entidade'},{key:'name',label:'Fluxo'},{key:'version',label:'Versão',render:r=>`V${r.version}`},{key:'stages',label:'Etapas',render:r=>(r.stages||[]).map(stage=>`<span class="tag">${esc(stage)}</span>`).join(' ')},{key:'active',label:'Estado',render:r=>badge(r.active?'ativo':'histórico')}]});
-  if(index===3)return renderEntityPage(panel,{resource:'article-types',title:'Tipos de artigo',subtitle:'Cada tipo liga um modelo de ficha e um fluxo adequado.',singular:'tipo de artigo',newLabel:'Novo tipo',fields:async()=>[
-    {key:'code',label:'Código',required:true},{key:'name',label:'Nome',required:true},{key:'category',label:'Categoria'},{key:'default_unit',label:'Unidade',default:'un'},
-    {key:'template_id',label:'Modelo de ficha',type:'select',options:await options('form-templates',r=>`${r.name} V${r.version}`)},{key:'workflow_id',label:'Fluxo',type:'select',options:await options('workflows',r=>`${r.name} V${r.version}`)},{key:'active',label:'Ativo',type:'checkbox',default:true},
-  ],columns:[{key:'code',label:'Código'},{key:'name',label:'Tipo'},{key:'category',label:'Categoria'},{key:'default_unit',label:'Unidade'},{key:'template_id',label:'Modelo'},{key:'workflow_id',label:'Fluxo'},{key:'active',label:'Estado',render:r=>badge(r.active?'ativo':'inativo')}]});
   if(index===4)return renderUsers(panel);
   if(index===5)return renderEntityPage(panel,{resource:'audit',readOnly:true,title:'Auditoria',subtitle:'Histórico de alterações, utilizador, entidade e payload.',singular:'evento',fields:[],columns:[{key:'created_at',label:'Data',render:r=>datetime(r.created_at)},{key:'user_id',label:'Utilizador'},{key:'entity',label:'Entidade',render:r=>badge(r.entity)},{key:'entity_id',label:'Registo'},{key:'action',label:'Ação',render:r=>badge(r.action)},{key:'payload',label:'Alteração',render:r=>`<code>${esc(JSON.stringify(r.payload||{}))}</code>`}]});
   if(index===6)return renderCompanies(panel);

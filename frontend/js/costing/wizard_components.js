@@ -9,9 +9,9 @@ export function stepper(current) {
   return `<div class="wizard-stepper">${steps.map(([key, label], index) => `<div class="${index === current ? 'active' : index < current ? 'done' : ''}"><span>${index < current ? '✓' : index + 1}</span><b>${esc(label)}</b></div>`).join('')}</div>`;
 }
 
-export function articleTypeCards(rows, selected) {
+export function articleTypeCards(rows, selected, templates = {}) {
   const symbols = {top:'T', dress:'V', trousers:'C', outerwear:'J', accessory:'A'};
-  return `<div class="choice-grid piece-choices">${rows.map(row => `<button type="button" class="choice-card ${row.id === selected ? 'selected' : ''}" data-article-type="${row.id}"><span>${symbols[row.category] || row.name.charAt(0)}</span><b>${esc(row.name)}</b><small>${esc(row.category || 'peça')}</small><i>✓</i></button>`).join('')}</div>`;
+  return `<div class="choice-grid piece-choices">${rows.map(row => {const template=templates[String(row.id)]||{};const count=(template.lines||[]).length;return `<button type="button" class="choice-card ${row.id === selected ? 'selected' : ''}" data-article-type="${row.id}"><span>${symbols[row.category] || row.name.charAt(0)}</span><b>${esc(row.name)}</b><small>${count} custos · ${template.configured?'configurado':'modelo base'}</small><i>✓</i></button>`;}).join('')}</div>`;
 }
 
 export function selectedComponentRows(items, kind) {

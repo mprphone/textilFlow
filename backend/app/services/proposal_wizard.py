@@ -8,7 +8,8 @@ from ..models import (
 )
 from .costing import recalculate_sheet
 from .cost_sheet_automation import (
-    default_cost_template, ensure_required_cost_lines, material_stock_snapshot, stock_unit_cost,
+    TEMPLATE_GROUP_CATEGORIES, article_type_cost_template_view, default_cost_template,
+    ensure_required_cost_lines, material_stock_snapshot, stock_unit_cost,
 )
 from .serialization import model_to_dict
 
@@ -36,8 +37,12 @@ def wizard_catalog(db, company_id: int) -> dict:
             "supplier_name": supplier.name if supplier else "Fornecedor desconhecido",
             "supplier_score": supplier.score if supplier else 0,
         })
+    article_types = db.query(ArticleType).filter_by(company_id=company_id, active=True).order_by(ArticleType.name).all()
     return {
-        "article_types": [model_to_dict(row) for row in db.query(ArticleType).filter_by(company_id=company_id, active=True).order_by(ArticleType.name).all()],
+        "article_types": [model_to_dict(row) for row in article_types],
+        "article_type_templates": {
+            str(row.id): article_type_cost_template_view(db, row) for row in article_types
+        },
         "customers": [model_to_dict(row) for row in db.query(Customer).filter_by(company_id=company_id, active=True).order_by(Customer.name).all()],
         "materials": materials,
         "operations": [model_to_dict(row) for row in db.query(Operation).filter_by(company_id=company_id, active=True).order_by(Operation.department, Operation.name).all()],
@@ -95,8 +100,9 @@ def create_from_wizard(db, payload) -> tuple[Style, CostSheet]:
         ))
 
     sequence = 10
+    added_operations = set()
     for item in payload.operations:
-        if not item.operation_id:
+        if not item.operation_id or item.cost_group == "machine" or item.operation_id in added_operations:
             continue
         operation = db.get(Operation, item.operation_id)
         if not operation or operation.company_id != payload.company_id:
@@ -105,6 +111,7 @@ def create_from_wizard(db, payload) -> tuple[Style, CostSheet]:
             company_id=payload.company_id, style_id=style.id, operation_id=operation.id,
             sequence=sequence, smv=item.quantity, target_units_hour=round(60 / item.quantity, 2) if item.quantity else 0,
         ))
+        added_operations.add(item.operation_id)
         sequence += 10
 
     version = (db.query(func.max(CostSheet.version)).filter_by(style_id=style.id).scalar() or 0) + 1
@@ -142,11 +149,13 @@ def create_from_wizard(db, payload) -> tuple[Style, CostSheet]:
                 if not service or service.company_id != payload.company_id or not service.active:
                     raise ValueError("O serviço subcontratado já não está disponível")
             quantity = item.quantity * (1 + item.waste_pct / 100)
+            item_category = TEMPLATE_GROUP_CATEGORIES.get(item.cost_group or "", category)
+            item_source = f"article_type_cost:{item.template_cost_id}" if item.template_cost_id else source_type
             db.add(CostLine(
-                company_id=payload.company_id, cost_sheet_id=sheet.id, category=category,
+                company_id=payload.company_id, cost_sheet_id=sheet.id, category=item_category,
                 description=item.description.strip(), quantity=round(quantity, 6), unit=item.unit,
                 unit_cost=item.unit_cost, amount=round(quantity * item.unit_cost, 4),
-                source_type=source_type,
+                source_type=item_source,
                 source_id=item.material_id or item.operation_id or item.subcontract_service_id,
             ))
 

@@ -173,12 +173,13 @@ export const MODULES = [
     routes:[
       ['tables-customers','Clientes','♧'],
       ['tables-suppliers','Fornecedores','⇄'],
+      ['tables-article-types','Tipos de peças','◇'],
       ['tables-service-stages','Etapas de produção','◷'],
       ['tables-items','Artigos','▣'],
       ['tables-banks','Bancos','€'],
       ['tables-exchange-rates','Câmbio','€'],
     ],
-    quick:[['tables-customers','Abrir clientes'],['tables-items','Abrir artigos']],
+    quick:[['tables-article-types','Configurar tipos de peças'],['tables-items','Abrir artigos']],
   },
   {
     id:'management', label:'Gestão', shortLabel:'Gestão', icon:'⚙', home:'overheads',

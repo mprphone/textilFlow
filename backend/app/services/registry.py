@@ -3,6 +3,7 @@ from .. import models
 
 RESOURCE_MODELS = {
     "article-types": models.ArticleType,
+    "article-type-costs": models.ArticleTypeCost,
     "audit": models.AuditLog,
     "banks": models.Bank,
     "batches": models.ProductionBatch,
