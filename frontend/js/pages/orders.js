@@ -1,7 +1,7 @@
 import { options } from '../data.js';
 import { renderEntityTabs } from '../entity.js?v=20260824-41';
 import { badge, date, esc, number, progress } from '../format.js?v=20260819-5';
-import { renderSalesOrders } from '../orders/sales_order_editor.js?v=20260825-49';
+import { renderSalesOrders } from '../orders/sales_order_editor.js?v=20260825-52';
 import { loadOrderDossier } from '../production/dossier.js?v=20260822-21';
 import { stageLabel } from '../production/cycle.js?v=20260822-18';
 

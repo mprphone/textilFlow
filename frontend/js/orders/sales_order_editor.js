@@ -338,7 +338,7 @@ export async function renderSalesOrders(panel) {
         <td>${date(row.delivery_date)}</td>
         <td><span class="badge blue">${esc(STATUS_LABELS[row.status] || row.status)}</span></td>
         <td class="listing-actions"><div class="row-actions">
-          ${['draft','confirmed'].includes(row.status) && row.custom_data?.source !== 'accepted_cost_proposal' ? `<button class="btn icon" type="button" data-icon="edit" data-edit-order="${row.id}" aria-label="Editar" title="Editar"></button><button class="btn icon primary" type="button" data-icon="check" data-release-order="${row.id}" aria-label="Libertar para produção" title="Libertar para produção"></button><button class="btn icon danger" type="button" data-icon="delete" data-delete-order="${row.id}" aria-label="Eliminar" title="Eliminar"></button>` : ''}
+          ${['draft','confirmed'].includes(row.status) ? `<button class="btn icon" type="button" data-icon="edit" data-edit-order="${row.id}" aria-label="Editar" title="Editar"></button><button class="btn icon primary" type="button" data-icon="production" data-release-order="${row.id}" aria-label="Lançar em produção" title="Lançar em produção"></button><button class="btn icon danger" type="button" data-icon="delete" data-delete-order="${row.id}" aria-label="Eliminar" title="Eliminar"></button>` : ''}
         </div></td>
       </tr>`).join('') : `<tr><td colspan="7">${empty('Sem encomendas', 'Crie a primeira encomenda de cliente.')}</td></tr>`}</tbody></table></div></section>`;
 

@@ -9,13 +9,15 @@
     width:125%;
     height:125vh;
     min-height:125vh;
-    zoom:.8;
+    transform:scale(.8);
+    transform-origin:top left;
   }
   body>.modal{
     inset:0 auto auto 0!important;
     width:125vw!important;
     height:125vh!important;
-    zoom:.8;
+    transform:scale(.8);
+    transform-origin:top left;
   }
 }
 
