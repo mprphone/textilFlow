@@ -1,6 +1,6 @@
 import { renderOverview } from '../confection/overview.js?v=20260822-1';
 import { renderConfectionTable } from '../confection/tables.js?v=20260822-7';
-import { renderProductionMap } from '../confection/map.js?v=20260824-41';
+import { renderProductionMap } from '../confection/map.js?v=20260825-51';
 import { renderDailyProduction } from '../confection/diary.js?v=20260821-25';
 import { renderControls } from '../costing/control.js?v=20260819-8';
 import { pageHeader } from '../ui.js?v=20260820-5';

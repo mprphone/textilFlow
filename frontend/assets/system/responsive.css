@@ -1,5 +1,10 @@
 /* Geometria final: superfícies 16 px, controlos 10 px e cápsulas apenas para estados. */
 @media screen and (min-width:1025px){
+  html,body{
+    width:100%;
+    height:100%;
+    overflow:hidden!important;
+  }
   #app-shell.saft-shell{
     width:125%;
     height:125vh;

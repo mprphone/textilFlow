@@ -5,7 +5,7 @@
 @import url("./experience.css?v=20260824-41") layer(legacy);
 @import url("./wizard.css?v=20260824-41") layer(legacy);
 @import url("./confection.css?v=20260824-41") layer(legacy);
-@import url("./confection-map.css?v=20260824-41") layer(legacy);
+@import url("./confection-map.css?v=20260825-51") layer(legacy);
 @import url("./chrome.css?v=20260824-41") layer(legacy);
 @import url("./design.css?v=20260824-41") layer(legacy);
 @import url("./supplier.css?v=20260824-41") layer(legacy);
@@ -14,4 +14,4 @@
 @import url("./system/components.css?v=20260824-41") layer(components);
 @import url("./system/utilities.css?v=20260824-41") layer(utilities);
 @import url("./polish.css?v=20260824-41") layer(pages);
-@import url("./system/responsive.css?v=20260825-50") layer(overrides);
+@import url("./system/responsive.css?v=20260825-51") layer(overrides);

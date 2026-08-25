@@ -2,7 +2,7 @@ import { crudList } from '../api.js';
 import { renderEntityPage } from '../entity.js?v=20260819-9';
 import { badge, money, number } from '../format.js?v=20260819-5';
 import { options } from '../data.js';
-import { renderProductionMap } from '../confection/map.js?v=20260824-41';
+import { renderProductionMap } from '../confection/map.js?v=20260825-51';
 import { state } from '../state.js';
 
 export async function renderMap(container) {

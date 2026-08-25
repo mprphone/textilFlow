@@ -103,21 +103,32 @@ function dueLabel(row) {
 }
 
 function orderPaint(row) {
-  const palettes = {
-    none: [['#eef1f5', '#c8ced8', '#3a4454'], ['#e8ecf2', '#bec6d2', '#343c4c']],
-    near: [['#fde8d4', '#e8b48a', '#5a3818'], ['#fce0c8', '#e0a878', '#5a3014'], ['#f8dcc4', '#dca070', '#4a2c14']],
-    mid: [['#fff6d8', '#e8d48c', '#5a4a18'], ['#fff0c8', '#e0c878', '#5a4414'], ['#f8ecc0', '#d4bc70', '#4a3c14']],
-    far: [['#def6e6', '#a8d4b6', '#1e4a32'], ['#d4f0de', '#94c8a8', '#184434'], ['#e4f4e8', '#b4dcc0', '#245038']],
-  };
-  const list = palettes[dueTone(row)];
-  const [bg, bd, fg] = list[(Number(row.id) || 0) % list.length];
-  return `background:${bg};border-color:${bd};color:${fg}`;
+  const palettes = [
+    ['#e8f1ff', '#70a2e8', '#173d70', '#2f6fc2'],
+    ['#e7f7ee', '#71c092', '#1c4c32', '#24915b'],
+    ['#f2ebff', '#a98be3', '#422a6d', '#7650bc'],
+    ['#fff0e6', '#ea9a66', '#63331b', '#cf6b2f'],
+    ['#e5f7f7', '#63bdbb', '#174a49', '#168b88'],
+    ['#fdebf2', '#e58eae', '#64263f', '#c04b76'],
+    ['#fff6d9', '#ddb84f', '#57430f', '#b68400'],
+    ['#eaeefe', '#8291da', '#2d376b', '#5265ba'],
+    ['#eef7dc', '#9dbd56', '#3c5118', '#71952a'],
+    ['#e8f6fd', '#6eb9db', '#17475d', '#2689b1'],
+    ['#f9e9fd', '#d086dd', '#5a2865', '#aa4fba'],
+    ['#fce9e6', '#df8378', '#642821', '#b94a3e'],
+  ];
+  const orderKey = item => String(item.order_id ?? item.production_order_id ?? item.code ?? item.id ?? '');
+  const keys = [...new Set([...(board?.backlog || []), ...(board?.scheduled || [])].map(orderKey))]
+    .sort((left, right) => left.localeCompare(right, 'pt', { numeric: true }));
+  const index = Math.max(0, keys.indexOf(orderKey(row)));
+  const [bg, bd, fg, accent] = palettes[index % palettes.length];
+  return `--order-accent:${accent};background:${bg};border-color:${bd};color:${fg}`;
 }
 
 function waitingStockHint() {
   const rows = [...pending(), ...onLine()].filter(row => row.order_id && row.fabric_ready === false);
-  if (!rows.length) return 'Laranja = entrega perto, amarelo = a meio, verde = com folga.';
-  return `${rows.length} OF${rows.length > 1 ? 's' : ''} no plano sem malha em stock. O alerta sai na entrada.`;
+  if (!rows.length) return 'Cada cor identifica uma OF e mantém-se igual em todos os dias.';
+  return `${rows.length} OF${rows.length > 1 ? 's' : ''} no plano sem malha em stock. Cada cor identifica uma OF.`;
 }
 
 function kindLabel(row) {
@@ -290,6 +301,7 @@ function draw(container) {
           <button data-view="month" class="${view==='month'?'active':''}">Mês</button>
         </div>
         <input class="pmap-search" data-query placeholder="Procurar OF, cliente ou artigo…" value="${esc(query)}">
+        <span class="pmap-color-key" title="A mesma OF mantém a mesma cor em todo o mapa"><i></i><i></i><i></i>Cada cor = uma OF</span>
         <button class="btn" data-add>+ Nova OF</button>
         <a class="btn primary" href="${isCut() ? '#/cutting' : '#/confection-diary'}">${isCut() ? '＋ Estendimentos' : '＋ Produção do dia'}</a>
         ${!isCut() ? '<button class="btn small" data-kanban-toggle>Kanban corte→costura</button>' : ''}
@@ -317,7 +329,7 @@ function pendingCol() {
 }
 
 function cardMarkup(row) {
-  return `<article class="pmap-card ${row.id===selectedId?'selected':''} ${row.fabric_ready===false?'no-stock':''}" draggable="true" data-backlog="${row.id}" style="${orderPaint(row)}">
+  return `<article class="pmap-card due-${dueTone(row)} ${row.id===selectedId?'selected':''} ${row.fabric_ready===false?'no-stock':''}" draggable="true" data-backlog="${row.id}" style="${orderPaint(row)}">
     <b>${esc(row.code)}</b>
     <small class="pmap-kind">${esc(kindLabel(row))}</small>
     <small>${esc(row.client)}</small>
@@ -356,7 +368,7 @@ function chipMarkup(row, day) {
   const left = row.days_left || 0;
   const ofPct = Number(sharesOf(row)[day] || 0);
   const load = lineLoad(row.line_key, day);
-  return `<button class="pmap-chip ${row.id===selectedId?'selected':''} ${selectedId && row.id!==selectedId?'ghost':''} ${left?'wait':''} ${row.fabric_ready===false?'no-stock':''}" draggable="true" data-block="${row.id}" data-from="${day}" style="${orderPaint(row)}">
+  return `<button class="pmap-chip due-${dueTone(row)} ${row.id===selectedId?'selected':''} ${selectedId && row.id!==selectedId?'ghost':''} ${left?'wait':''} ${row.fabric_ready===false?'no-stock':''}" draggable="true" data-block="${row.id}" data-from="${day}" style="${orderPaint(row)}">
     <b>${esc(row.code)}</b>
     <span>${esc(row.client)}</span>
     <em>${esc(dueLabel(row))}</em>
@@ -376,7 +388,7 @@ function outsideCol() {
       return `<div class="pmap-partner" data-supplier="${partner.id}">
         <b>${esc(partner.name)}</b>
         <small>${number(partner.weekly_capacity)} pcs/semana · ${number(partner.piece_cost)} €/peça · ${number(partner.lead_time_days)} dias</small>
-        ${here.map(row => `<button class="pmap-chip ${row.id===selectedId?'selected':''}" data-block="${row.id}" style="${orderPaint(row)}"><b>${esc(row.code)}</b><span>${esc(dueLabel(row))}</span></button>`).join('') || '<span class="pmap-slot-empty">Largar aqui para subcontratar</span>'}
+        ${here.map(row => `<button class="pmap-chip due-${dueTone(row)} ${row.id===selectedId?'selected':''}" data-block="${row.id}" style="${orderPaint(row)}"><b>${esc(row.code)}</b><span>${esc(dueLabel(row))}</span></button>`).join('') || '<span class="pmap-slot-empty">Largar aqui para subcontratar</span>'}
       </div>`;
     }).join('') || `<div class="empty"><strong>${isCut() ? 'Sem cortadores externos' : 'Sem confeçionadores'}</strong>${isCut() ? 'Cadastre um fornecedor de corte para largar OFs aqui.' : 'Crie-os em Configurar a fábrica.'}</div>`}</div>
   </section>`;
