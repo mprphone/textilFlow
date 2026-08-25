@@ -5,7 +5,7 @@ from ...db import get_db
 from ...models import CommercialDocument, Company, User
 from ...services.commercial_docs import (
     DOC_TYPES, convert_document, create_document, document_view, from_purchase_order,
-    from_sales_order, list_documents, prepare_primavera, public_document, receive_stock,
+    from_sales_order, from_shipment, list_documents, prepare_primavera, public_document, receive_stock,
     sales_orders_overview, unlock_document, update_document,
 )
 from ...services.erp_flavor import catalog as erp_catalog, set_system
@@ -119,6 +119,21 @@ def from_sales(company_id: int, order_id: int, payload: dict, db: Session = Depe
     if payload.get("series"):
         update_document(db, company, document, {"series": payload.get("series")})
     if payload.get("prepare", True):
+        prepare_primavera(db, company, document, user)
+    db.commit()
+    db.refresh(document)
+    return public_document(db, document)
+
+
+@router.post("/{company_id}/documents/from-shipment/{shipment_id}", status_code=201)
+def from_packing_list(company_id: int, shipment_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_role(db, user, company_id, {"admin", "manager", "warehouse", "commercial"})
+    require_module_access(db, user, company_id, {"erp", "shipping", "commercial"})
+    document = from_shipment(db, company_id, shipment_id, payload.get("doc_type") or "sales_delivery")
+    company = _company(db, company_id)
+    if payload.get("series"):
+        update_document(db, company, document, {"series": payload.get("series")})
+    if payload.get("prepare", True) and document.primavera_status not in {"queued", "prepared", "sent"}:
         prepare_primavera(db, company, document, user)
     db.commit()
     db.refresh(document)

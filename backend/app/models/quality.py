@@ -46,6 +46,12 @@ class CorrectiveAction(Base, TimestampMixin):
 
 
 class Shipment(Base, TimestampMixin):
+    """Packing list e, depois da saída, expedição.
+
+    O mesmo registo acompanha a mercadoria desde a preparação até à
+    fatura. Isto permite vários packing lists/expedições para a mesma
+    encomenda sem perder a ligação às variantes e unidades logísticas.
+    """
     __tablename__ = "shipments"
     id = Column(Integer, primary_key=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
@@ -56,7 +62,15 @@ class Shipment(Base, TimestampMixin):
     destination = Column(Text)
     quantity = Column(Float, default=0, nullable=False)
     shipped_at = Column(DateTime(timezone=True))
-    status = Column(String(30), default="planned", nullable=False)
+    status = Column(String(30), default="preparing", nullable=False)
+    packing_mode = Column(String(20), default="simple", nullable=False)
+    package_count = Column(Integer, default=0, nullable=False)
+    net_weight = Column(Float, default=0, nullable=False)
+    gross_weight = Column(Float, default=0, nullable=False)
+    packing_data = Column(JSON, default=dict, nullable=False)
+    closed_at = Column(DateTime(timezone=True))
+    vehicle_plate = Column(String(40))
+    notes = Column(Text)
     documents = Column(JSON, default=list, nullable=False)
     __table_args__ = (UniqueConstraint("company_id", "shipment_no"),)
 

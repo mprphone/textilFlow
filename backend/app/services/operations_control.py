@@ -110,7 +110,8 @@ def _ensure_legacy_finished_goods(db: Session, order: ProductionOrder) -> None:
         )
 
 
-def allocate_finished_goods(db: Session, shipment: Shipment, line: ShipmentLine, user_id: int | None = None) -> list[ShipmentAllocation]:
+def reserve_finished_goods(db: Session, shipment: Shipment, line: ShipmentLine) -> list[ShipmentAllocation]:
+    """Reserva FIFO de produto acabado para um packing list fechado."""
     order = db.get(ProductionOrder, line.production_order_id)
     _ensure_legacy_finished_goods(db, order)
     query = db.query(FinishedGoodsUnit).filter_by(company_id=line.company_id, production_order_id=line.production_order_id, status="available")
@@ -128,15 +129,61 @@ def allocate_finished_goods(db: Session, shipment: Shipment, line: ShipmentLine,
             continue
         allocation = ShipmentAllocation(company_id=line.company_id, shipment_line_id=line.id, finished_goods_unit_id=unit.id, quantity=take)
         db.add(allocation)
-        unit.quantity = round(float(unit.quantity or 0) - take, 2)
-        unit.status = "shipped" if unit.quantity <= EPSILON else "available"
-        record_movement(db, company_id=line.company_id, production_order_id=line.production_order_id, batch_id=unit.batch_id, variant_id=line.variant_id or unit.variant_id, shipment_id=shipment.id, finished_goods_unit_id=unit.id, movement_type="shipment", quantity=take, location_from="finished_goods", location_to="shipped", reference=shipment.shipment_no, idempotency_key=f"shipment-allocation:{line.id}:{unit.id}", user_id=user_id)
+        unit.reserved_quantity = round(float(unit.reserved_quantity or 0) + take, 2)
         allocations.append(allocation)
         remaining = round(remaining - take, 2)
     if remaining > EPSILON:
-        raise ValueError(f"Faltam {remaining:g} unidades físicas em produto acabado para completar a expedição")
+        raise ValueError(f"Faltam {remaining:g} unidades físicas em produto acabado para fechar o packing list")
     db.flush()
     return allocations
+
+
+def consume_reserved_finished_goods(db: Session, shipment: Shipment, line: ShipmentLine, user_id: int | None = None) -> list[ShipmentAllocation]:
+    """Consome as reservas do packing list quando a mercadoria sai."""
+    allocations = db.query(ShipmentAllocation).filter_by(shipment_line_id=line.id).order_by(ShipmentAllocation.id).all()
+    reserved = round(sum(float(row.quantity or 0) for row in allocations), 2)
+    if reserved + EPSILON < float(line.quantity or 0):
+        raise ValueError("O packing list não tem stock reservado suficiente")
+    for allocation in allocations:
+        unit = db.get(FinishedGoodsUnit, allocation.finished_goods_unit_id)
+        if not unit:
+            raise ValueError("Uma unidade logística reservada já não existe")
+        quantity = round(float(allocation.quantity or 0), 2)
+        if float(unit.quantity or 0) + EPSILON < quantity or float(unit.reserved_quantity or 0) + EPSILON < quantity:
+            raise ValueError(f"A unidade {unit.package_code} já não tem o saldo reservado")
+        unit.quantity = round(float(unit.quantity or 0) - quantity, 2)
+        unit.reserved_quantity = max(0.0, round(float(unit.reserved_quantity or 0) - quantity, 2))
+        unit.status = "shipped" if unit.quantity <= EPSILON else "available"
+        record_movement(
+            db, company_id=line.company_id, production_order_id=line.production_order_id,
+            batch_id=unit.batch_id, variant_id=line.variant_id or unit.variant_id,
+            shipment_id=shipment.id, finished_goods_unit_id=unit.id,
+            movement_type="shipment", quantity=quantity,
+            location_from="finished_goods", location_to="shipped",
+            reference=shipment.shipment_no,
+            idempotency_key=f"shipment-allocation:{line.id}:{unit.id}", user_id=user_id,
+        )
+    db.flush()
+    return allocations
+
+
+def release_finished_goods_reservations(db: Session, shipment: Shipment) -> None:
+    """Liberta as reservas de um packing list cancelado antes da saída."""
+    lines = db.query(ShipmentLine).filter_by(shipment_id=shipment.id).all()
+    for line in lines:
+        allocations = db.query(ShipmentAllocation).filter_by(shipment_line_id=line.id).all()
+        for allocation in allocations:
+            unit = db.get(FinishedGoodsUnit, allocation.finished_goods_unit_id)
+            if unit:
+                unit.reserved_quantity = max(0.0, round(float(unit.reserved_quantity or 0) - float(allocation.quantity or 0), 2))
+            db.delete(allocation)
+    db.flush()
+
+
+def allocate_finished_goods(db: Session, shipment: Shipment, line: ShipmentLine, user_id: int | None = None) -> list[ShipmentAllocation]:
+    """Compatibilidade para integrações antigas que expedem numa só operação."""
+    reserve_finished_goods(db, shipment, line)
+    return consume_reserved_finished_goods(db, shipment, line, user_id)
 
 
 def ensure_rework_for_inspection(db: Session, inspection: QualityInspection, user_id: int | None = None) -> ReworkOrder | None:

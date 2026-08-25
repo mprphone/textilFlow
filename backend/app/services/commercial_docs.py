@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from ..models import (
     CommercialDocument, Company, Customer, Department, InventoryMovement, Material, ProductionLine,
-    ProductionOrder, PurchaseOrder, PurchaseOrderLine, SalesOrder, SalesOrderLine, Shipment, StockLot,
-    Style, SubcontractService, Supplier,
+    ProductionOrder, PurchaseOrder, PurchaseOrderLine, SalesOrder, SalesOrderLine, Shipment, ShipmentLine, StockLot,
+    Style, StyleVariant, SubcontractService, Supplier,
 )
 from .company_profile import public_company
 from .erp_flavor import identity_for, is_official
@@ -385,6 +385,7 @@ def create_document(db: Session, company_id: int, payload: dict) -> CommercialDo
         customer_id=payload.get("customer_id"),
         purchase_order_id=payload.get("purchase_order_id"),
         sales_order_id=payload.get("sales_order_id"),
+        shipment_id=payload.get("shipment_id"),
         converted_from_id=payload.get("converted_from_id"),
         currency=payload.get("currency") or "EUR",
         total=_total(lines),
@@ -534,6 +535,75 @@ def from_sales_order(db: Session, company_id: int, order_id: int, doc_type: str 
     })
 
 
+def _link_document_to_shipment(shipment: Shipment, document: CommercialDocument) -> None:
+    references = [item for item in list(shipment.documents or []) if isinstance(item, dict) and int(item.get("id") or 0) != document.id]
+    references.append({"id": document.id, "doc_no": document.doc_no, "doc_type": document.doc_type})
+    shipment.documents = references
+    if document.doc_type == "sales_invoice" and shipment.status in {"shipped", "invoiced"}:
+        shipment.status = "invoiced"
+    elif shipment.status == "closed":
+        shipment.status = "ready"
+
+
+def from_shipment(db: Session, company_id: int, shipment_id: int, doc_type: str = "sales_delivery") -> CommercialDocument:
+    """Cria guia/fatura apenas com as quantidades deste packing list."""
+    if doc_type not in {"sales_delivery", "sales_invoice"}:
+        raise HTTPException(422, "Um packing list apenas pode gerar guia de transporte ou fatura de venda")
+    shipment = db.get(Shipment, shipment_id)
+    if not shipment or shipment.company_id != company_id:
+        raise HTTPException(404, "Packing list não encontrado")
+    if shipment.status not in {"closed", "ready", "shipped", "invoiced"}:
+        raise HTTPException(409, "Feche o packing list antes de gerar documentos")
+    existing = db.query(CommercialDocument).filter_by(
+        company_id=company_id, shipment_id=shipment.id, doc_type=doc_type,
+    ).filter(CommercialDocument.status != "cancelled").order_by(CommercialDocument.id.desc()).first()
+    if existing:
+        return existing
+    order = db.get(SalesOrder, shipment.sales_order_id)
+    if not order:
+        raise HTTPException(409, "A encomenda deste packing list já não existe")
+    sales_lines = {row.id: row for row in db.query(SalesOrderLine).filter_by(sales_order_id=order.id).all()}
+    rows = db.query(ShipmentLine).filter_by(shipment_id=shipment.id).order_by(ShipmentLine.id).all()
+    document_lines = []
+    for row in rows:
+        sales_line = sales_lines.get(row.sales_order_line_id)
+        if not sales_line:
+            continue
+        variant = db.get(StyleVariant, row.variant_id) if row.variant_id else None
+        variant_label = " · ".join(value for value in ((variant.color if variant else None), (variant.size if variant else None)) if value)
+        description = sales_line.description or "Artigo"
+        if variant_label:
+            description = f"{description} — {variant_label}"
+        document_lines.append({
+            "style_id": sales_line.style_id,
+            "description": description,
+            "quantity": row.quantity,
+            "unit_cost": sales_line.unit_price,
+            "unit": "un",
+        })
+    if not document_lines:
+        raise HTTPException(409, "O packing list não tem linhas faturáveis")
+    document = create_document(db, company_id, {
+        "doc_type": doc_type,
+        "customer_id": order.customer_id,
+        "sales_order_id": order.id,
+        "shipment_id": shipment.id,
+        "currency": order.currency or "EUR",
+        "notes": f"Packing list {shipment.shipment_no}. {shipment.notes or ''}".strip(),
+        "lines": document_lines,
+        "extra": {
+            "your_ref": order.customer_po or order.order_no,
+            "shipment_no": shipment.shipment_no,
+            "shipping_qty": shipment.quantity,
+            "destination": shipment.destination,
+            "carrier": shipment.carrier,
+            "tracking_no": shipment.tracking_no,
+        },
+    })
+    _link_document_to_shipment(shipment, document)
+    return document
+
+
 SOURCE_AREA = {"internal": "sewing", "revista": "revista"}
 
 
@@ -631,12 +701,18 @@ def convert_document(db: Session, company_id: int, document_id: int, doc_type: s
         "customer_id": source.customer_id,
         "purchase_order_id": source.purchase_order_id,
         "sales_order_id": source.sales_order_id,
+        "shipment_id": source.shipment_id,
         "converted_from_id": source.id,
         "currency": source.currency,
         "notes": f"Gerado a partir de {source.doc_no}",
         "lines": source.lines or [],
+        "extra": dict(source.extra or {}),
     })
     source.status = "converted"
+    if source.shipment_id:
+        shipment = db.get(Shipment, source.shipment_id)
+        if shipment:
+            _link_document_to_shipment(shipment, replica)
     if doc_type == "stock_receipt":
         receive_stock(db, company_id, replica)
     return replica

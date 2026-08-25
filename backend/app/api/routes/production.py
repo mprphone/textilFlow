@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 
 from ...db import get_db
 from ...models import (
-    Company, Customer, CuttingJob, Employee, InventoryMovement, Machine, Operation, ProductionBatch,
+    CommercialDocument, Company, Customer, CuttingJob, Employee, InventoryMovement, Machine, Operation, ProductionBatch,
     ProductionEvent, ProductionLine, ProductionMaterialRequirement, ProductionOrder, ProductionOrderVariant, QualityInspection, StockLot,
-    SalesOrder, SalesOrderLine, Sample, Shipment, ShipmentLine, Style, User, WorkAssignment,
+    SalesOrder, SalesOrderLine, Sample, Shipment, ShipmentLine, Style, StyleVariant, User, WorkAssignment,
 )
 from ...schemas import ProductionEventRequest, StockMovementRequest
 from ...services.analytics import line_performance
@@ -21,7 +21,10 @@ from ...services.production_cockpit import order_cockpit
 from ...services.production_split import distribute as distribute_order
 from ...services.kanban import complete_sewing_batch, kanban_board, release_batch_to_sewing, request_next_batch
 from ...services.production_stage import record_packing, record_revista, update_order_stage
-from ...services.shipping import create_partial_shipment, dispatch_status
+from ...services.shipping import (
+    cancel_packing_list, close_packing_list, create_packing_list, create_partial_shipment,
+    dispatch_packing_list, dispatch_status, update_packing_list,
+)
 from ...services.control_tower import control_tower, finite_plan
 from ...services.execution import batch_trace, merge_batches, operation_flow, split_batch, transfer_operation
 from ...services.serialization import model_to_dict
@@ -229,6 +232,126 @@ def release_sample_to_production(sample_id: int, payload: dict, db: Session = De
         raise HTTPException(409, "Já existe uma ordem com esse número") from exc
 
 
+def _packing_list_payload(db: Session, shipment: Shipment, lines: list[ShipmentLine] | None = None) -> dict:
+    lines = lines if lines is not None else db.query(ShipmentLine).filter_by(shipment_id=shipment.id).order_by(ShipmentLine.id).all()
+    detail = []
+    for line in lines:
+        production_order = db.get(ProductionOrder, line.production_order_id)
+        sales_line = db.get(SalesOrderLine, line.sales_order_line_id)
+        variant = db.get(StyleVariant, line.variant_id) if line.variant_id else None
+        detail.append({
+            **model_to_dict(line),
+            "production_order_no": production_order.order_no if production_order else None,
+            "description": sales_line.description if sales_line else None,
+            "unit_price": float(sales_line.unit_price or 0) if sales_line else 0,
+            "variant": " · ".join(value for value in ((variant.color if variant else None), (variant.size if variant else None)) if value),
+        })
+    documents = db.query(CommercialDocument).filter_by(shipment_id=shipment.id).order_by(CommercialDocument.id).all()
+    return {
+        **model_to_dict(shipment),
+        "lines": detail,
+        "commercial_documents": [public_document(db, row) for row in documents],
+    }
+
+
+def _packing_list(db: Session, shipment_id: int) -> Shipment:
+    shipment = db.get(Shipment, shipment_id)
+    if not shipment:
+        raise HTTPException(404, "Packing list não encontrado")
+    return shipment
+
+
+@router.post("/sales-orders/{order_id}/packing-lists", status_code=201)
+def create_sales_order_packing_list(order_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    order = db.get(SalesOrder, order_id)
+    if not order:
+        raise HTTPException(404, "Encomenda não encontrada")
+    require_role(db, user, order.company_id, {"admin", "manager", "warehouse"})
+    require_module_access(db, user, order.company_id, {"shipping"})
+    try:
+        shipment, lines, status = create_packing_list(db, order, payload)
+        db.commit()
+        db.refresh(shipment)
+        return {"packing_list": _packing_list_payload(db, shipment, lines), "dispatch_status": status}
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(409, str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "Já existe um packing list com esse número") from exc
+
+
+@router.get("/packing-lists/{shipment_id}")
+def packing_list_detail(shipment_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    shipment = _packing_list(db, shipment_id)
+    require_module_access(db, user, shipment.company_id, {"shipping", "erp"})
+    return _packing_list_payload(db, shipment)
+
+
+@router.put("/packing-lists/{shipment_id}")
+def edit_packing_list(shipment_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    shipment = _packing_list(db, shipment_id)
+    require_role(db, user, shipment.company_id, {"admin", "manager", "warehouse"})
+    require_module_access(db, user, shipment.company_id, {"shipping"})
+    try:
+        shipment, lines, status = update_packing_list(db, shipment, payload)
+        db.commit()
+        db.refresh(shipment)
+        return {"packing_list": _packing_list_payload(db, shipment, lines), "dispatch_status": status}
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post("/packing-lists/{shipment_id}/close")
+def close_sales_order_packing_list(shipment_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    shipment = _packing_list(db, shipment_id)
+    require_role(db, user, shipment.company_id, {"admin", "manager", "warehouse"})
+    require_module_access(db, user, shipment.company_id, {"shipping"})
+    try:
+        shipment, lines, status = close_packing_list(db, shipment, user.id)
+        db.commit()
+        db.refresh(shipment)
+        return {"packing_list": _packing_list_payload(db, shipment, lines), "dispatch_status": status}
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post("/packing-lists/{shipment_id}/dispatch")
+def dispatch_sales_order_packing_list(shipment_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    shipment = _packing_list(db, shipment_id)
+    require_role(db, user, shipment.company_id, {"admin", "manager", "warehouse"})
+    require_module_access(db, user, shipment.company_id, {"shipping"})
+    try:
+        shipment, lines, status = dispatch_packing_list(db, shipment, payload, user.id)
+        for line in lines:
+            production_order = db.get(ProductionOrder, line.production_order_id)
+            if production_order:
+                update_order_stage(db, production_order)
+        db.commit()
+        db.refresh(shipment)
+        return {"packing_list": _packing_list_payload(db, shipment, lines), "dispatch_status": status}
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post("/packing-lists/{shipment_id}/cancel")
+def cancel_sales_order_packing_list(shipment_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    shipment = _packing_list(db, shipment_id)
+    require_role(db, user, shipment.company_id, {"admin", "manager", "warehouse"})
+    require_module_access(db, user, shipment.company_id, {"shipping"})
+    try:
+        cancel_packing_list(db, shipment)
+        db.commit()
+        db.refresh(shipment)
+        return _packing_list_payload(db, shipment)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(409, str(exc)) from exc
+
+
 @router.post("/sales-orders/{order_id}/dispatch", status_code=201)
 def dispatch_sales_order(order_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
     order = db.get(SalesOrder, order_id)
@@ -301,10 +424,15 @@ def shipping_board(company_id: int, db: Session = Depends(get_db), user: User = 
     )
     by_order = {}
     for shipment in shipments:
-        by_order.setdefault(shipment.sales_order_id, []).append(model_to_dict(shipment))
+        by_order.setdefault(shipment.sales_order_id, []).append(_packing_list_payload(db, shipment))
     result = []
     for order in orders:
         row = model_to_dict(order)
+        customer = db.get(Customer, order.customer_id)
+        row["customer_name"] = customer.name if customer else "—"
+        row["customer_code"] = customer.code if customer else None
+        row["customer_email"] = customer.email if customer else None
+        row["shipping_address"] = (customer.address if customer else None) or ""
         row["dispatch"] = dispatch_status(db, order)
         row["shipments"] = by_order.get(order.id, [])
         result.append(row)

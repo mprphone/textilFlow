@@ -152,8 +152,8 @@ export const MODULES = [
   {
     id:'shipping', label:'Expedição', shortLabel:'Expedição', icon:'▰', home:'shipping',
     defaultRoles:['admin','manager','warehouse','commercial','planner'],
-    routes:[['shipping','Cockpit de expedição','▰'],['operations-control','Devoluções e caixas','⇥'],['embalagem','Embalagem','▣'],['stock-fg','Produto acabado','▦'],['inventory','Matéria-prima e compras','▦']],
-    quick:[['shipping','Preparar expedição'],['embalagem','Registar embalagem'],['stock-fg','Consultar produto acabado']],
+    routes:[['shipping','Cockpit','▦'],['shipping-prepare','A preparar','□'],['shipping-packing','Packing Lists','▤'],['shipping-ready','Prontas a expedir','✓'],['shipping-history','Expedidas','⇥'],['shipping-incidents','Devoluções / Incidências','!']],
+    quick:[['shipping-prepare','Criar packing list'],['shipping-ready','Confirmar uma saída'],['shipping-incidents','Registar incidência']],
   },
   {
     id:'erp', label:'ERP', shortLabel:'ERP', icon:'↔', home:'erp-docs',

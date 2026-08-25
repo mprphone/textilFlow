@@ -17,7 +17,7 @@ function saveFilters(value){try{localStorage.setItem(filterKey(),JSON.stringify(
 function openState(closed){return closed?'closed':'open';}
 function loadingShell(){return `<div class="ops-shell" aria-busy="true"><section class="ops-command skeleton-card skeleton"></section><div class="ops-metrics">${Array.from({length:5},()=>'<article class="skeleton-card skeleton"></article>').join('')}</div><section class="ops-panel-card ops-loading-panel"><div class="loading">A preparar a central operacional…</div></section></div>`;}
 
-export async function render(container){
+export async function render(container, preferredActive=null){
   const base=`/operations-control/${state.companyId}`;
   container.innerHTML=pageHeader('Fluxo operacional integrado','Caixas e lotes, retrabalho, devoluções, compras sugeridas e leitura de códigos.','<a class="btn" href="#/tracking">OF e rastreabilidade</a><a class="btn primary" href="#/shipping">Expedição</a>')+loadingShell();
   const results=await Promise.allSettled([get(`${base}/finished-goods`),get(`${base}/rework`),get(`${base}/procurement`),get(`${base}/claims`),get(`${base}/return-options`),get(`${base}/notifications`)]);
@@ -43,7 +43,7 @@ export async function render(container){
   if(claims)tabs.push(['claims','Pós-venda',claimRows.filter(x=>x.status!=='closed').length]);
   if(notes)tabs.push(['history','Histórico',noteRows.length]);
   const stored=readFilters();
-  const active=tabs.some(([id])=>id===stored.active)?stored.active:'overview';
+  const active=tabs.some(([id])=>id===preferredActive)?preferredActive:(tabs.some(([id])=>id===stored.active)?stored.active:'overview');
   const activeReworks=reworkRows.filter(x=>!['completed','cancelled'].includes(x.status));
   const openClaims=claimRows.filter(x=>x.status!=='closed');
   const priorityItems=[

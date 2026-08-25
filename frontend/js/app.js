@@ -21,16 +21,16 @@ import * as confection from './pages/confection.js?v=20260825-51';
 import * as processPlant from './pages/process.js?v=20260820-1';
 import * as tracking from './pages/tracking.js?v=20260824-1';
 import * as controlTower from './pages/control_tower.js?v=20260824-2';
-import * as operationsControl from './pages/operations_control.js?v=20260824-40';
+import * as operationsControl from './pages/operations_control.js?v=20260825-54';
 import * as subcontracts from './pages/subcontracts.js?v=20260824-41';
 import * as reports from './pages/reports.js?v=20260819-7';
 import * as partners from './pages/partners.js?v=20260824-41';
 import * as tables from './pages/tables.js?v=20260824-41';
-import * as shipping from './pages/shipping.js?v=20260824-2';
+import * as shipping from './pages/shipping.js?v=20260825-54';
 import * as commercialDocs from './pages/commercial_docs.js?v=20260824-41';
 import * as erpOrders from './pages/erp_orders.js?v=20260824-1';
 import * as settings from './pages/settings.js?v=20260822-27';
-import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260824-2';
+import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260825-54';
 
 async function renderDesign(container, view) {
   const { render } = await import('./pages/design.js?v=20260824-41');
@@ -39,6 +39,11 @@ async function renderDesign(container, view) {
 
 const routes={dashboard,planning:tracking,live,styles,samples,costing,orders,confection,floor,cutting,quality,revista:quality,people,machines,operations,overheads,subcontracts,reports,partners,settings,shipping,tracking,'control-tower':controlTower,
   'operations-control':operationsControl,
+  'shipping-prepare':{render:container=>shipping.render(container,'prepare')},
+  'shipping-packing':{render:container=>shipping.render(container,'packing')},
+  'shipping-ready':{render:container=>shipping.render(container,'ready')},
+  'shipping-history':{render:container=>shipping.render(container,'history')},
+  'shipping-incidents':{render:container=>operationsControl.render(container,'claims')},
   'design-today':{render:container=>renderDesign(container,'today')},
   'design-requests':{render:container=>renderDesign(container,'requests')},
   'design-samples':{render:container=>renderDesign(container,'samples')},
