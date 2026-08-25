@@ -1,4 +1,19 @@
 /* Geometria final: superfícies 16 px, controlos 10 px e cápsulas apenas para estados. */
+@media screen and (min-width:1025px){
+  #app-shell.saft-shell{
+    width:125%;
+    height:125vh;
+    min-height:125vh;
+    zoom:.8;
+  }
+  body>.modal{
+    inset:0 auto auto 0!important;
+    width:125vw!important;
+    height:125vh!important;
+    zoom:.8;
+  }
+}
+
 :where(.card,.metric,.listing-panel,.ops-panel-card,.dashboard-card,.release-order-card){
   border-radius:var(--radius-surface)!important;
 }
