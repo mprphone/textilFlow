@@ -310,6 +310,22 @@ function editorLine(line = {}, locked = false, requirement = null) {
   </tr>`;
 }
 
+function groupedLines(lines, locked, requirements) {
+  const byGroup = new Map();
+  lines.forEach(line => {
+    const requirement = requirementFor(line, requirements);
+    const key = lineGroupKey(line, requirement);
+    if (!byGroup.has(key)) byGroup.set(key, []);
+    byGroup.get(key).push({ line, requirement });
+  });
+  return COST_GROUPS.filter(group => byGroup.has(group.key)).map(group => {
+    const rows = byGroup.get(group.key);
+    const subtotal = rows.reduce((sum, { line }) => sum + safeAmount(line), 0);
+    const header = `<tr class="cost-group-header" data-group-header="${group.key}"><td colspan="8"><span class="cost-group-icon ${group.tone}">${group.icon}</span>${esc(group.label)}<b data-group-total="${group.key}">${preciseMoney(subtotal)}</b></td></tr>`;
+    return header + rows.map(({ line, requirement }) => editorLine(line, locked, requirement)).join('');
+  }).join('');
+}
+
 function validNumber(root, selector, label, {positive = false} = {}) {
   const input = root.querySelector(selector);
   const value = Number(input?.value);
@@ -691,7 +707,7 @@ export async function renderProposalDetail(container, sheetId) {
             ${locked ? '' : '<button class="btn small primary" type="button" data-add-line>+ Custo</button>'}
           </div>
         </div>
-        <div class="table-wrap cost-lines-scroll"><table class="data-table cost-input-table industrial"><thead><tr><th>Família</th><th>Descrição</th><th>Consumo</th><th>Un.</th><th>Preço un.</th><th>Custo/peça</th><th>Origem</th><th></th></tr></thead><tbody data-lines>${lines.map(line => editorLine(line, locked, requirementFor(line, requirements))).join('')}</tbody></table></div>
+        <div class="table-wrap cost-lines-scroll"><table class="data-table cost-input-table industrial"><thead><tr><th>Família</th><th>Descrição</th><th>Consumo</th><th>Un.</th><th>Preço un.</th><th>Custo/peça</th><th>Origem</th><th></th></tr></thead><tbody data-lines>${groupedLines(lines, locked, requirements)}</tbody></table></div>
         <details class="proposal-fold" ${finiteNumber(stockSummary.shortage_items) > 0 ? 'open' : ''}>
           <summary>Stock e cobertura${finiteNumber(stockSummary.shortage_items) > 0 ? ` · ${number(stockSummary.shortage_items)} em falta` : ''}</summary>
           <div data-detail-stock>${stockPanel(requirements, stockSummary, {editable:!locked, variance:detail.cost_variance || sheet.cost_variance})}</div>
@@ -764,6 +780,7 @@ export async function renderProposalDetail(container, sheetId) {
     const selected = button.dataset.costGroup;
     container.querySelectorAll('[data-cost-group]').forEach(item => item.classList.toggle('active', item === button));
     editor.querySelectorAll('[data-cost-line]').forEach(row => { row.hidden = selected !== 'all' && valueOf(row, '[data-line="group"]') !== selected; });
+    editor.querySelectorAll('[data-group-header]').forEach(row => { row.hidden = selected !== 'all' && row.dataset.groupHeader !== selected; });
   }));
   container.querySelectorAll('[data-check-group]').forEach(button => button.addEventListener('click', () => {
     const group = button.dataset.checkGroup;

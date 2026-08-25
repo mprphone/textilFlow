@@ -249,3 +249,29 @@ tr.requirement-row-shortage{background:#fff7f7}
 .cost-action-dock .suggested-price{background:linear-gradient(180deg,#eef5ff,#e6efff)!important}.cost-action-dock .suggested-price strong{color:#2457ca}
 @media(max-width:1440px){.cost-completeness-summary{grid-template-columns:30px 1fr auto}.cost-completeness-summary .btn{grid-column:2/-1;justify-self:start}.proposal-board .cost-meta-compact{grid-template-columns:repeat(5,1fr)}.proposal-board .cost-action-dock{grid-template-columns:repeat(3,1fr)}.proposal-board .cost-dock-actions{grid-column:1/-1}}
 @media(max-width:768px){.cost-completeness-summary{grid-template-columns:30px 1fr auto}.cost-completeness-summary .btn{grid-column:1/-1;width:100%}.proposal-board .cost-meta-compact{grid-template-columns:1fr 1fr}}
+
+/* Polish visual — ronda 2: secções com título na tabela, números finais maiores, menos ruído por linha. */
+.proposal-board .industrial-cost-editor{gap:18px}
+.proposal-board .cost-essentials-card,.proposal-board .cost-composition-card,.proposal-board .proposal-client-doc{box-shadow:0 6px 20px rgba(45,66,105,.05)}
+.cost-input-table.industrial tr.cost-group-header{background:#f3f6fb!important}
+.cost-input-table.industrial tr.cost-group-header:hover{background:#f3f6fb!important}
+.cost-input-table.industrial tr.cost-group-header td{padding:10px 10px!important;border-top:1px solid #e1e8f2;border-bottom:1px solid #e1e8f2;font-size:13px;font-weight:800;color:#2c3e56;letter-spacing:.01em}
+.cost-input-table.industrial tr.cost-group-header td b{float:right;font-weight:850;color:#1f3a63;font-size:13px}
+.cost-group-icon{display:inline-grid;place-items:center;width:21px;height:21px;margin-right:8px;border-radius:6px;font-style:normal;font-size:11px;vertical-align:middle}
+.cost-group-icon.mint{background:#e4f6ef;color:#338870}
+.cost-group-icon.sky{background:#e8f3fc;color:#4a81af}
+.cost-group-icon.blue{background:#e9efff;color:#4d6dce}
+.cost-group-icon.lilac{background:#f0eaff;color:#7961c7}
+.cost-group-icon.violet{background:#eee9ff;color:#765bc8}
+.cost-group-icon.peach{background:#fff0e3;color:#b56e3b}
+.cost-group-icon.rose{background:#fdecef;color:#bd5968}
+.cost-group-icon.amber{background:#fff4df;color:#a7762b}
+.proposal-board .cost-input-table.industrial tbody tr:nth-child(odd):not(.cost-group-header){background:#fff}
+.proposal-board .cost-input-table.industrial tbody tr[data-cost-line]{border-bottom:1px solid #eef2f7}
+.cost-input-table.industrial tbody tr [data-remove-line]{opacity:.3;transition:opacity .15s}
+.cost-input-table.industrial tbody tr:hover [data-remove-line]{opacity:1}
+.line-client-supplied{padding:4px 9px;border:1px solid #dfe6f0;border-radius:999px;background:#f8fafc}
+.line-client-supplied:has(input:checked){border-color:#bfe3cd;background:#eef7f1;color:#2f8060}
+.proposal-board .cost-action-dock strong{font-size:19px;letter-spacing:-.01em}
+.proposal-board .cost-action-dock span{font-size:11px;font-weight:800;letter-spacing:.05em}
+.proposal-board .cost-action-dock .suggested-price strong{font-size:19px}
