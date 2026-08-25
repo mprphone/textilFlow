@@ -408,7 +408,7 @@ function refreshEditorTotals(root) {
   setAllText(scope, '[data-profit-total]', money((sale - cost) * qty));
   setAllText(scope, '[data-suggested-price]', preciseMoney(suggested));
   setAllText(scope, '[data-suggested-inline]', preciseMoney(suggested));
-  root.dataset.suggestedPrice = String(suggested);
+  root.dataset.suggestedPriceValue = String(suggested);
   setAllText(scope, '[data-total-margin]', `${number(margin)}%`);
   COST_GROUPS.forEach(group => setAllText(scope, `[data-group-total="${group.key}"]`, preciseMoney(groups[group.key])));
   scope.querySelectorAll('[data-margin-value]').forEach(node => node.classList.toggle('risk', margin < 20));
@@ -797,7 +797,7 @@ export async function renderProposalDetail(container, sheetId) {
     editor.addEventListener('input', () => refreshEditorTotals(editor));
     container.querySelector('[data-use-suggested-price]')?.addEventListener('click', () => {
       const field = editor.querySelector('[name="selling_price"]');
-      field.value = Number(editor.dataset.suggestedPrice || 0).toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+      field.value = Number(editor.dataset.suggestedPriceValue || 0).toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
       refreshEditorTotals(editor);
     });
     container.querySelector('[data-autofill-sheet]')?.addEventListener('click', async event => {
