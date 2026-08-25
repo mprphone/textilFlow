@@ -42,6 +42,28 @@
 .stock-cost-variance{display:flex;align-items:center;gap:8px;margin:8px 7px 0;padding:7px 9px;border:1px solid #dce6f1;border-radius:9px;background:#fff}.stock-cost-variance span{color:#75869a;font-size:12px}.stock-cost-variance span b{margin-left:3px;color:#3a526e}.stock-cost-variance em{margin-left:auto;padding:4px 7px;border-radius:99px;font-size:12px;font-style:normal;font-weight:850}.stock-cost-variance em.good{background:#e5f7f0;color:#2e866c}.stock-cost-variance em.risk{background:#fdebed;color:#b24f5e}
 .proposal-click-flow button{font-size:12px}.industrial-cost-title small{font-size:12px}.industrial-cost-title p{font-size:12px}.industrial-cost-metrics span{font-size:12px}.industrial-cost-metrics small{font-size:12px}.cost-meta-compact label{font-size:12px}.cost-meta-compact input,.cost-meta-compact select{font-size:12px}.cost-family-grid span{font-size:12px}.cost-family-grid strong{font-size:12px}.cost-input-table.industrial input,.cost-input-table.industrial select{font-size:12px}.cost-stock-panel>header span{font-size:12px}.cost-stock-panel>header h3{font-size:13px}.stock-requirements article>div:nth-child(2)>b{font-size:12px}.stock-requirements small{font-size:12px}.stock-real-cost b{font-size:12px}.cost-action-dock span{font-size:12px}.release-sheet label,.release-fields label{font-size:12px}.release-sheet input,.release-fields input,.release-fields select{font-size:12px}
 .cost-family-grid button.lilac i{background:#f0eaff;color:#7961c7}
+
+/* Polish visual da ficha de custo — mais hierarquia e agrupamento, sem perder o ecrã único. */
+.proposal-hero .industrial-cost-title{grid-template-columns:auto 36px minmax(0,1fr) auto}
+.proposal-hero .cost-detail-flow,.proposal-hero .proposal-hero-actions{grid-column:1/-1;justify-content:flex-start}
+.proposal-hero .cost-detail-flow{margin-top:6px}
+.proposal-hero .proposal-hero-actions{margin-top:2px}
+.proposal-board .cost-meta-compact{grid-template-columns:repeat(5,minmax(0,1fr));row-gap:12px}
+.proposal-board .cost-meta-compact label:nth-child(4){padding:6px 8px 8px;border-radius:9px;background:#eef5ff}
+.proposal-board .cost-meta-compact label:nth-child(4) input{background:#fff}
+.cost-checklist button{opacity:.62}
+.cost-checklist button.done{opacity:1}
+.cost-checklist button:not(.done){opacity:1;border-color:#e0ab52;background:#fff4de;color:#8a5a12;font-weight:800}
+.cost-checklist button:not(.done) i{background:#ffe4b3;color:#8a5a12}
+.cost-input-table.industrial tr[data-original-group] td:first-child{border-left:3px solid #cdd6e4}
+.cost-input-table.industrial tr[data-original-group="fabric"] td:first-child{border-left-color:#47b79c}
+.cost-input-table.industrial tr[data-original-group="accessory"] td:first-child{border-left-color:#6ba9dd}
+.cost-input-table.industrial tr[data-original-group="labor"] td:first-child{border-left-color:#4d6dce}
+.cost-input-table.industrial tr[data-original-group="machine"] td:first-child{border-left-color:#7961c7}
+.cost-input-table.industrial tr[data-original-group="dyeing"] td:first-child{border-left-color:#765bc8}
+.cost-input-table.industrial tr[data-original-group="printing"] td:first-child{border-left-color:#b56e3b}
+.cost-input-table.industrial tr[data-original-group="subcontract"] td:first-child{border-left-color:#bd5968}
+.cost-input-table.industrial tr[data-original-group="overhead"] td:first-child{border-left-color:#a7762b}
 .release-order-page{display:flex;flex-direction:column;gap:16px;max-width:1440px;margin:0 auto;padding-bottom:20px}
 .release-order-header{display:flex;align-items:center;gap:14px;padding-bottom:4px}
 .release-order-header>div{flex:1}
