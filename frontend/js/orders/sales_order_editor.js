@@ -95,7 +95,7 @@ function articleBlockHtml(block, styles) {
         <div class="release-order-article-metric"><small>Peças totais</small><b><span data-article-pieces>0</span> un.</b></div>
         <div class="release-order-article-metric"><small>Preço médio</small><b data-article-value>0,00 €</b></div>
         <button type="button" class="btn release-material-button" data-calc-requirements><span>Ver ficha de custo</span></button>
-        <button type="button" class="btn icon" data-icon="more" data-duplicate-article aria-label="Duplicar artigo" title="Duplicar artigo"></button>
+        <button type="button" class="btn icon" data-icon="copy" data-duplicate-article aria-label="Duplicar artigo" title="Duplicar artigo"></button>
         ${block.removable ? '<button type="button" class="btn icon danger" data-icon="delete" data-remove-article aria-label="Remover artigo" title="Remover artigo"></button>' : ''}
       </div>
     </div>
@@ -417,7 +417,7 @@ export async function renderSalesOrderEditor(panel, orderId) {
 
   panel.innerHTML = `<div class="release-order-page" data-vat-rate="${vatRate}" data-vat-label="${esc(vatLabel)}">
     <header class="release-order-header">
-      <button type="button" class="btn icon release-order-back" data-icon="back" data-back-order aria-label="Voltar às encomendas" title="Voltar às encomendas"></button>
+      <button type="button" class="btn icon release-order-back" data-icon="back" data-back-order aria-label="Voltar às encomendas sem guardar" title="Voltar às encomendas sem guardar"></button>
       <div class="release-order-heading">
         <span class="release-order-eyebrow">Nota de Encomenda</span>
         <div><h1>${esc(order.order_no || 'Nova encomenda')}</h1><span class="release-order-status-chip" data-order-status>${esc(STATUS_LABELS[order.status] || order.status)}</span></div>
@@ -427,7 +427,6 @@ export async function renderSalesOrderEditor(panel, orderId) {
         <button type="button" class="btn release-order-output" data-print-order><span data-icon="print" aria-hidden="true"></span><span>PDF / Imprimir</span></button>
         <button type="button" class="btn release-order-output" data-email-order><span data-icon="mail" aria-hidden="true"></span><span>Enviar por email</span></button>
         <button type="button" class="btn release-save-button" data-submit-order><span data-icon="save" aria-hidden="true"></span>${orderId ? 'Guardar' : 'Criar encomenda'}</button>
-        <div class="release-order-more"><button type="button" class="btn icon" data-toggle-order-menu data-icon="more" aria-label="Mais ações" title="Mais ações"></button><div class="release-order-menu" data-order-menu hidden><button type="button" data-cancel-order><span data-icon="close"></span>Fechar sem guardar</button></div></div>
         <button type="button" class="btn primary release-production-button" data-release-order-editor><span data-icon="production" aria-hidden="true"></span>Lançar em Produção</button>
       </div>
     </header>
@@ -678,13 +677,6 @@ Com os melhores cumprimentos,</textarea></label>
     }
     if (event.target.closest('[data-email-order]')) {
       await openOrderEmailComposer();
-      return;
-    }
-    const menuToggle = event.target.closest('[data-toggle-order-menu]');
-    if (menuToggle) {
-      const menu = root.querySelector('[data-order-menu]');
-      menu.hidden = !menu.hidden;
-      menuToggle.setAttribute('aria-expanded', String(!menu.hidden));
       return;
     }
     const releaseButton = event.target.closest('[data-release-order-editor]');
