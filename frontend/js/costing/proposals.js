@@ -559,17 +559,18 @@ function stockPanel(requirements, summary, {editable = false, variance = null} =
 function detailHero(sheet, actions = '') {
   const stage = stageOf(sheet);
   const initials = esc((sheet.style_reference || 'C').slice(0, 2).toUpperCase());
+  const customerName = esc(sheet.customer_name === '—' ? 'Ficha interna' : sheet.customer_name);
   return `<section class="industrial-cost-hero proposal-hero">
     <div class="industrial-cost-title">
       <button class="btn small" type="button" data-back>←</button>
       <span class="cost-style-thumb">${sheet.style_image_url ? `<img src="${esc(sheet.style_image_url)}" alt="">` : initials}</span>
-      <div>
-        <small>${esc(sheet.quote_no)} · ficha de custo</small>
-        <h2>${esc(sheet.style_description || sheet.style_reference)}</h2>
-        <p>${esc(sheet.customer_name === '—' ? 'Ficha interna' : sheet.customer_name)} · ${number(sheet.quantity_basis)} pcs · v${sheet.version}</p>
+      <div class="hero-title-line">
+        <b>${esc(sheet.quote_no)}</b>
+        <span class="hero-name">${esc(sheet.style_description || sheet.style_reference)}</span>
+        <small>${customerName} · ${number(sheet.quantity_basis)} pcs · v${sheet.version}</small>
       </div>
       <span class="cost-state ${stage}">${statusText(stage)}</span>
-      <div class="cost-detail-flow">${proposalFlow(sheet, false)}</div>
+      <div class="cost-detail-flow">${proposalFlow(sheet, true)}</div>
       <div class="proposal-hero-actions">${actions}</div>
     </div>
   </section>`;

@@ -44,10 +44,6 @@
 .cost-family-grid button.lilac i{background:#f0eaff;color:#7961c7}
 
 /* Polish visual da ficha de custo — mais hierarquia e agrupamento, sem perder o ecrã único. */
-.proposal-hero .industrial-cost-title{grid-template-columns:auto 36px minmax(0,1fr) auto}
-.proposal-hero .cost-detail-flow,.proposal-hero .proposal-hero-actions{grid-column:1/-1;justify-content:flex-start}
-.proposal-hero .cost-detail-flow{margin-top:6px}
-.proposal-hero .proposal-hero-actions{margin-top:2px}
 .proposal-board .cost-meta-compact{grid-template-columns:repeat(5,minmax(0,1fr));row-gap:12px}
 .proposal-board .cost-meta-compact label:nth-child(4){padding:6px 8px 8px;border-radius:9px;background:#eef5ff}
 .proposal-board .cost-meta-compact label:nth-child(4) input{background:#fff}
@@ -144,15 +140,19 @@ tr.requirement-row-shortage{background:#fff7f7}
   radial-gradient(circle at 88% -30%,rgba(130,157,239,.22),transparent 42%),
   radial-gradient(circle at 8% 120%,rgba(86,196,168,.16),transparent 38%),
   linear-gradient(135deg,#e8faf4,#eef4ff 55%,#fff6ec)}
-.proposal-hero .industrial-cost-title{grid-template-columns:auto 36px minmax(0,1fr) auto auto auto;gap:8px;padding:0;border:0;align-items:center}
-.proposal-hero .cost-style-thumb{width:36px;height:36px;border-radius:10px;background:linear-gradient(145deg,#fff,#eaf1ff);color:#4d70cf;box-shadow:0 4px 10px rgba(70,100,160,.1)}
-.proposal-hero .industrial-cost-title small{color:#2f9a86;letter-spacing:.06em;text-transform:uppercase;font-size:12px}
-.proposal-hero .industrial-cost-title h2{margin:1px 0;font-size:16px;line-height:1.15}
-.proposal-hero .industrial-cost-title p{font-size:12px}
-.proposal-hero .cost-detail-flow{margin:0;justify-content:flex-end}
+.proposal-hero .industrial-cost-title{display:flex;flex-wrap:nowrap;align-items:center;gap:10px;padding:0;border:0;overflow-x:auto}
+.proposal-hero .cost-style-thumb{flex:none;width:36px;height:36px;border-radius:10px;background:linear-gradient(145deg,#fff,#eaf1ff);color:#4d70cf;box-shadow:0 4px 10px rgba(70,100,160,.1)}
+.proposal-hero .hero-title-line{display:flex;align-items:baseline;gap:6px;min-width:120px;flex:1 1 auto;overflow:hidden;white-space:nowrap}
+.proposal-hero .hero-title-line b{flex:none;color:#2f9a86;font-size:12px;letter-spacing:.03em}
+.proposal-hero .hero-title-line .hero-name{overflow:hidden;color:#17314f;font-size:15px;font-weight:800;text-overflow:ellipsis}
+.proposal-hero .hero-title-line small{flex:none;color:#667b92;font-size:12px}
+.proposal-hero .cost-state{flex:none}
+.proposal-hero .cost-detail-flow{flex:none;margin:0;justify-content:flex-end}
 .proposal-hero .cost-detail-flow .proposal-click-flow{width:auto;padding:0;border:0;background:transparent}
 .proposal-hero .proposal-click-flow button{min-height:28px;padding:3px 6px;border-radius:8px;font-size:12px}
-.proposal-hero-actions{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.proposal-hero .cost-detail-flow .proposal-click-flow.compact button span{display:none}
+.proposal-hero .cost-detail-flow .proposal-click-flow.compact button{padding:3px 5px}
+.proposal-hero-actions{flex:none;display:flex;gap:4px;flex-wrap:nowrap;justify-content:flex-end}
 .cost-meta-bar{padding:0;border-radius:14px}
 .proposal-board .cost-meta-compact{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px;padding:10px 12px}
 .proposal-board .cost-meta-compact label{margin:0;font-size:12px;color:#5f738c;font-weight:750}
@@ -206,8 +206,7 @@ tr.requirement-row-shortage{background:#fff7f7}
 .client-doc-preview strong{font-size:15px}
 .proposal-board .industrial-cost-editor{gap:8px}
 @media(max-width:1440px){
-  .proposal-hero .industrial-cost-title{grid-template-columns:auto 36px minmax(0,1fr) auto}
-  .proposal-hero .cost-detail-flow,.proposal-hero-actions{grid-column:1/-1;justify-content:flex-start}
+  .proposal-hero .hero-title-line small{display:none}
   .proposal-board .cost-meta-compact{grid-template-columns:repeat(4,1fr)}
   .proposal-client-doc .client-doc-fields,.client-doc-preview{grid-template-columns:1fr 1fr}
   .proposal-board .cost-family-grid{grid-template-columns:repeat(8,minmax(0,1fr))}
@@ -295,9 +294,9 @@ tr.requirement-row-shortage{background:#fff7f7}
 .proposal-board .cost-input-table.industrial input:hover,.proposal-board .cost-input-table.industrial select:hover{background:#eef1f6;border-color:#dfe6f0}
 .proposal-board .cost-input-table.industrial input:focus,.proposal-board .cost-input-table.industrial select:focus{background:#fff;border-color:#8fa6ee;box-shadow:0 0 0 3px rgba(82,115,230,.12)}
 .proposal-board .cost-input-table.industrial td[data-line-total]{background:transparent;font-size:13px}
-.cost-input-table.industrial th:nth-child(1),.cost-input-table.industrial td:nth-child(1){width:104px}
-.cost-input-table.industrial th:nth-child(2),.cost-input-table.industrial td:nth-child(2){width:96px}
-.cost-input-table.industrial th:nth-child(3),.cost-input-table.industrial td:nth-child(3){width:auto}
+.cost-input-table.industrial th:nth-child(1),.cost-input-table.industrial td:nth-child(1){width:100px}
+.cost-input-table.industrial th:nth-child(2),.cost-input-table.industrial td:nth-child(2){width:150px}
+.cost-input-table.industrial th:nth-child(3),.cost-input-table.industrial td:nth-child(3){width:260px}
 .cost-input-table.industrial th:nth-child(4),.cost-input-table.industrial td:nth-child(4){width:76px}
 .cost-input-table.industrial th:nth-child(5),.cost-input-table.industrial td:nth-child(5){width:50px}
 .cost-input-table.industrial th:nth-child(6),.cost-input-table.industrial td:nth-child(6){width:82px}
@@ -333,8 +332,12 @@ tr.requirement-row-shortage{background:#fff7f7}
 .proposal-board .cost-dock-actions .btn.success{background:#0b9c70;border-color:#0b9c70;font-weight:800}
 .proposal-board .cost-dock-actions .btn.success:hover{background:#098a63}
 
-/* Corrige o rodape a sobrepor a composicao do custo: deixa de ser sticky (o formulario ja ficou curto) e fica mais compacto. */
-.proposal-board .cost-action-dock{position:static;bottom:auto;margin-top:14px;padding:8px 10px}
+/* Rodape sticky (sempre visivel ao fundo do ecra) sem sobrepor a composicao: a tabela deixa
+   de ter scroll interno proprio (max-height mal calculado tapava quase o ecra todo) - passa a
+   crescer no fluxo normal, e so ha um scroll (o da pagina). Como o rodape e o ultimo elemento,
+   ao ficar sticky nunca cobre nada que venha antes dele. */
+.proposal-board .cost-lines-scroll{max-height:none;min-height:0;overflow:visible}
+.proposal-board .cost-action-dock{position:sticky;bottom:8px;z-index:6;margin-top:14px;padding:8px 10px}
 .proposal-board .cost-action-dock>div:not(.cost-dock-actions){padding:6px 8px}
 .proposal-board .cost-action-dock strong{font-size:16px}
 .proposal-board .cost-action-dock .suggested-price strong{font-size:16px}
