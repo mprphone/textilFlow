@@ -332,3 +332,13 @@ tr.requirement-row-shortage{background:#fff7f7}
 .proposal-board .cost-action-dock{border-color:#eef1f6;box-shadow:0 4px 16px rgba(16,24,40,.07),0 14px 34px rgba(16,24,40,.08)}
 .proposal-board .cost-dock-actions .btn.success{background:#0b9c70;border-color:#0b9c70;font-weight:800}
 .proposal-board .cost-dock-actions .btn.success:hover{background:#098a63}
+
+/* Corrige o rodape a sobrepor a composicao do custo: deixa de ser sticky (o formulario ja ficou curto) e fica mais compacto. */
+.proposal-board .cost-action-dock{position:static;bottom:auto;margin-top:14px;padding:8px 10px}
+.proposal-board .cost-action-dock>div:not(.cost-dock-actions){padding:6px 8px}
+.proposal-board .cost-action-dock strong{font-size:16px}
+.proposal-board .cost-action-dock .suggested-price strong{font-size:16px}
+.proposal-board .cost-action-dock span{font-size:10px}
+.proposal-board .cost-composition-card{margin-bottom:14px}
+.proposal-board .cost-checklist{flex-wrap:wrap;overflow-x:visible}
+.proposal-board .cost-checklist button{min-height:26px;padding:4px 9px}
