@@ -69,8 +69,8 @@ body{
   display:flex;
   align-items:center;
   justify-content:center;
-  min-height:34px;
-  padding:6px 11px;
+  min-height:44px;
+  padding:8px 12px;
   border:0!important;
   border-radius:999px;
   color:#c5d0de!important;
@@ -442,7 +442,12 @@ body{
 }
 
 @media print{
-  .sidebar,.topbar,.page-head,.invoice-toolbar,.toast-stack,.modal{display:none!important}
+  .sidebar,.topbar,.page-head,.invoice-toolbar,.toast-stack{display:none!important}
+  body:not(.printing-supplier) .modal{display:none!important}
+  body.printing-supplier #app-shell{display:none!important}
+  body.printing-supplier .modal{
+    display:flex!important;position:static!important;background:none!important;padding:0!important;inset:auto!important;
+  }
   .app-shell,.workspace,.page-content{display:block!important;height:auto!important;overflow:visible!important;background:#fff!important;padding:0!important}
   .invoice-sheet{border:0;border-radius:0;box-shadow:none;padding:0}
 }
@@ -625,6 +630,15 @@ body{
 @media(max-width:1024px){
   .form-grid.company-fiche{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+@media(max-width:768px){
+  .form-grid.company-fiche{grid-template-columns:1fr}
+  .company-fiche .field input,
+  .company-fiche .field select,
+  .company-fiche .field textarea{
+    min-height:44px;
+    padding:10px 12px!important;
+  }
+}
 .modal:has(.user-fiche) .modal-card{width:min(880px,96vw);max-height:94vh}
 .modal:has(.user-fiche) .modal-body{padding:12px 16px 14px}
 .user-fiche{display:flex;flex-direction:column;gap:12px}
@@ -666,6 +680,18 @@ body{
 .user-switch input:checked{background:#1f8a58}
 .user-switch input:checked:after{transform:translateX(16px)}
 .user-mod-wrap.is-dim{opacity:.42;pointer-events:none;filter:grayscale(.2)}
+.modal-card.company-fiche-card{width:min(1120px,98vw);max-height:96vh}
+.co-fiche{display:grid;gap:12px}
+.co-tabs{display:flex;gap:4px;flex-wrap:wrap;padding:4px;background:#fff;border:1px solid #e5ebf3;border-radius:14px}
+.co-tabs button{border:0;background:transparent;border-radius:10px;padding:8px 13px;cursor:pointer;font:inherit;font-weight:700;font-size:12.5px;color:#5d6f84}
+.co-tabs button.on{background:#1a3f73;color:#fff}
+.co-toolbar{display:flex;justify-content:flex-end;gap:8px}
+.co-view{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.co-view .sf-card h3{margin:0 0 10px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#5f6f82}
+@media(max-width:768px){
+  .co-view{grid-template-columns:1fr}
+  .modal-card.company-fiche-card,.modal-card.supplier-ficha-card{width:100%}
+}
 @media(max-width:1024px){
   .user-ident,.user-ops-head,.user-rows-3{grid-template-columns:1fr}
   .user-rows-3 .user-row{border-right:0}

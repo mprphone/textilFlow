@@ -1,4 +1,4 @@
-import { get, post } from './api.js?v=20260822-16';
+import { get, post } from './api.js?v=20260826-3';
 import { setSession } from './state.js';
 
 const form = document.getElementById('login-form');
@@ -13,7 +13,7 @@ function say(text) {
 async function launchApp() {
   say('A abrir o sistema…');
   try {
-    const app = await import('./app.js?v=20260825-57');
+    const app = await import('./app.js?v=20260826-4');
     await app.bootApp();
     say('');
   } catch (error) {

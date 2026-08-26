@@ -1,9 +1,9 @@
-import { crudList } from '../api.js?v=20260822-15';
-import { designApi } from './api.js?v=20260822-15';
+import { crudList } from '../api.js?v=20260826-3';
+import { designApi } from './api.js?v=20260826-3';
 import { initials as nameInitials, SOURCES } from './constants.js';
-import { esc } from '../format.js?v=20260822-15';
+import { esc } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
-import { closeModal, openModal, toast } from '../ui.js?v=20260821-19';
+import { closeModal, openModal, toast } from '../ui.js?v=20260826-3';
 
 function emptyModel() {
   return {title: '', user_ids: [], quantity: '', cover_url: '', code: ''};

@@ -1,8 +1,8 @@
-import { get, patch, post, remove } from '../api.js?v=20260822-16';
-import { bindPhotoFields, readForm, renderForm } from '../forms.js?v=20260824-41';
-import { badge, date, esc, money, number, percent } from '../format.js?v=20260821-22';
+import { get, patch, post, remove } from '../api.js?v=20260826-3';
+import { bindPhotoFields, readForm, renderForm } from '../forms.js?v=20260826-3';
+import { badge, date, esc, money, number, percent } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
-import { loading, openModal, toast } from '../ui.js?v=20260824-41';
+import { loading, openModal, toast } from '../ui.js?v=20260826-3';
 
 const TABS = [
   {id: 'geral', label: 'Geral'},
@@ -36,9 +36,13 @@ export async function openSupplierDossier(supplierId, options = {}) {
     id: Number(supplierId), tab: options.tab || 'geral', period: options.period || '12m',
     from: '', to: '', occFilter: 'todas', data: null,
   };
-  openModal('Ficha de fornecedor', loading('A abrir a ficha…'));
-  widen();
-  await reload();
+  openModal('Ficha de fornecedor', loading('A abrir a ficha…'), '', {cardClass: 'supplier-ficha-card'});
+  try {
+    await reload();
+  } catch (error) {
+    openModal('Ficha de fornecedor', `<div class="empty"><strong>Não foi possível abrir a ficha</strong><span>${esc(error.message)}</span></div>`, '', {cardClass: 'supplier-ficha-card'});
+    toast(error.message, 'error');
+  }
 }
 
 function widen() {
@@ -58,7 +62,7 @@ async function reload() {
 function paint() {
   const data = current.data;
   const supplier = data.supplier || {};
-  openModal('Ficha de fornecedor', fichaHtml(data, current.tab), supplier.name || '');
+  openModal('Ficha de fornecedor', fichaHtml(data, current.tab), supplier.name || '', {cardClass: 'supplier-ficha-card'});
   widen();
   bind(data);
 }
@@ -548,7 +552,11 @@ function bind(data) {
     if (!current.from || !current.to) { toast('Indique as duas datas.', 'error'); return; }
     await reload();
   });
-  body.querySelector('[data-sf-print]')?.addEventListener('click', () => window.print());
+  body.querySelector('[data-sf-print]')?.addEventListener('click', () => {
+    document.body.classList.add('printing-supplier');
+    window.print();
+    setTimeout(() => document.body.classList.remove('printing-supplier'), 400);
+  });
   body.querySelector('[data-sf-edit]')?.addEventListener('click', () => openEdit(data));
   body.querySelectorAll('[data-new-occ]').forEach(button => button.addEventListener('click', () => openOccurrence(data, null)));
   body.querySelectorAll('[data-occ]').forEach(row => row.addEventListener('click', event => {
@@ -558,7 +566,7 @@ function bind(data) {
   }));
   body.querySelectorAll('[data-open-of]').forEach(button => button.addEventListener('click', async event => {
     event.stopPropagation();
-    const {loadOrderDossier} = await import('../production/dossier.js?v=20260823-4');
+    const {loadOrderDossier} = await import('../production/dossier.js?v=20260826-3');
     await loadOrderDossier(Number(button.dataset.openOf));
   }));
   body.querySelectorAll('.sf-stars-input').forEach(group => group.addEventListener('click', event => {

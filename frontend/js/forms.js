@@ -1,5 +1,5 @@
-import { esc, humanize } from './format.js?v=20260819-5';
-import { toast } from './ui.js?v=20260824-41';
+import { esc, humanize } from './format.js?v=20260826-3';
+import { toast } from './ui.js?v=20260826-3';
 
 const MAX_PHOTOS = 6;
 const MAX_PHOTO_BYTES = 1.5 * 1024 * 1024;
@@ -120,9 +120,11 @@ export function fieldsCard(title, fields, values = {}, hint = '') {
   return `<div class="card"><div class="card-header"><h2>${esc(title)}</h2>${hint ? `<span>${esc(hint)}</span>` : ''}</div><div class="form-grid">${fieldsMarkup(fields, values)}</div></div>`;
 }
 
-export function renderForm(fields, values = {}, { submitLabel = 'Guardar', formId = 'record-form', formClass = 'form-grid' } = {}) {
+export function renderForm(fields, values = {}, { submitLabel = 'Guardar', formId = 'record-form', formClass = 'form-grid', includeFooter = true, hideCancel = false } = {}) {
   const content = fieldsMarkup(fields, values);
-  return `<form id="${formId}" class="${esc(formClass)}">${content}<div class="form-footer"><button type="button" class="btn" data-close-modal>Cancelar</button><button type="submit" class="btn primary">${esc(submitLabel)}</button></div></form>`;
+  const cancel = hideCancel ? '' : '<button type="button" class="btn" data-close-modal>Cancelar</button>';
+  const footer = includeFooter ? `<div class="form-footer">${cancel}<button type="submit" class="btn primary">${esc(submitLabel)}</button></div>` : '';
+  return `<form id="${formId}" class="${esc(formClass)}">${content}${footer}</form>`;
 }
 
 export function readForm(form, fields) {

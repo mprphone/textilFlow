@@ -1,8 +1,8 @@
 import { crudList, get, post } from '../api.js';
-import { badge, date, datetime, esc, number } from '../format.js?v=20260819-9';
+import { badge, date, datetime, esc, number } from '../format.js?v=20260826-3';
 import { recordModal } from '../quick_create.js';
 import { state } from '../state.js';
-import { openModal, toast } from '../ui.js?v=20260820-5';
+import { openModal, toast } from '../ui.js?v=20260826-3';
 
 const SOURCE_LABEL = { unassigned: 'Por distribuir', internal: 'Confeção interna', revista: 'Revista' };
 const DESTINATION_LABEL = { internal: 'Confeção interna', subcontract: 'Serviço externo', revista: 'Revista' };
@@ -265,10 +265,6 @@ export function openOrderDossier(data, lines = [], services = []) {
     distributePanel.innerHTML = distributeFormHtml(data.holdings || {}, lines, services, data.batches || []);
     bindDistributeForm(body, order.id, lines, services);
   }
-  body.querySelectorAll('.dossier-tabs [data-tab]').forEach(button => button.addEventListener('click', () => {
-    body.querySelectorAll('.dossier-tabs [data-tab]').forEach(item => item.classList.toggle('active', item === button));
-    body.querySelectorAll('[data-tab-panel]').forEach(panel => { panel.hidden = panel.dataset.tabPanel !== button.dataset.tab; });
-  }));
   document.querySelector('[data-mark-alerts-seen]')?.addEventListener('click', async event => {
     const button = event.target.closest('[data-mark-alerts-seen]');
     if (!button) return;
@@ -303,5 +299,6 @@ export async function loadOrderDossier(orderId) {
     openOrderDossier(data, lines, services);
   } catch (error) {
     toast(error.message, 'error');
+    openModal('Ordem de fabrico', `<div class="empty"><strong>Não foi possível abrir o dossier</strong><span>${esc(error.message)}</span></div>`);
   }
 }

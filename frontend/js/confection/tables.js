@@ -1,6 +1,6 @@
 import { crudList } from '../api.js';
-import { renderEntityPage } from '../entity.js?v=20260819-9';
-import { badge, date, esc, number, percent } from '../format.js?v=20260819-8';
+import { renderEntityPage } from '../entity.js?v=20260826-3';
+import { badge, date, esc, number, percent } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
 
 const opts = (rows, label) => rows.map(row=>({value:row.id,label:label(row)}));

@@ -1,4 +1,4 @@
-import { icon } from './icons.js?v=20260824-43';
+import { icon } from './icons.js?v=20260826-3';
 
 const exclusions='.grade-table,.grade-table-full,[data-grade-table],.cost-input-table,.wizard-input-table,.invoice-lines,[data-mobile-table="scroll"]';
 const labels={eye:'Abrir',edit:'Editar',delete:'Eliminar',save:'Guardar',check:'Concluir',close:'Fechar',truck:'Expedir',box:'Embalar',tag:'Etiqueta',document:'Documento',add:'Adicionar',route:'Dar destino',inbox:'Receber',print:'Imprimir',copy:'Duplicar',more:'Mais ações'};

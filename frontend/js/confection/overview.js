@@ -1,7 +1,7 @@
 import { crudList, get, post } from '../api.js';
-import { date, esc, money, number, percent, progress } from '../format.js?v=20260819-8';
+import { date, esc, money, number, percent, progress } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
-import { toast } from '../ui.js?v=20260820-5';
+import { toast } from '../ui.js?v=20260826-3';
 
 function loadClass(value) {
   return value > 100 ? 'capacity-danger' : value >= 90 ? 'capacity-warning' : 'capacity-good';

@@ -1,8 +1,8 @@
 import { get } from '../api.js';
 import { state } from '../state.js';
-import { pageHeader } from '../ui.js?v=20260820-5';
-import { assistantPanel, bindAssistant } from '../dashboard/assistant.js?v=20260819-5';
-import { briefingHero, lineOverview, metricCards, orderFlow, priorityPanel, quickWorkflows } from '../dashboard/briefing.js?v=20260822-10';
+import { pageHeader } from '../ui.js?v=20260826-3';
+import { assistantPanel, bindAssistant } from '../dashboard/assistant.js?v=20260826-3';
+import { briefingHero, lineOverview, metricCards, orderFlow, priorityPanel, quickWorkflows } from '../dashboard/briefing.js?v=20260826-3';
 
 
 export async function render(container) {

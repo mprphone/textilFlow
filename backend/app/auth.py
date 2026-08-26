@@ -28,9 +28,14 @@ def allow_weak_secret() -> bool:
 def require_app_secret() -> str:
     secret = app_secret()
     if secret.strip() in WEAK_SECRETS:
+        if not allow_weak_secret():
+            raise RuntimeError(
+                "APP_SECRET ainda é o valor de demonstração. Defina uma chave longa "
+                "ou, só em desenvolvimento, APP_ALLOW_WEAK_SECRET=1."
+            )
         log.warning(
-            "APP_SECRET ainda é o valor de demonstração. Na fábrica defina uma chave longa. "
-            "O programa arranca na mesma para não bloquear o login."
+            "APP_SECRET é o valor de demonstração. APP_ALLOW_WEAK_SECRET está ligado — "
+            "não use isto na fábrica."
         )
     return secret
 

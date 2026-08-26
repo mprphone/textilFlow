@@ -149,6 +149,7 @@ def classify_cost_line(db: Session, sheet: CostSheet, line: CostLine) -> dict:
         "cost_group": cost_group,
         "source_label": source_label,
         "material_id": material.id if material else None,
+        "material_code": material.code if material else None,
         "material_category": material_category,
         "material_unit": material.unit if material else None,
     }

@@ -1,8 +1,8 @@
 import { crudUpdate, get } from '../api.js';
-import { badge, date, datetime, esc, money, number } from '../format.js?v=20260819-5';
-import { bindPhotoFields, fieldsCard, fieldsMarkup, mergeCustomData, readForm } from '../forms.js?v=20260824-1';
+import { badge, date, datetime, esc, money, number } from '../format.js?v=20260826-3';
+import { bindPhotoFields, fieldsCard, fieldsMarkup, mergeCustomData, readForm } from '../forms.js?v=20260826-3';
 import { state } from '../state.js';
-import { pageHeader, toast } from '../ui.js?v=20260821-19';
+import { pageHeader, toast } from '../ui.js?v=20260826-3';
 
 const TF_TYPE_LABELS = {
   unclassified: 'Não classificado', finished: 'Produto acabado', raw_material: 'Matéria-prima',

@@ -12,13 +12,13 @@
   color:var(--sf-ink);
 }
 .modal-card.supplier-ficha-card{
-  width:min(1280px,97vw)!important;
+  width:min(1280px,97vw);
   max-height:95vh;
   border-radius:20px;
   background:#f7f9fc;
 }
 .modal-card.supplier-ficha-card > header{background:#fff;border-bottom:1px solid var(--sf-line,#e5ebf3)}
-.modal-card.supplier-ficha-card > header h2{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:#7c8ca1}
+.modal-card.supplier-ficha-card > header h2{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:#5f6f82}
 .modal-card.supplier-ficha-card > header p{display:none}
 
 /* ---------- Cabeçalho ---------- */
@@ -113,7 +113,7 @@
   box-shadow:0 2px 10px rgba(19,34,56,.04);
 }
 .sf-card h3{
-  margin:0 0 12px;font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#7c8ca1;
+  margin:0 0 12px;font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#5f6f82;
   display:flex;align-items:center;gap:7px;
 }
 .sf-card h3:before{content:"";width:3px;height:13px;border-radius:2px;background:var(--sf-blue)}
@@ -168,7 +168,7 @@
 .sf-perf-mini li span{color:var(--sf-muted)}
 .sf-donut{width:120px;height:120px;display:block}
 .sf-donut .val{font:800 20px Inter,system-ui;fill:var(--sf-ink)}
-.sf-donut .cap{font:600 8px Inter,system-ui;fill:#8494a8;letter-spacing:.12em}
+.sf-donut .cap{font:600 11px Inter,system-ui;fill:#5f6f82;letter-spacing:.12em}
 .sf-chart{width:100%;height:auto;display:block;max-height:280px}
 .sf-chart .grid{stroke:#eaeff6;stroke-width:1}
 .sf-chart .axis{font:600 9px Inter,system-ui;fill:#93a2b5}
@@ -278,11 +278,11 @@
 /* ---------- Tabelas / diversos ---------- */
 .sf .table-wrap{border:1px solid var(--sf-line);border-radius:12px;overflow:auto}
 .sf .data-table{margin:0}
-.sf .data-table th{background:var(--sf-soft);font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:#7c8ca1}
+.sf .data-table th{background:var(--sf-soft);font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:#5f6f82}
 .sf .data-table td{font-size:13px}
 em.good{color:var(--sf-green);font-style:normal;font-weight:700}
 em.bad{color:var(--sf-red);font-style:normal;font-weight:700}
-.sf-foot{margin:14px 0 0;color:#8494a8;font-size:12px;text-align:center}
+.sf-foot{margin:14px 0 0;color:#5f6f82;font-size:12px;text-align:center}
 .sf-sheet{max-width:1024px;margin:0 auto}
 .sf-sheet .form-footer{display:none}
 .sf-sheet-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--sf-line)}

@@ -1,6 +1,6 @@
 import { options } from '../data.js';
-import { renderEntityPage } from '../entity.js?v=20260819-9';
-import { badge, date, money, number } from '../format.js?v=20260819-5';
+import { renderEntityPage } from '../entity.js?v=20260826-3';
+import { badge, date, money, number } from '../format.js?v=20260826-3';
 import { recordModal } from '../quick_create.js';
 import { post } from '../api.js';
 

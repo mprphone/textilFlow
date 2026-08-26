@@ -1,7 +1,7 @@
 import { post, get } from '../api.js';
-import { esc, number } from '../format.js?v=20260822-1';
+import { esc, number } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
-import { closeModal, openModal, setHeading, toast } from '../ui.js?v=20260822-1';
+import { closeModal, openModal, setHeading, toast } from '../ui.js?v=20260826-3';
 
 let board = null;
 let extraHours = false;

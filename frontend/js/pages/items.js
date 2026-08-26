@@ -1,10 +1,10 @@
 import { render as renderStylesPage } from './styles.js';
 import { renderMaterialDetail } from './material_detail.js';
-import { renderEntityPage } from '../entity.js?v=20260824-41';
-import { badge, esc, money } from '../format.js?v=20260821-22';
+import { renderEntityPage } from '../entity.js?v=20260826-3';
+import { badge, esc, money } from '../format.js?v=20260826-3';
 import { post } from '../api.js';
 import { state } from '../state.js';
-import { toast } from '../ui.js?v=20260821-19';
+import { toast } from '../ui.js?v=20260826-3';
 
 const TF_TYPE_LABELS = {
   unclassified: 'Não classificado', raw_material: 'Matéria-prima', semi_finished: 'Semiacabado',

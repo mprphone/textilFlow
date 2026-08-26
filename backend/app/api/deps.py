@@ -1,4 +1,4 @@
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ..auth import decode_token
@@ -7,6 +7,7 @@ from ..models import User, UserCompany
 
 
 def current_user(
+    request: Request,
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> User:
@@ -19,6 +20,10 @@ def current_user(
     user = db.get(User, user_id)
     if not user or not user.active:
         raise HTTPException(401, "Utilizador inativo")
+    if getattr(user, "must_change_password", False):
+        path = request.url.path.rstrip("/")
+        if not (path.endswith("/auth/change-password") or path.endswith("/auth/me")):
+            raise HTTPException(403, "Altere a palavra-passe antes de continuar")
     return user
 
 
@@ -110,6 +115,7 @@ RESOURCE_MODULES = {
     "capacity-days": {"production", "confection"}, "capacity-events": {"production", "confection"}, "sewing-plans": {"production", "confection"},
     "external-capacities": {"confection", "subcontracting"}, "work-shifts": {"confection"},
     "subcontract-services": {"subcontracting"}, "subcontract-jobs": {"subcontracting"},
+    "service-stages": {"subcontracting", "production", "confection", "management"},
     "supplier-occurrences": {"commercial", "subcontracting", "production", "shipping", "erp", "tables", "management"},
     "stock-lots": {"shipping", "production", "erp"}, "inventory-movements": {"shipping", "production"},
     "purchase-orders": {"shipping", "erp"}, "purchase-order-lines": {"shipping", "erp"}, "shipments": {"shipping"},

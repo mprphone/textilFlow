@@ -1,9 +1,9 @@
 import { get, post } from '../api.js';
 import { options } from '../data.js';
-import { renderEntityTabs } from '../entity.js?v=20260822-1';
-import { badge, datetime, esc, number } from '../format.js?v=20260819-5';
+import { renderEntityTabs } from '../entity.js?v=20260826-3';
+import { badge, datetime, esc, number } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
-import { toast } from '../ui.js?v=20260820-5';
+import { toast } from '../ui.js?v=20260826-3';
 import { recordModal } from '../quick_create.js';
 
 function aqlCalculatorHtml() {

@@ -43,7 +43,7 @@ STATUSES = {
 COMPLAINT_KINDS = {"reclamacao", "qualidade"}
 OPEN_STATUSES = {"aberto", "em_analise", "aguarda_fornecedor"}
 OPEN_JOB = {"planned", "sent", "partial", "problem"}
-COMPLETED_JOB = {"received", "partial"}
+COMPLETED_JOB = {"received"}
 COMPLAINT_FIELDS = (
     "motivo", "qty_affected", "qty_rejected", "cost_estimated", "cost_actual",
     "supplier_responsible", "supplier_reply", "solution", "resolved_date",
@@ -428,6 +428,28 @@ def supplier_dossier(db: Session, company_id: int, supplier_id: int, period: str
     }
 
 
+def _bind_occurrence_links(db: Session, company_id: int, supplier_id: int, payload: dict, row) -> None:
+    checks = (
+        ("production_order_id", ProductionOrder, None),
+        ("subcontract_job_id", SubcontractJob, "supplier_id"),
+        ("subcontract_service_id", SubcontractService, "supplier_id"),
+        ("purchase_order_id", PurchaseOrder, "supplier_id"),
+    )
+    for field, model, supplier_attr in checks:
+        if field not in payload:
+            continue
+        ident = _id(payload.get(field))
+        if not ident:
+            setattr(row, field, None)
+            continue
+        entity = db.get(model, ident)
+        if not entity or getattr(entity, "company_id", None) != company_id:
+            raise HTTPException(422, "O documento ligado não pertence a esta empresa")
+        if supplier_attr and getattr(entity, supplier_attr, None) != supplier_id:
+            raise HTTPException(422, "O documento ligado não pertence a este fornecedor")
+        setattr(row, field, ident)
+
+
 def upsert_occurrence(db: Session, company_id: int, supplier_id: int, payload: dict,
                       occurrence_id: int | None = None) -> dict:
     _load_supplier(db, company_id, supplier_id)
@@ -462,14 +484,7 @@ def upsert_occurrence(db: Session, company_id: int, supplier_id: int, payload: d
         row.priority = str(payload.get("priority") or "normal").strip().lower()
     if "due_date" in payload:
         row.due_date = _date(payload.get("due_date"))
-    for field, column in (
-        ("production_order_id", "production_order_id"),
-        ("subcontract_job_id", "subcontract_job_id"),
-        ("subcontract_service_id", "subcontract_service_id"),
-        ("purchase_order_id", "purchase_order_id"),
-    ):
-        if field in payload:
-            setattr(row, column, _id(payload.get(field)))
+    _bind_occurrence_links(db, company_id, supplier_id, payload, row)
 
     extra = dict(row.extra or {})
     if "attachments" in payload:

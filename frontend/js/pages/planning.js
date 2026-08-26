@@ -1,7 +1,7 @@
 import { crudList, get } from '../api.js';
-import { esc, number, percent } from '../format.js?v=20260819-5';
+import { esc, number, percent } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
-import { pageHeader, toast } from '../ui.js?v=20260820-5';
+import { pageHeader, toast } from '../ui.js?v=20260826-3';
 
 const DAY = 86400000;
 

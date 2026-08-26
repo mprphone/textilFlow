@@ -1,10 +1,10 @@
 import { post } from '../api.js';
-import { renderEntityTabs } from '../entity.js?v=20260824-41';
-import { badge, date, esc, number } from '../format.js?v=20260819-5';
+import { renderEntityTabs } from '../entity.js?v=20260826-3';
+import { badge, date, esc, number } from '../format.js?v=20260826-3';
 import { options } from '../data.js';
 import { state } from '../state.js';
-import { toast } from '../ui.js?v=20260820-5';
-import { openSupplierDossier } from './supplier_dossier.js?v=20260824-41';
+import { toast } from '../ui.js?v=20260826-3';
+import { openSupplierDossier } from './supplier_dossier.js?v=20260826-3';
 
 const common = [
   { key:'code', label:'Código (Cliente/Fornecedor)', required:true, help:'Mesmo código do Primavera' },

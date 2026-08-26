@@ -285,14 +285,30 @@ tr.requirement-row-shortage{background:#fff7f7}
 .proposal-board .cost-meta-compact input,.proposal-board .cost-meta-compact select{border-color:transparent;background:#f2f4f9}
 .proposal-board .cost-meta-compact input:hover,.proposal-board .cost-meta-compact select:hover{background:#eaeef5}
 .proposal-board .cost-meta-compact input:focus,.proposal-board .cost-meta-compact select:focus{background:#fff}
-.proposal-board .cost-meta-compact label:nth-child(4){background:#e2ecff}
-.proposal-board .cost-meta-compact label:nth-child(4) input{background:#fff}
+.proposal-board .cost-essentials-card>.cost-meta-compact label:nth-child(4){background:#e2ecff}
+.proposal-board .cost-essentials-card>.cost-meta-compact label:nth-child(4) input{background:#fff}
+.proposal-board .cost-meta-fold{margin-top:8px}
+.proposal-board .cost-meta-fold .cost-meta-compact{padding-top:2px}
 
 .proposal-board .cost-input-table.industrial input,.proposal-board .cost-input-table.industrial select{border-color:transparent;background:transparent}
 .proposal-board .cost-input-table.industrial tbody tr[data-cost-line]:hover{background:#f7f9fc}
 .proposal-board .cost-input-table.industrial input:hover,.proposal-board .cost-input-table.industrial select:hover{background:#eef1f6;border-color:#dfe6f0}
 .proposal-board .cost-input-table.industrial input:focus,.proposal-board .cost-input-table.industrial select:focus{background:#fff;border-color:#8fa6ee;box-shadow:0 0 0 3px rgba(82,115,230,.12)}
 .proposal-board .cost-input-table.industrial td[data-line-total]{background:transparent;font-size:13px}
+.cost-input-table.industrial th:nth-child(1),.cost-input-table.industrial td:nth-child(1){width:104px}
+.cost-input-table.industrial th:nth-child(2),.cost-input-table.industrial td:nth-child(2){width:96px}
+.cost-input-table.industrial th:nth-child(3),.cost-input-table.industrial td:nth-child(3){width:auto}
+.cost-input-table.industrial th:nth-child(4),.cost-input-table.industrial td:nth-child(4){width:76px}
+.cost-input-table.industrial th:nth-child(5),.cost-input-table.industrial td:nth-child(5){width:50px}
+.cost-input-table.industrial th:nth-child(6),.cost-input-table.industrial td:nth-child(6){width:82px}
+.cost-input-table.industrial th:nth-child(7),.cost-input-table.industrial td:nth-child(7){width:84px}
+.cost-input-table.industrial th:nth-child(8),.cost-input-table.industrial td:nth-child(8){width:100px}
+.cost-input-table.industrial th:nth-child(9),.cost-input-table.industrial td:nth-child(9){width:36px}
+.cost-line-code-cell{display:flex;align-items:center;gap:4px}
+.cost-line-code-cell .pri-f4wrap{flex:1;min-width:0}
+.cost-line-code-cell .pri-lookup-in{width:100%}
+.cost-line-code-cell [data-new-material]{flex:none;width:22px;height:22px;min-height:0;padding:0;border-radius:6px;font-size:14px;line-height:1;color:#4a5c72}
+.cost-line-code-cell [data-new-material]:hover{background:#eef1f6;color:#2f5fd8}
 
 .cost-input-table.industrial tr.cost-group-header{background:#f7f9fc!important;border:0!important}
 .cost-input-table.industrial tr.cost-group-header[data-group-header="fabric"]{background:#ecf9f3!important}

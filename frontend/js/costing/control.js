@@ -1,9 +1,9 @@
 import { get, post } from '../api.js';
-import { badge, esc, money, number, progress } from '../format.js?v=20260819-6';
+import { badge, esc, money, number, progress } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
-import { closeModal, openModal, pageHeader, toast } from '../ui.js?v=20260820-5';
-import { categoryLabel, categoryOptions, statusText, todayIso } from './shared.js?v=20260825-53';
-import { renderProposalDetail } from './proposals.js?v=20260825-57';
+import { closeModal, openModal, pageHeader, toast } from '../ui.js?v=20260826-3';
+import { categoryLabel, categoryOptions, statusText, todayIso } from './shared.js?v=20260826-3';
+import { renderProposalDetail } from './proposals.js?v=20260826-4';
 
 function variance(value) {
   const numberValue = Number(value || 0);

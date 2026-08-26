@@ -1,7 +1,7 @@
 import { crudDelete, crudList, get, post } from '../api.js';
-import { badge, date, esc, money, number } from '../format.js?v=20260824-2';
+import { badge, date, esc, money, number } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
-import { closeModal, confirmDelete, empty, openModal, pageHeader, toast } from '../ui.js?v=20260824-42';
+import { closeModal, confirmDelete, empty, openModal, pageHeader, toast } from '../ui.js?v=20260826-3';
 
 const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 

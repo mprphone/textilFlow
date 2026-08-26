@@ -1,9 +1,9 @@
 import { get, post } from '../api.js';
 import { options } from '../data.js';
-import { badge, date, esc, number } from '../format.js?v=20260819-9';
+import { badge, date, esc, number } from '../format.js?v=20260826-3';
 import { recordModal } from '../quick_create.js';
 import { state } from '../state.js';
-import { pageHeader } from '../ui.js?v=20260820-5';
+import { pageHeader } from '../ui.js?v=20260826-3';
 
 const KIND = {
   dyeing: 'dyeing', printing: 'printing', weaving: 'weaving', spinning: 'spinning',

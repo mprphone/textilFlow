@@ -1,6 +1,6 @@
-import { date, datetime, esc, humanize } from '../format.js?v=20260822-15';
-import { toast } from '../ui.js?v=20260821-19';
-import { designApi } from './api.js?v=20260822-15';
+import { date, datetime, esc, humanize } from '../format.js?v=20260826-3';
+import { toast } from '../ui.js?v=20260826-3';
+import { designApi } from './api.js?v=20260826-3';
 import { PIPELINE, PHASE_ONE, ROLE_NAMES, STAGE_LABELS, STATUS_BADGE, TASK_KINDS, TASK_STATUSES, isPhaseOne } from './constants.js';
 
 let overlay = null;

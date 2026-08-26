@@ -1,10 +1,10 @@
 import { get, post, crudDelete, crudUpdate } from '../api.js';
 import { options } from '../data.js';
-import { badge, date, esc, money, number } from '../format.js?v=20260822-1';
-import { dynamicFields, fieldsCard, fieldsMarkup, mergeCustomData, readForm } from '../forms.js?v=20260824-1';
+import { badge, date, esc, money, number } from '../format.js?v=20260826-3';
+import { dynamicFields, fieldsCard, fieldsMarkup, mergeCustomData, readForm } from '../forms.js?v=20260826-3';
 import { recordModal } from '../quick_create.js';
 import { state } from '../state.js';
-import { confirmDelete, pageHeader, toast } from '../ui.js?v=20260822-1';
+import { confirmDelete, pageHeader, toast } from '../ui.js?v=20260826-3';
 
 function rowsTable(headers, rows) {
   return `<div class="table-wrap"><table class="data-table"><thead><tr>${headers.map(item=>`<th>${item}</th>`).join('')}<th></th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;

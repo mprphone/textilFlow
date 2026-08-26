@@ -1,13 +1,13 @@
 import { get, patch, post } from '../api.js';
 import { options } from '../data.js';
-import { renderEntityTabs } from '../entity.js?v=20260819-9';
-import { badge, date, datetime, esc, humanize, money, number } from '../format.js?v=20260819-5';
-import { loadOrderDossier } from '../production/dossier.js?v=20260824-2';
-import { recordModal } from '../quick_create.js?v=20260821-19';
-import { stageLabel } from '../production/cycle.js?v=20260822-20';
+import { renderEntityTabs } from '../entity.js?v=20260826-3';
+import { badge, date, datetime, esc, humanize, money, number } from '../format.js?v=20260826-3';
+import { loadOrderDossier } from '../production/dossier.js?v=20260826-3';
+import { recordModal } from '../quick_create.js?v=20260826-3';
+import { stageLabel } from '../production/cycle.js?v=20260826-3';
 import { state } from '../state.js';
-import { loading, openModal, pageHeader, toast } from '../ui.js?v=20260820-5';
-import { prepareFromPurchase, startSupplierOrder } from './commercial_docs.js?v=20260822-33';
+import { loading, openModal, pageHeader, toast } from '../ui.js?v=20260826-3';
+import { prepareFromPurchase, startSupplierOrder } from './commercial_docs.js?v=20260826-3';
 
 function reload(container) {
   return render(container, container.dataset.stockView || 'mp');

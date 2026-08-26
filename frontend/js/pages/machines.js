@@ -1,7 +1,7 @@
 import { get, crudList } from '../api.js';
 import { options } from '../data.js';
-import { renderEntityPage } from '../entity.js?v=20260819-9';
-import { badge, date, esc, money, number } from '../format.js?v=20260819-5';
+import { renderEntityPage } from '../entity.js?v=20260826-3';
+import { badge, date, esc, money, number } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
 
 export async function render(container) {

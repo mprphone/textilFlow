@@ -1,10 +1,12 @@
 import { crudList, get, post, put } from '../api.js';
-import { date, esc, finiteNumber, money, number, preciseMoney } from '../format.js?v=20260819-8';
+import { date, esc, finiteNumber, money, number, preciseMoney } from '../format.js?v=20260826-3';
+import { f4Field, openF4 } from '../primavera_lookup.js?v=20260826-3';
+import { recordModal } from '../quick_create.js?v=20260826-3';
 import { state } from '../state.js';
-import { closeModal, openModal, pageHeader, setHeading, toast } from '../ui.js?v=20260820-5';
-import { renderReleaseOrder } from './release_order.js?v=20260825-56';
-import { numericValue, statusText, todayIso, valueOf } from './shared.js?v=20260825-53';
-import { renderProposalWizard } from './wizard.js?v=20260825-56';
+import { closeModal, openModal, pageHeader, setHeading, toast } from '../ui.js?v=20260826-3';
+import { renderReleaseOrder } from './release_order.js?v=20260826-4';
+import { numericValue, statusText, todayIso, valueOf } from './shared.js?v=20260826-3';
+import { renderProposalWizard } from './wizard.js?v=20260826-3';
 
 const COST_GROUPS = [
   {key:'fabric', label:'Malhas / tecidos', short:'Malhas', icon:'▧', tone:'mint', category:'material', source:'manual_fabric'},
@@ -300,6 +302,9 @@ function editorLine(line = {}, locked = false, requirement = null) {
     : `<label class="line-client-supplied" title="O cliente fornece este componente; o preço pode ficar a zero"><input type="checkbox" data-line="client_supplied" ${clientSupplied ? 'checked' : ''}> Cliente</label>`;
   return `<tr class="${line.validation_status === 'incomplete' ? 'cost-line-incomplete' : ''}" data-cost-line data-cost-line-id="${line.id || ''}" data-original-group="${groupKey}" data-source-type="${esc(source)}" data-source-id="${sourceId}">
     <td><select data-line="group" ${locked ? 'disabled' : ''}>${groupOptions(groupKey)}</select></td>
+    <td class="cost-line-code-cell">${locked
+      ? esc(line.material_code || '')
+      : `${f4Field('material_code', line.material_code || '', {placeholder: 'F4'})}<button type="button" class="btn icon small" data-new-material aria-label="Criar novo artigo" title="Criar novo artigo · adiciona à tabela de artigos">+</button>`}</td>
     <td><input data-line="description" value="${esc(line.description || '')}" placeholder="Descrição do custo" ${locked ? 'disabled' : ''}></td>
     <td><input data-line="quantity" type="number" min="0" step="any" value="${finiteNumber(line.quantity, 1)}" ${locked ? 'disabled' : ''}></td>
     <td><input data-line="unit" value="${esc(line.unit || 'un')}" ${locked ? 'disabled' : ''}></td>
@@ -308,6 +313,67 @@ function editorLine(line = {}, locked = false, requirement = null) {
     <td>${origin}</td>
     ${locked ? '<td></td>' : '<td><button class="btn icon danger" type="button" data-icon="delete" data-remove-line aria-label="Remover custo" title="Remover custo"></button></td>'}
   </tr>`;
+}
+
+const MATERIAL_TF_TYPE = { fabric: 'raw_material', accessory: 'accessory' };
+
+function fillLineFromMaterial(row, editor, material) {
+  row.dataset.sourceId = String(material.id);
+  const code = row.querySelector('[data-f4-field="material_code"]');
+  if (code) code.value = material.code || '';
+  const description = row.querySelector('[data-line="description"]');
+  if (description) description.value = material.name || material.code || '';
+  const unit = row.querySelector('[data-line="unit"]');
+  if (unit && material.unit) unit.value = material.unit;
+  const unitCost = row.querySelector('[data-line="unit_cost"]');
+  if (unitCost && material.unit_cost != null) unitCost.value = material.unit_cost;
+  refreshEditorTotals(editor);
+}
+
+function openNewMaterialModal(row, editor) {
+  const groupKey = valueOf(row, '[data-line="group"]') || 'accessory';
+  const typedCode = row.querySelector('[data-f4-field="material_code"]')?.value || '';
+  recordModal({
+    title: 'Novo artigo',
+    resource: 'materials',
+    values: { code: typedCode, tf_type: MATERIAL_TF_TYPE[groupKey] || 'accessory', unit: 'un', active: true },
+    fields: [
+      { key: 'code', label: 'Código', required: true },
+      { key: 'name', label: 'Descrição', required: true },
+      { key: 'tf_type', label: 'Tipo', type: 'select', options: [
+        { value: 'raw_material', label: 'Matéria-prima' }, { value: 'accessory', label: 'Acessório' },
+        { value: 'packaging', label: 'Embalagem' }, { value: 'consumable', label: 'Consumível' },
+      ] },
+      { key: 'unit', label: 'Unidade', default: 'un' },
+      { key: 'unit_cost', label: 'Custo médio', type: 'number', default: 0 },
+      { key: 'active', label: 'Ativo', type: 'checkbox', default: true },
+    ],
+    onSaved: material => { fillLineFromMaterial(row, editor, material); toast('Artigo criado e ligado à linha.'); },
+  });
+}
+
+function bindMaterialLookup(editor) {
+  const fireLookup = field => {
+    openF4({ kind: 'artigo', catalog: null, onPick: material => {
+      const row = field.closest('[data-cost-line]');
+      if (row) fillLineFromMaterial(row, editor, material);
+    } });
+  };
+  editor.addEventListener('dblclick', event => {
+    const field = event.target.closest('[data-f4-field="material_code"]');
+    if (field) fireLookup(field);
+  });
+  editor.addEventListener('keydown', event => {
+    const field = event.target.closest('[data-f4-field="material_code"]');
+    if (!field) return;
+    if (event.key === 'F4' || (event.altKey && event.key === 'ArrowDown')) { event.preventDefault(); fireLookup(field); }
+  });
+  editor.addEventListener('click', event => {
+    const newMaterial = event.target.closest('[data-new-material]');
+    if (!newMaterial) return;
+    const row = newMaterial.closest('[data-cost-line]');
+    if (row) openNewMaterialModal(row, editor);
+  });
 }
 
 function groupedLines(lines, locked, requirements) {
@@ -321,7 +387,7 @@ function groupedLines(lines, locked, requirements) {
   return COST_GROUPS.filter(group => byGroup.has(group.key)).map(group => {
     const rows = byGroup.get(group.key);
     const subtotal = rows.reduce((sum, { line }) => sum + safeAmount(line), 0);
-    const header = `<tr class="cost-group-header" data-group-header="${group.key}"><td colspan="8"><span class="cost-group-icon ${group.tone}">${group.icon}</span>${esc(group.label)}<b data-group-total="${group.key}">${preciseMoney(subtotal)}</b></td></tr>`;
+    const header = `<tr class="cost-group-header" data-group-header="${group.key}"><td colspan="9"><span class="cost-group-icon ${group.tone}">${group.icon}</span>${esc(group.label)}<b data-group-total="${group.key}">${preciseMoney(subtotal)}</b></td></tr>`;
     return header + rows.map(({ line, requirement }) => editorLine(line, locked, requirement)).join('');
   }).join('');
 }
@@ -689,13 +755,18 @@ export async function renderProposalDetail(container, sheetId) {
           <label>Cliente<select name="customer_id" ${locked ? 'disabled' : ''}><option value="">Ficha interna</option>${customers.map(row => `<option value="${row.id}" data-payment="${esc(row.payment_terms || '')}" ${String(row.id) === String(sheet.customer_id) ? 'selected' : ''}>${esc(row.name)}</option>`).join('')}</select></label>
           <label class="cost-price-field">Venda / peça s/ IVA<input name="selling_price" type="number" min="0" step="any" value="${finiteNumber(sheet.selling_price)}" ${locked ? 'disabled' : ''}>${locked ? '' : `<button type="button" data-use-suggested-price>Usar sugerido · <span data-suggested-inline>${preciseMoney(pricing.recommended_selling_price)}</span></button>`}</label>
           <label>Moeda<select name="currency" ${locked ? 'disabled' : ''}>${['EUR','USD','GBP','CHF'].map(code => `<option value="${code}" ${(sheet.currency || 'EUR') === code ? 'selected' : ''}>${code}</option>`).join('')}</select></label>
-          <label>Válida até<input name="valid_until" type="date" value="${esc(sheet.valid_until || '')}" ${locked ? 'disabled' : ''}></label>
-          <label>Notas internas<input name="notes" value="${esc(sheet.notes || '')}" placeholder="Só para a fábrica" ${locked ? 'disabled' : ''}></label>
-          <label>Encargos financeiros %<input name="financial_cost_pct" type="number" min="0" max="100" step="0.1" value="${finiteNumber(pricing.financial_cost_pct, 2)}" ${locked ? 'disabled' : ''}></label>
-          <label>Acréscimo / margem alvo %<input name="markup_pct" type="number" min="0" max="500" step="0.1" value="${finiteNumber(pricing.markup_pct, 35)}" ${locked ? 'disabled' : ''}></label>
-          <label>Comissão %<input name="commission_pct" type="number" min="0" max="99" step="0.1" value="${finiteNumber(pricing.commission_pct)}" ${locked ? 'disabled' : ''}></label>
         </div>
         ${sheet.currency && sheet.currency !== sheet.base_currency ? `<p class="muted section-note">${sheet.fx_missing ? `⚠ Sem taxa de câmbio ${esc(sheet.currency)} → ${esc(sheet.base_currency)} configurada em Tabelas → Câmbio — os totais em ${esc(sheet.base_currency)} não são mostrados.` : `≈ ${money(sheet.sales_total_base)} ${esc(sheet.base_currency)} à taxa de ${finiteNumber(sheet.fx_rate).toFixed(4)} (venda) · margem ≈ ${money(sheet.margin_value_base)} ${esc(sheet.base_currency)}`}</p>` : ''}
+        <details class="proposal-fold cost-meta-fold">
+          <summary><div><b>Mais opções</b><small>Validade, notas internas, encargos financeiros, margem alvo, comissão</small></div></summary>
+          <div class="cost-meta-compact">
+            <label>Válida até<input name="valid_until" type="date" value="${esc(sheet.valid_until || '')}" ${locked ? 'disabled' : ''}></label>
+            <label>Notas internas<input name="notes" value="${esc(sheet.notes || '')}" placeholder="Só para a fábrica" ${locked ? 'disabled' : ''}></label>
+            <label>Encargos financeiros %<input name="financial_cost_pct" type="number" min="0" max="100" step="0.1" value="${finiteNumber(pricing.financial_cost_pct, 2)}" ${locked ? 'disabled' : ''}></label>
+            <label>Acréscimo / margem alvo %<input name="markup_pct" type="number" min="0" max="500" step="0.1" value="${finiteNumber(pricing.markup_pct, 35)}" ${locked ? 'disabled' : ''}></label>
+            <label>Comissão %<input name="commission_pct" type="number" min="0" max="99" step="0.1" value="${finiteNumber(pricing.commission_pct)}" ${locked ? 'disabled' : ''}></label>
+          </div>
+        </details>
       </section>
       ${completenessPanel(completeness, locked)}
       <div class="proposal-alerts" data-proposal-alerts></div>
@@ -704,10 +775,10 @@ export async function renderProposalDetail(container, sheetId) {
           <h2>Composição do custo</h2>
           ${familyFilters()}
           <div class="composition-tools">
-            ${locked ? '' : '<button class="btn small primary" type="button" data-add-line>+ Custo</button>'}
+            ${locked ? '' : '<button class="btn small primary" type="button" data-add-line>+ Adicionar</button>'}
           </div>
         </div>
-        <div class="table-wrap cost-lines-scroll"><table class="data-table cost-input-table industrial"><thead><tr><th>Família</th><th>Descrição</th><th>Consumo</th><th>Un.</th><th>Preço un.</th><th>Custo/peça</th><th>Origem</th><th></th></tr></thead><tbody data-lines>${groupedLines(lines, locked, requirements)}</tbody></table></div>
+        <div class="table-wrap cost-lines-scroll"><table class="data-table cost-input-table industrial"><thead><tr><th>Família</th><th>Código</th><th>Descrição</th><th>Consumo</th><th>Un.</th><th>Preço un.</th><th>Custo/peça</th><th>Origem</th><th></th></tr></thead><tbody data-lines>${groupedLines(lines, locked, requirements)}</tbody></table></div>
         <details class="proposal-fold" ${finiteNumber(stockSummary.shortage_items) > 0 ? 'open' : ''}>
           <summary>Stock e cobertura${finiteNumber(stockSummary.shortage_items) > 0 ? ` · ${number(stockSummary.shortage_items)} em falta` : ''}</summary>
           <div data-detail-stock>${stockPanel(requirements, stockSummary, {editable:!locked, variance:detail.cost_variance || sheet.cost_variance})}</div>
@@ -839,6 +910,7 @@ export async function renderProposalDetail(container, sheetId) {
       const remove = event.target.closest('[data-remove-line]');
       if (remove) { remove.closest('[data-cost-line]').remove(); refreshEditorTotals(editor); }
     });
+    bindMaterialLookup(editor);
     detailStockRoot.addEventListener('click', event => {
       const use = event.target.closest('[data-use-stock-cost]');
       if (!use) return;

@@ -1,8 +1,8 @@
 import { API_URL, get, post } from '../api.js';
-import { badge, date, esc, number } from '../format.js?v=20260824-2';
+import { badge, date, esc, number } from '../format.js?v=20260826-3';
 import { recordModal } from '../quick_create.js';
 import { state } from '../state.js';
-import { pageHeader, toast } from '../ui.js?v=20260821-19';
+import { pageHeader, toast } from '../ui.js?v=20260826-3';
 
 const table=(label,heads,rows)=>`<div class="table-wrap"><table class="data-table" aria-label="${esc(label)}"><thead><tr>${heads.map(x=>`<th scope="col">${x}</th>`).join('')}</tr></thead><tbody>${rows.join('')||`<tr><td colspan="${heads.length}" class="ops-empty-cell">Sem registos.</td></tr>`}</tbody></table></div>`;
 const role=()=>state.companies.find(row=>Number(row.id)===Number(state.companyId))?.role||'';

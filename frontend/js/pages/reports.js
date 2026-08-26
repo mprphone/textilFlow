@@ -1,7 +1,7 @@
 import { get } from '../api.js';
-import { badge, esc, money, number, percent, progress } from '../format.js?v=20260819-5';
+import { badge, esc, money, number, percent, progress } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
-import { pageHeader } from '../ui.js?v=20260820-5';
+import { pageHeader } from '../ui.js?v=20260826-3';
 
 export async function render(container){
   const results=await Promise.allSettled([get(`/reports/${state.companyId}/costs`),get(`/reports/${state.companyId}/employees`),get(`/reports/${state.companyId}/machines`),get(`/reports/${state.companyId}/downtime`),get(`/reports/${state.companyId}/operations-scorecard`)]);

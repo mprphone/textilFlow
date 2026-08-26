@@ -1,8 +1,8 @@
 import { crudList, get, put } from '../api.js';
-import { esc, money } from '../format.js?v=20260821-22';
-import { recordModal } from '../quick_create.js?v=20260821-19';
+import { esc, money } from '../format.js?v=20260826-3';
+import { recordModal } from '../quick_create.js?v=20260826-3';
 import { state } from '../state.js';
-import { empty, pageHeader, toast } from '../ui.js?v=20260821-19';
+import { empty, pageHeader, toast } from '../ui.js?v=20260826-3';
 
 const GROUPS = [
   ['fabric', 'Malha / tecido'],

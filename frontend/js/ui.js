@@ -1,10 +1,11 @@
-import { esc } from './format.js?v=20260819-5';
+import { esc } from './format.js?v=20260826-3';
 
 const modal = document.getElementById('modal');
 const modalTitle = document.getElementById('modal-title');
 const modalSubtitle = document.getElementById('modal-subtitle');
 const modalBody = document.getElementById('modal-body');
 let previousFocus = null;
+let modalLocked = false;
 
 function syncModalVisibility() {
   const isOpen = modal.getAttribute('aria-hidden') === 'false' && !modal.classList.contains('hidden');
@@ -31,9 +32,16 @@ export function pageHeader(title, subtitle, actions = '', extraClass = '') {
   return `<div class="page-head${extraClass ? ` ${extraClass}` : ''}"><div><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div><div class="actions">${actions}</div></div>`;
 }
 
-export function openModal(title, body, subtitle = '') {
+export function openModal(title, body, subtitle = '', options = {}) {
   previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  modal.querySelector('.modal-card')?.classList.remove('supplier-ficha-card');
+  modalLocked = Boolean(options.lock);
+  const card = modal.querySelector('.modal-card');
+  card?.classList.remove('supplier-ficha-card', 'company-fiche-card');
+  if (options.cardClass) card?.classList.add(options.cardClass);
+  const closeBtn = document.getElementById('modal-close');
+  if (closeBtn) closeBtn.hidden = modalLocked;
+  const statusSlot = document.getElementById('modal-status-slot');
+  if (statusSlot) statusSlot.innerHTML = '';
   modalTitle.textContent = title;
   modalSubtitle.textContent = subtitle;
   modalBody.innerHTML = body;
@@ -46,13 +54,17 @@ export function openModal(title, body, subtitle = '') {
   requestAnimationFrame(() => modal.querySelector('input:not(:disabled),select:not(:disabled),textarea:not(:disabled),button:not(:disabled),a[href]')?.focus());
 }
 
-export function closeModal() {
+export function closeModal(force = false) {
+  if (modalLocked && force !== true) return;
+  modalLocked = false;
+  const closeBtn = document.getElementById('modal-close');
+  if (closeBtn) closeBtn.hidden = false;
   modal.classList.add('hidden');
   modal.setAttribute('aria-hidden', 'true');
   modal.hidden = true;
   modal.style.setProperty('display', 'none');
   document.body.classList.remove('modal-open');
-  modal.querySelector('.modal-card')?.classList.remove('supplier-ficha-card');
+  modal.querySelector('.modal-card')?.classList.remove('supplier-ficha-card', 'company-fiche-card');
   modalTitle.textContent = '';
   modalSubtitle.textContent = '';
   modalBody.innerHTML = '';
@@ -63,7 +75,7 @@ export function closeModal() {
 }
 
 export function resetTransientUi() {
-  closeModal();
+  if (!modalLocked) closeModal(true);
   document.querySelectorAll('.design-overlay').forEach(layer => layer.remove());
   document.querySelectorAll('.pri-lookup-layer').forEach(layer => {
     layer.classList.add('hidden');

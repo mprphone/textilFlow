@@ -1,10 +1,10 @@
 import { crudCreate, crudDelete, crudList, crudUpdate, get } from '../api.js';
-import { badge, date, esc, money, number } from '../format.js?v=20260819-9';
-import { loadOrderDossier } from '../production/dossier.js?v=20260822-21';
-import { stageLabel } from '../production/cycle.js?v=20260822-20';
+import { badge, date, esc, money, number } from '../format.js?v=20260826-3';
+import { loadOrderDossier } from '../production/dossier.js?v=20260826-3';
+import { stageLabel } from '../production/cycle.js?v=20260826-3';
 import { recordModal } from '../quick_create.js';
 import { state } from '../state.js';
-import { closeModal, confirmDelete, empty, openModal, pageHeader, toast } from '../ui.js?v=20260820-5';
+import { closeModal, confirmDelete, empty, openModal, pageHeader, toast } from '../ui.js?v=20260826-3';
 
 const JOB_STATUS = {planned:'A enviar', sent:'No fornecedor', partial:'Receção parcial', received:'Recebido', problem:'Incidência', cancelled:'Anulado'};
 const SERVICE = {dyeing:'Tinturaria', printing:'Estamparia', sewing:'Costura', cutting:'Corte fora', embroidery:'Bordado', laundry:'Lavandaria', finishing:'Acabamento', transport:'Transporte', other:'Outro'};

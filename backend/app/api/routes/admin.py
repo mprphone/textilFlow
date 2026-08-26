@@ -113,8 +113,8 @@ def create_user(company_id: int, payload: dict, db: Session = Depends(get_db), u
     if db.query(User).filter_by(username=payload.get("username")).first():
         raise HTTPException(409, "Nome de utilizador já existe")
     password = str(payload.get("password") or "").strip()
-    if len(password) < 6:
-        raise HTTPException(400, "A palavra-passe inicial precisa de pelo menos 6 caracteres")
+    if len(password) < 8:
+        raise HTTPException(400, "A palavra-passe inicial precisa de pelo menos 8 caracteres")
     account = User(
         username=payload["username"], full_name=payload["full_name"], email=payload.get("email"),
         password_hash=hash_password(password),
@@ -149,8 +149,8 @@ def update_user_access(company_id: int, user_id: int, payload: dict, db: Session
         account.active = bool(payload["active"])
     password = str(payload.get("password") or "").strip()
     if password:
-        if len(password) < 6:
-            raise HTTPException(400, "A nova palavra-passe precisa de pelo menos 6 caracteres")
+        if len(password) < 8:
+            raise HTTPException(400, "A nova palavra-passe precisa de pelo menos 8 caracteres")
         account.password_hash = hash_password(password)
         account.must_change_password = True
     role = payload.get("role", membership.role)
@@ -163,9 +163,6 @@ def update_user_access(company_id: int, user_id: int, payload: dict, db: Session
     else:
         membership.role = role
         membership.permissions = permissions
-        for row in _user_memberships(db, user_id):
-            row.role = role
-            row.permissions = permissions
     db.commit()
     db.refresh(account)
     current = db.query(UserCompany).filter_by(company_id=company_id, user_id=user_id).first() or membership
@@ -179,6 +176,8 @@ def companies(db: Session = Depends(get_db), user: User = Depends(current_user))
 
 @router.post("/companies", status_code=201)
 def create_company(payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    if not db.query(UserCompany).filter_by(user_id=user.id, role="admin").first():
+        raise HTTPException(403, "Só um administrador pode criar empresas")
     company = Company(
         code=payload["code"], name=payload["name"],
         currency=payload.get("currency", "EUR"), timezone=payload.get("timezone", "Europe/Lisbon"), active=True,

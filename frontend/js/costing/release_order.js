@@ -1,8 +1,8 @@
 import { crudList, get, post } from '../api.js';
-import { esc, money, number } from '../format.js?v=20260819-8';
+import { esc, money, number } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
-import { toast } from '../ui.js?v=20260820-5';
-import { releaseRequirements } from './proposals.js?v=20260825-57';
+import { toast } from '../ui.js?v=20260826-3';
+import { releaseRequirements } from './proposals.js?v=20260826-4';
 
 const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 

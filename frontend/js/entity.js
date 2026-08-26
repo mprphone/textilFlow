@@ -1,8 +1,8 @@
 import { crudCreate, crudDelete, crudList, crudUpdate } from './api.js';
-import { esc, humanize } from './format.js?v=20260819-5';
-import { bindPasswordToggles, bindPhotoFields, readForm, renderForm } from './forms.js?v=20260824-41';
+import { esc, humanize } from './format.js?v=20260826-3';
+import { bindPasswordToggles, bindPhotoFields, readForm, renderForm } from './forms.js?v=20260826-3';
 import { state } from './state.js';
-import { closeModal, confirmDelete, empty, openModal, pageHeader, toast } from './ui.js?v=20260824-41';
+import { closeModal, confirmDelete, empty, openModal, pageHeader, toast } from './ui.js?v=20260826-3';
 
 export async function renderEntityPage(container, config) {
   const defaultFields = typeof config.fields === 'function' ? await config.fields(null) : config.fields;

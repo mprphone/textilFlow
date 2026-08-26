@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import unicodedata
 import urllib.error
@@ -51,7 +50,7 @@ def normalize(value: str | None) -> str:
 
 def gemini_configured(company: Company) -> bool:
     secrets = dict((company.settings or {}).get("secrets") or {})
-    return bool(decrypt_secret(secrets.get("gemini_api_key")) or os.getenv("GEMINI_API_KEY"))
+    return bool(decrypt_secret(secrets.get("gemini_api_key")))
 
 
 def save_gemini_key(company: Company, api_key: str) -> None:
@@ -68,7 +67,7 @@ def save_gemini_key(company: Company, api_key: str) -> None:
 
 def _api_key(company: Company) -> str:
     secrets = dict((company.settings or {}).get("secrets") or {})
-    key = decrypt_secret(secrets.get("gemini_api_key")) or os.getenv("GEMINI_API_KEY") or ""
+    key = decrypt_secret(secrets.get("gemini_api_key")) or ""
     if not key.strip():
         raise HTTPException(409, "Indique a chave da API Gemini em ERP → Ler fatura. Sem ela o programa não lê fotos nem PDFs.")
     return key.strip()

@@ -1,5 +1,5 @@
-import { renderControls } from '../costing/control.js?v=20260825-57';
-import { renderCostOverview, renderProposals } from '../costing/proposals.js?v=20260825-57';
+import { renderControls } from '../costing/control.js?v=20260826-4';
+import { renderCostOverview, renderProposals } from '../costing/proposals.js?v=20260826-4';
 
 
 export async function render(container) {

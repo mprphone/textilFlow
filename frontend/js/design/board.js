@@ -1,9 +1,9 @@
-import { esc } from '../format.js?v=20260822-15';
-import { pageHeader, toast } from '../ui.js?v=20260821-19';
-import { designApi } from './api.js?v=20260822-15';
+import { esc } from '../format.js?v=20260826-3';
+import { pageHeader, toast } from '../ui.js?v=20260826-3';
+import { designApi } from './api.js?v=20260826-3';
 import { columnsFor, initials, isPhaseOne, STAGE_LABELS } from './constants.js';
-import { openCreateRequest } from './create.js?v=20260824-41';
-import { openDevelopment } from './detail.js?v=20260824-41';
+import { openCreateRequest } from './create.js?v=20260826-3';
+import { openDevelopment } from './detail.js?v=20260826-3';
 
 const META = {
   portfolio: {

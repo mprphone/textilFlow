@@ -1,8 +1,8 @@
 import { crudUpdate, get } from '../api.js';
-import { date, esc, number, progress } from '../format.js?v=20260819-5';
+import { date, esc, number, progress } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
-import { pageHeader, toast } from '../ui.js?v=20260821-19';
-import { prepareFromSales } from './commercial_docs.js?v=20260822-33';
+import { pageHeader, toast } from '../ui.js?v=20260826-3';
+import { prepareFromSales } from './commercial_docs.js?v=20260826-3';
 
 function orderStageIndex(status) {
   if (status === 'finished') return 3;

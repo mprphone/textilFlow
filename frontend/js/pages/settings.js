@@ -1,13 +1,14 @@
 import { get, post, put } from '../api.js';
 import { options } from '../data.js';
-import { renderEntityPage } from '../entity.js?v=20260819-9';
-import { badge, datetime, esc } from '../format.js?v=20260819-5';
-import { bindPasswordToggles } from '../forms.js?v=20260821-19';
-import { recordModal } from '../quick_create.js?v=20260821-19';
+import { renderEntityPage } from '../entity.js?v=20260826-3';
+import { badge, datetime, esc } from '../format.js?v=20260826-3';
+import { bindPasswordToggles } from '../forms.js?v=20260826-3';
+import { recordModal } from '../quick_create.js?v=20260826-3';
 import { setCompany, setSession, state } from '../state.js';
-import { closeModal, openModal, pageHeader, toast } from '../ui.js?v=20260821-19';
-import { CORE_MODULE_IDS, MODULE_ACCESS_OPTIONS, MODULES, PLANT_MODULE_IDS } from '../navigation.js?v=20260825-56';
-import { render as renderArticleTypes } from './article_types.js?v=20260825-56';
+import { closeModal, openModal, pageHeader, toast } from '../ui.js?v=20260826-3';
+import { CORE_MODULE_IDS, MODULE_ACCESS_OPTIONS, MODULES, PLANT_MODULE_IDS } from '../navigation.js?v=20260826-3';
+import { render as renderArticleTypes } from './article_types.js?v=20260826-3';
+import { openCompanyFiche } from './company_fiche.js?v=20260826-3';
 
 const tabs=['Campos adaptativos','Modelos de ficha','Fluxos','Tipos de peças','Utilizadores','Auditoria','Empresas','Integrações'];
 
@@ -300,169 +301,10 @@ function refreshCompanySelect() {
   select.innerHTML = state.companies.map(company => `<option value="${company.id}" ${Number(company.id) === Number(state.companyId) ? 'selected' : ''}>${esc(company.name)}</option>`).join('');
 }
 
-const KNOWN_BILLING_SOFTWARE = [
-  {value:'primavera', label:'Primavera'},
-  {value:'generic', label:'TextileFlow / genérico'},
-];
-
-async function softwareOptionsFor(company = null) {
-  const knownIds = new Set(KNOWN_BILLING_SOFTWARE.map(item => item.value));
-  const configured = new Set();
-  const id = company?.id || state.companyId;
-  let currentSystem = 'primavera';
-  if (id) {
-    const [pri, catalog] = await Promise.all([
-      get(`/integrations/${id}/primavera/status`).catch(() => ({})),
-      get(`/erp/${id}/documents/types`).catch(() => ({})),
-    ]);
-    if (pri.configured || pri.connected || (pri.config && pri.config.base_url)) configured.add('primavera');
-    if (catalog.system) {
-      configured.add(catalog.system);
-      currentSystem = catalog.system;
-    }
-  }
-  if (!configured.size) KNOWN_BILLING_SOFTWARE.forEach(item => configured.add(item.value));
-  const stored = String((company?.profile || {}).billing_software || '').trim();
-  if (stored) configured.add(knownIds.has(stored.toLowerCase()) ? stored.toLowerCase() : stored);
-  const options = KNOWN_BILLING_SOFTWARE.filter(item => configured.has(item.value));
-  if (stored && !options.some(item => item.value === stored || item.value === stored.toLowerCase())) {
-    options.push({value: stored, label: stored});
-  }
-  return {options, currentSystem};
-}
-
-function companyFields(company = null, softwareOptions = []) {
-  const taxSet = Boolean(company?.tax_password_set);
-  const apiSet = Boolean(company?.billing_api_key_set);
-  const billPassSet = Boolean(company?.billing_password_set);
-  const keepSecret = 'Cifrada no servidor. Em branco = manter.';
-  const newSecret = 'Guardada cifrada. Não volta a ser mostrada.';
-  return [
-    {key:'code', label:'Código', required:true, section:'Identificação'},
-    {key:'name', label:'Nome', required:true, section:'Identificação'},
-    {key:'legal_name', label:'Firma / denominação', section:'Identificação'},
-    {key:'legal_form', label:'Forma jurídica', type:'select', options:[
-      {value:'lda', label:'Sociedade por quotas (Lda.)'},
-      {value:'unipessoal', label:'Unipessoal por quotas'},
-      {value:'sa', label:'Sociedade anónima (S.A.)'},
-      {value:'eni', label:'Empresário em nome individual'},
-      {value:'cooperativa', label:'Cooperativa'},
-      {value:'outra', label:'Outra'},
-    ], section:'Identificação'},
-    {key:'tax_id', label:'NIF', required:true, section:'Identificação', title:'NIF português de 9 dígitos. Pode alterar depois de gravar.'},
-    {key:'cae', label:'CAE', section:'Identificação', placeholder:'14100'},
-    {key:'address', label:'Morada da sede', type:'textarea', rows:2, span:2, section:'Sede'},
-    {key:'address_extra', label:'Complemento', section:'Sede'},
-    {key:'postal_code', label:'Cód. postal', section:'Sede', placeholder:'0000-000'},
-    {key:'city', label:'Localidade', section:'Sede'},
-    {key:'district', label:'Distrito', section:'Sede'},
-    {key:'country', label:'País', section:'Sede', default:'Portugal'},
-    {key:'phone', label:'Telefone', section:'Sede'},
-    {key:'email', label:'Email', type:'email', section:'Sede'},
-    {key:'website', label:'Website', section:'Sede'},
-    {key:'conservatory_no', label:'Conservatória / CRC', section:'Legal'},
-    {key:'commercial_registry', label:'Matrícula / pess. coletiva', section:'Legal'},
-    {key:'social_security_no', label:'Segurança social', section:'Legal'},
-    {key:'share_capital', label:'Capital social', type:'money', currencyKey:'share_capital_currency', currencyDefault:'EUR', currencies:['EUR','USD','GBP','CHF'], section:'Legal'},
-    {key:'iban', label:'IBAN', span:2, section:'Legal'},
-    {key:'bic', label:'BIC / SWIFT', section:'Legal'},
-    {key:'manager_name', label:'Gerência', span:2, section:'Legal'},
-    {key:'currency', label:'Moeda operacional', required:true, section:'Legal'},
-    {key:'timezone', label:'Fuso horário', required:true, section:'Legal'},
-    {key:'status', type:'hidden'},
-    {key:'billing_software', label:'Software', type:'select', options:softwareOptions, section:'Faturação', title:'Só aparecem os sistemas com ligação configurada em Integrações.'},
-    {key:'billing_company_code', label:'Código no software', section:'Faturação'},
-    {key:'billing_api_url', label:'URL da API', span:2, section:'Faturação'},
-    {key:'tax_password', label:'Senha das Finanças', type:'password', autocomplete:false, section:'Faturação', placeholder:taxSet ? '•••• definida' : '', help:taxSet ? keepSecret : newSecret},
-    {key:'billing_password', label:'Senha de faturação', type:'password', autocomplete:false, section:'Faturação', placeholder:billPassSet ? '•••• definida' : '', help:billPassSet ? keepSecret : newSecret},
-    {key:'billing_api_key', label:'Chave API faturação', type:'password', autocomplete:false, section:'Faturação', placeholder:apiSet ? '•••• definida' : '', help:apiSet ? keepSecret : newSecret},
-  ];
-}
-
-function companyValues(company = {}, extras = {}) {
-  const profile = company.profile || {};
-  return {
-    country: 'Portugal',
-    ...profile,
-    code: company.code,
-    name: company.name,
-    tax_id: company.tax_id,
-    currency: company.currency || 'EUR',
-    timezone: company.timezone || 'Europe/Lisbon',
-    status: company.status || (company.active === false ? 'inactive' : 'active'),
-    billing_software: profile.billing_software || extras.billing_software || 'primavera',
-    share_capital_currency: profile.share_capital_currency || extras.share_capital_currency || company.currency || 'EUR',
-  };
-}
-
-const COMPANY_STATUS_OPTIONS = [
-  {id:'active', label:'Ativa'},
-  {id:'inactive', label:'Inativa'},
-  {id:'suspended', label:'Suspensa'},
-];
-
-function bindCompanyStatus(initial) {
-  const slot = document.getElementById('modal-status-slot');
-  const form = document.getElementById('record-form');
-  if (!slot || !form) return;
-  const current = COMPANY_STATUS_OPTIONS.some(item => item.id === initial) ? initial : 'active';
-  slot.innerHTML = `<div class="co-status" role="group" aria-label="Estado da empresa">${COMPANY_STATUS_OPTIONS.map(item => `<button type="button" class="co-status-btn" data-status="${item.id}">${item.label}</button>`).join('')}</div>`;
-  let hidden = form.elements.namedItem('status');
-  if (!hidden) {
-    hidden = document.createElement('input');
-    hidden.type = 'hidden';
-    hidden.name = 'status';
-    form.appendChild(hidden);
-  }
-  const paint = value => {
-    hidden.value = value;
-    slot.querySelectorAll('[data-status]').forEach(button => button.classList.toggle('is-on', button.dataset.status === value));
-  };
-  slot.querySelectorAll('[data-status]').forEach(button => {
-    button.addEventListener('click', () => paint(button.dataset.status));
-  });
-  paint(current);
-}
-
 function statusBadge(row) {
   const status = row.status || (row.active === false ? 'inactive' : 'active');
   const labels = {active:'ativa', inactive:'inativa', suspended:'suspensa'};
   return `<span class="badge co-st-${status}">${labels[status] || status}</span>`;
-}
-
-async function refreshSessionCompanies() {
-  const me = await get('/auth/me');
-  setSession(me);
-  refreshCompanySelect();
-}
-
-async function openCompanyFiche(panel, company = null) {
-  let companyId = company?.id || null;
-  const software = await softwareOptionsFor(company);
-  recordModal({
-    title: companyId ? `Editar ${company.name}` : 'Nova empresa',
-    subtitle: 'Pode gravar e continuar a editar. O software de faturação vem das ligações em Integrações.',
-    formClass: 'form-grid company-fiche',
-    stayOpen: true,
-    values: companyValues(company || {currency:'EUR', timezone:'Europe/Lisbon', status:'active', country:'Portugal'}, {billing_software: software.currentSystem}),
-    fields: companyFields(company, software.options),
-    save: payload => {
-      if (companyId) return put(`/admin/companies/${companyId}`, payload);
-      return post('/admin/companies', payload).then(saved => {
-        companyId = saved.id;
-        const title = document.getElementById('modal-title');
-        if (title && saved.name) title.textContent = `Editar ${saved.name}`;
-        return saved;
-      });
-    },
-    onSaved: async saved => {
-      await refreshSessionCompanies();
-      if (saved?.id) setCompany(saved.id);
-      refreshCompanySelect();
-      await renderCompanies(panel);
-    },
-  });
-  bindCompanyStatus((company && company.status) || (company && company.active === false ? 'inactive' : 'active'));
 }
 
 async function renderCompanies(panel){
@@ -472,19 +314,22 @@ async function renderCompanies(panel){
   const core=MODULES.filter(module=>!module.plant);
   const plant=MODULES.filter(module=>module.plant);
   const box=(module,checked)=>`<label class="module-switch ${checked?'on':''}"><input type="checkbox" data-company-module="${module.id}" ${checked?'checked':''}><span><b>${esc(module.label)}</b><small>${module.plant?'Processo interno de fábrica':'Módulo de gestão e rasto'}</small></span></label>`;
-  panel.innerHTML=pageHeader('Empresas e módulos','Crie empresas, altere os dados e escolha os módulos de cada uma. O seletor no topo troca o ambiente em que está a trabalhar.','<button class="btn" data-edit-company>Editar dados</button><button class="btn primary" data-new-company>+ Nova empresa</button>')+`
+  panel.innerHTML=pageHeader('Empresas e módulos','Crie empresas, altere os dados e escolha os módulos de cada uma. O seletor no topo troca o ambiente em que está a trabalhar.','<button class="btn" data-edit-company>Visualizar dados</button><button class="btn primary" data-new-company>+ Nova empresa</button>')+`
     ${current?`<section class="card company-modules"><div class="card-header"><div><h2>${esc(current.name)}</h2><span>${esc(current.code)} · ${esc(current.tax_id || 'sem NIF')} · ${esc(current.currency)} · ${esc(current.timezone)}</span></div><button class="btn primary" data-save-modules>Guardar módulos</button></div>
       <h3>Gestão e rasto</h3><div class="module-grid">${core.map(module=>box(module,enabled.has(module.id))).join('')}</div>
       <h3>Processos internos</h3><p class="muted">Ative só o que esta fábrica faz. O que ficar desligado não aparece na barra e o trabalho sai por subcontrato.</p>
       <div class="module-grid">${plant.map(module=>box(module,enabled.has(module.id))).join('')}</div>
     </section>`:''}
     <div class="table-wrap u-mt-3"><table class="data-table"><thead><tr><th></th><th>Código</th><th>Empresa</th><th>NIF</th><th>Moeda</th><th>Módulos de processo</th><th>Estado</th></tr></thead><tbody>${rows.map(row=>`<tr class="track-row ${Number(row.id)===Number(current?.id)?'is-current':''}" data-open-company="${row.id}"><td>${Number(row.id)===Number(current?.id)?'<b>Atual</b>':'Abrir'}</td><td><b>${esc(row.code)}</b></td><td>${esc(row.name)}</td><td>${esc(row.tax_id||'—')}</td><td>${esc(row.currency)}</td><td>${(row.enabled_modules||[]).filter(id=>PLANT_MODULE_IDS.includes(id)).map(id=>`<span class="tag">${esc(MODULES.find(module=>module.id===id)?.label||id)}</span>`).join(' ')||'<span class="muted">Sem processos extra</span>'}</td><td>${statusBadge(row)}</td></tr>`).join('')}</tbody></table></div>`;
-  panel.querySelector('[data-new-company]').addEventListener('click',()=>openCompanyFiche(panel));
+  panel.querySelector('[data-new-company]').addEventListener('click',()=>openCompanyFiche(panel, null, ()=>renderCompanies(panel)));
   panel.querySelector('[data-edit-company]')?.addEventListener('click',()=>{
     if (!current) return;
-    openCompanyFiche(panel, current);
+    openCompanyFiche(panel, current, ()=>renderCompanies(panel));
   });
+  const selectedNow=()=>[...panel.querySelectorAll('[data-company-module]:checked')].map(input=>input.dataset.companyModule).sort().join(',');
+  const initialModules=selectedNow();
   panel.querySelectorAll('[data-open-company]').forEach(row=>row.addEventListener('click',()=>{
+    if(selectedNow()!==initialModules && !confirm('Há módulos por guardar. Trocar de empresa na mesma?')) return;
     setCompany(row.dataset.openCompany);
     refreshCompanySelect();
     renderCompanies(panel);

@@ -1,4 +1,4 @@
-import { badge, esc, money, number, percent, progress } from '../format.js?v=20260819-5';
+import { badge, esc, money, number, percent, progress } from '../format.js?v=20260826-3';
 
 function greeting() {
   const hour = new Date().getHours();

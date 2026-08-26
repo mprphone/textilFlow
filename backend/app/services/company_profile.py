@@ -8,6 +8,12 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from ..auth import SECRET
 
+try:
+    from cryptography.fernet import Fernet, InvalidToken
+except ImportError:  # pragma: no cover - fallback se a imagem Docker ainda não tiver o pacote
+    Fernet = None
+    InvalidToken = Exception
+
 PROFILE_KEYS = (
     "legal_name", "legal_form", "address", "address_extra", "postal_code", "city", "district",
     "country", "phone", "email", "website", "cae", "conservatory_no", "commercial_registry",
@@ -26,10 +32,20 @@ def _key() -> bytes:
     return hashlib.sha256(f"textileflow-company-secret:{SECRET}".encode()).digest()
 
 
+def _fernet():
+    if Fernet is None:
+        return None
+    digest = hashlib.sha256(f"textileflow-fernet:{SECRET}".encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
 def encrypt_secret(plain: str | None) -> str | None:
     text = (plain or "").strip()
     if not text:
         return None
+    box = _fernet()
+    if box is not None:
+        return "tf2:" + box.encrypt(text.encode("utf-8")).decode("ascii")
     raw = text.encode("utf-8")
     key = _key()
     nonce = os.urandom(16)
@@ -42,10 +58,21 @@ def encrypt_secret(plain: str | None) -> str | None:
 
 
 def decrypt_secret(token: str | None) -> str | None:
-    if not token or not str(token).startswith("tf1:"):
+    if not token:
+        return None
+    text = str(token)
+    if text.startswith("tf2:"):
+        box = _fernet()
+        if box is None:
+            return None
+        try:
+            return box.decrypt(text[4:].encode("ascii")).decode("utf-8")
+        except (InvalidToken, Exception):
+            return None
+    if not text.startswith("tf1:"):
         return None
     try:
-        blob = base64.urlsafe_b64decode(str(token)[4:].encode("ascii"))
+        blob = base64.urlsafe_b64decode(text[4:].encode("ascii"))
         nonce, mac, cipher = blob[:16], blob[16:48], blob[48:]
         key = _key()
         expected = hmac.new(key, nonce + cipher, hashlib.sha256).digest()
@@ -93,9 +120,13 @@ def nif_is_locked(tax_id: str | None) -> bool:
 def resolve_status(company) -> str:
     settings = dict(company.settings or {})
     raw = str(settings.get("life_status") or "").strip().lower()
+    if company.active is False:
+        if raw == "suspended":
+            return "suspended"
+        return "inactive"
     if raw in COMPANY_STATUSES:
         return raw
-    return "active" if company.active else "inactive"
+    return "active"
 
 
 def _secrets(settings: dict) -> dict:
@@ -113,7 +144,7 @@ def public_company(company) -> dict:
     data["enabled_modules"] = enabled_modules(company)
     data["profile"] = {key: profile.get(key) for key in PROFILE_KEYS}
     data["status"] = resolve_status(company)
-    data["nif_locked"] = False
+    data["nif_locked"] = nif_is_locked(company.tax_id)
     data["tax_password_set"] = bool(secrets.get("tax_password"))
     data["billing_api_key_set"] = bool(secrets.get("billing_api_key"))
     data["billing_password_set"] = bool(secrets.get("billing_password"))
@@ -128,7 +159,10 @@ def apply_company_payload(company, payload: dict, *, creating: bool = False) -> 
     if "tax_id" in payload or creating:
         incoming = payload.get("tax_id")
         if incoming:
-            company.tax_id = validate_nif(incoming)
+            nif = validate_nif(incoming)
+            if not creating and nif_is_locked(company.tax_id) and normalize_nif(company.tax_id) != nif:
+                raise CompanyProfileError("O NIF já está validado e não pode ser alterado")
+            company.tax_id = nif
         elif creating:
             raise CompanyProfileError("O NIF é obrigatório")
 

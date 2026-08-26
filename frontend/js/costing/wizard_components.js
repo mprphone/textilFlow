@@ -1,4 +1,4 @@
-import { esc, money, number } from '../format.js?v=20260819-6';
+import { esc, money, number } from '../format.js?v=20260826-3';
 
 export const steps = [
   ['piece', 'Peça e cliente'], ['fabric', 'Malhas'], ['accessories', 'Acessórios'],

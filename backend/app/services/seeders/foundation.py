@@ -9,7 +9,7 @@ from ..modules import default_enabled_modules
 
 
 def seed_foundation(db) -> dict:
-    company = Company(code="TF", name="TextileFlow Fábrica Demo", tax_id="PT500000001", settings={"enabled_modules": default_enabled_modules()})
+    company = Company(code="TF", name="TextileFlow Fábrica Demo", tax_id="500000000", settings={"enabled_modules": default_enabled_modules()})
     db.add(company)
     db.flush()
     user = User(username="admin", full_name="Administrador", email="admin@textileflow.local", password_hash=hash_password("admin123"), must_change_password=True)

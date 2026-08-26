@@ -1,5 +1,5 @@
 import { post } from '../api.js';
-import { esc } from '../format.js?v=20260819-5';
+import { esc } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
 
 export function assistantPanel(briefing) {

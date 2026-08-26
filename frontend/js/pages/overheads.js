@@ -1,6 +1,6 @@
 import { options } from '../data.js';
-import { renderEntityPage } from '../entity.js?v=20260819-9';
-import { date, money } from '../format.js?v=20260819-5';
+import { renderEntityPage } from '../entity.js?v=20260826-3';
+import { date, money } from '../format.js?v=20260826-3';
 
 export async function render(container){
   await renderEntityPage(container,{resource:'overheads',title:'Custos gerais e centros de custo',subtitle:'Energia, rendas, manutenção, administração e bases de imputação.',singular:'custo geral',newLabel:'Novo custo geral',fields:async()=>[

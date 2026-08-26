@@ -306,7 +306,7 @@ body .field small,body .table-subline,body .muted{font-size:12px;line-height:1.4
 
 body .btn{min-height:38px;padding:8px 13px;font-size:12px;line-height:1.2;border-color:var(--ui-border)}
 body .btn.small{min-height:32px;padding:6px 9px;font-size:12px}
-body .btn.icon{width:36px;height:36px;min-height:36px}
+body .btn.icon{width:40px;height:40px;min-height:40px}
 body .btn.primary{background:linear-gradient(135deg,var(--ui-primary),var(--ui-primary-dark))}
 body .btn:active{transform:translateY(0) scale(.985)}
 

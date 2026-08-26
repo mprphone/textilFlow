@@ -1,7 +1,7 @@
 import { crudList, get, post } from '../api.js';
-import { esc, money, number } from '../format.js?v=20260821-22';
+import { esc, money, number } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
-import { pageHeader, toast } from '../ui.js?v=20260820-5';
+import { pageHeader, toast } from '../ui.js?v=20260826-3';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);

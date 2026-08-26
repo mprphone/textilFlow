@@ -1,4 +1,4 @@
-import { humanize } from '../format.js?v=20260819-8';
+import { humanize } from '../format.js?v=20260826-3';
 
 const STAGE_LABEL = {
   planning: 'Planeamento',

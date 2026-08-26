@@ -1,7 +1,7 @@
 import { get, post, put } from '../api.js';
-import { date, datetime, esc, number } from '../format.js?v=20260824-2';
+import { date, datetime, esc, number } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
-import { closeModal, openModal, pageHeader, toast } from '../ui.js?v=20260824-42';
+import { closeModal, openModal, pageHeader, toast } from '../ui.js?v=20260826-3';
 
 const EPSILON = 0.001;
 const statusLabels = {

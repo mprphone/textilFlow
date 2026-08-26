@@ -1,6 +1,6 @@
 import { options } from '../data.js';
-import { renderEntityPage } from '../entity.js?v=20260819-9';
-import { badge, money, number } from '../format.js?v=20260819-5';
+import { renderEntityPage } from '../entity.js?v=20260826-3';
+import { badge, money, number } from '../format.js?v=20260826-3';
 
 export async function render(container) {
   const typeOptions = await options('machine-types','name','code');

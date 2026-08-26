@@ -42,7 +42,7 @@ DEFAULTS = {
     "instance": "DEFAULT",
     "line": "professional",
     "username": "",
-    "verify_ssl": False,
+    "verify_ssl": True,
     "timeout_seconds": 20,
     "sales_doc_type": "FA",
     "sales_series": "A",

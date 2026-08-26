@@ -1,4 +1,4 @@
-import { get, patch, post, put, remove } from '../api.js?v=20260822-15';
+import { get, patch, post, put, remove } from '../api.js?v=20260826-3';
 import { state } from '../state.js';
 
 const root = () => `/design/${state.companyId}`;

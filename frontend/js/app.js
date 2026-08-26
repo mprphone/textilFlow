@@ -1,40 +1,40 @@
-import { post } from './api.js?v=20260822-16';
+import { post } from './api.js?v=20260826-3';
 import { clearSession, setCompany, setSession, state } from './state.js';
-import { loading, resetTransientUi, toast } from './ui.js?v=20260824-42';
-import { recordModal } from './quick_create.js?v=20260821-19';
-import { initExperience } from './experience.js?v=20260825-53';
-import * as dashboard from './pages/dashboard.js?v=20260822-10';
-import * as live from './pages/live.js?v=20260819-7';
-import * as styles from './pages/styles.js?v=20260824-41';
-import * as samples from './pages/samples.js?v=20260822-30';
-import * as costing from './pages/costing.js?v=20260825-57';
-import * as orders from './pages/orders.js?v=20260825-52';
-import * as floor from './pages/floor.js?v=20260822-30';
-import * as cutting from './pages/cutting.js?v=20260825-51';
-import * as quality from './pages/quality.js?v=20260824-1';
-import * as inventoryPage from './pages/inventory.js?v=20260824-3';
-import * as people from './pages/people.js?v=20260822-1';
-import * as machines from './pages/machines.js?v=20260824-41';
-import * as operations from './pages/operations.js?v=20260822-1';
-import * as overheads from './pages/overheads.js?v=20260819-8';
-import * as confection from './pages/confection.js?v=20260825-51';
-import * as processPlant from './pages/process.js?v=20260820-1';
-import * as tracking from './pages/tracking.js?v=20260824-1';
-import * as controlTower from './pages/control_tower.js?v=20260824-2';
-import * as operationsControl from './pages/operations_control.js?v=20260825-54';
-import * as subcontracts from './pages/subcontracts.js?v=20260824-41';
-import * as reports from './pages/reports.js?v=20260819-7';
-import * as partners from './pages/partners.js?v=20260824-41';
-import * as tables from './pages/tables.js?v=20260824-41';
-import * as articleTypes from './pages/article_types.js?v=20260825-56';
-import * as shipping from './pages/shipping.js?v=20260825-54';
-import * as commercialDocs from './pages/commercial_docs.js?v=20260824-41';
-import * as erpOrders from './pages/erp_orders.js?v=20260824-1';
-import * as settings from './pages/settings.js?v=20260825-56';
-import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260825-56';
+import { loading, resetTransientUi, toast } from './ui.js?v=20260826-3';
+import { recordModal } from './quick_create.js?v=20260826-3';
+import { initExperience } from './experience.js?v=20260826-3';
+import * as dashboard from './pages/dashboard.js?v=20260826-3';
+import * as live from './pages/live.js?v=20260826-3';
+import * as styles from './pages/styles.js?v=20260826-3';
+import * as samples from './pages/samples.js?v=20260826-3';
+import * as costing from './pages/costing.js?v=20260826-4';
+import * as orders from './pages/orders.js?v=20260826-3';
+import * as floor from './pages/floor.js?v=20260826-3';
+import * as cutting from './pages/cutting.js?v=20260826-3';
+import * as quality from './pages/quality.js?v=20260826-3';
+import * as inventoryPage from './pages/inventory.js?v=20260826-3';
+import * as people from './pages/people.js?v=20260826-3';
+import * as machines from './pages/machines.js?v=20260826-3';
+import * as operations from './pages/operations.js?v=20260826-3';
+import * as overheads from './pages/overheads.js?v=20260826-3';
+import * as confection from './pages/confection.js?v=20260826-3';
+import * as processPlant from './pages/process.js?v=20260826-3';
+import * as tracking from './pages/tracking.js?v=20260826-3';
+import * as controlTower from './pages/control_tower.js?v=20260826-3';
+import * as operationsControl from './pages/operations_control.js?v=20260826-3';
+import * as subcontracts from './pages/subcontracts.js?v=20260826-3';
+import * as reports from './pages/reports.js?v=20260826-3';
+import * as partners from './pages/partners.js?v=20260826-3';
+import * as tables from './pages/tables.js?v=20260826-3';
+import * as articleTypes from './pages/article_types.js?v=20260826-3';
+import * as shipping from './pages/shipping.js?v=20260826-3';
+import * as commercialDocs from './pages/commercial_docs.js?v=20260826-3';
+import * as erpOrders from './pages/erp_orders.js?v=20260826-3';
+import * as settings from './pages/settings.js?v=20260826-3';
+import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260826-3';
 
 async function renderDesign(container, view) {
-  const { render } = await import('./pages/design.js?v=20260824-41');
+  const { render } = await import('./pages/design.js?v=20260826-3');
   return render(container, view);
 }
 
@@ -173,7 +173,10 @@ function showApp(){
   fillCompanyCard();
 }
 
+let navGen = 0;
+
 async function navigate(){
+  const gen = ++navGen;
   resetTransientUi();
   let route=(location.hash.replace(/^#\//,'').split(/[/?]/)[0]||'dashboard');
   if(route==='planning')route='tracking';
@@ -187,8 +190,13 @@ async function navigate(){
   renderNavigation(route);
   document.querySelector('.sidebar').classList.remove('open');
   content.innerHTML=loading();
-  try{await module.render(content);}catch(error){
+  try{
+    await module.render(content);
+    if(gen!==navGen)return;
+  }catch(error){
+    if(gen!==navGen)return;
     if(error.status===401){logout();return;}
+    if(error.status===403 && state.user?.must_change_password){await forcePasswordChange();return navigate();}
     content.innerHTML=`<div class="card"><h2>Não foi possível abrir este módulo</h2><p class="muted">${error.message}</p><button class="btn" onclick="location.reload()">Tentar novamente</button></div>`;
     toast(error.message,'error');
   }
@@ -197,10 +205,11 @@ async function navigate(){
 function logout(){clearSession();shell.classList.add('hidden');loginScreen.classList.remove('hidden');location.hash='';document.getElementById('login-message').textContent='';}
 
 function forcePasswordChange(){
-  return new Promise(resolve=>{
+  const ask=()=>new Promise((resolve,reject)=>{
     recordModal({
       title:'Altere a palavra-passe inicial',
-      subtitle:'admin123 não deve ficar na rede da fábrica. Pode fechar e alterar depois no círculo do utilizador.',
+      subtitle:'Tem de escolher uma senha nova (mínimo 8 caracteres) antes de usar o sistema.',
+      lock:true,
       fields:[
         {key:'current_password',label:'Palavra-passe atual',type:'password',required:true},
         {key:'new_password',label:'Nova palavra-passe',type:'password',required:true,help:'Mínimo de 8 caracteres, diferente de admin123.'},
@@ -212,7 +221,17 @@ function forcePasswordChange(){
       },
       onSaved:()=>{toast('Palavra-passe alterada.');resolve();},
     });
+    document.getElementById('modal-close')?.addEventListener('click',()=>{
+      toast('Tem de alterar a palavra-passe para continuar.','error');
+      reject(new Error('closed'));
+    },{once:true});
   });
+  const loop=async()=>{
+    while(state.user?.must_change_password){
+      try{await ask();}catch{/* reabre até gravar */}
+    }
+  };
+  return loop();
 }
 
 let appStarted=false;
@@ -230,9 +249,10 @@ export async function bootApp(){
     window.addEventListener('hashchange',navigate);
   }
   showApp();
+  if(state.user?.must_change_password) await forcePasswordChange();
   try{await navigate();}catch(error){content.innerHTML=`<div class="card"><h2>Não foi possível iniciar a área de trabalho</h2><p class="muted">${error.message}</p><button class="btn" onclick="location.reload()">Tentar novamente</button></div>`;toast(error.message,'error');}
 }
 
 if(!document.querySelector('script[src*="login.js"]')){
-  import('./login.js?v=20260822-21');
+  import('./login.js?v=20260826-3');
 }

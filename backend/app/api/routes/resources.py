@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import String, or_
@@ -103,6 +104,7 @@ def _queue_primavera(db, company_id, resource, row):
             else:
                 row.sync_status = "local"
     except Exception:
+        logging.getLogger("textileflow.primavera").exception("Falha ao enviar %s para o Primavera", resource)
         if hasattr(row, "sync_status"):
             row.sync_status = "failed"
 

@@ -1,4 +1,4 @@
-import { esc } from '../format.js?v=20260819-6';
+import { esc } from '../format.js?v=20260826-3';
 
 export const categories = [
   ['material', 'Materiais'],

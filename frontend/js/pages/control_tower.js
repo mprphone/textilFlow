@@ -1,7 +1,7 @@
 import { get, post } from '../api.js';
-import { badge, date, esc, money, number } from '../format.js?v=20260819-9';
+import { badge, date, esc, money, number } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
-import { pageHeader, toast } from '../ui.js?v=20260820-5';
+import { pageHeader, toast } from '../ui.js?v=20260826-3';
 
 function kpi(label, value, tone = '') {
   return `<div class="tower-kpi ${tone}"><span>${esc(label)}</span><strong>${value}</strong></div>`;
