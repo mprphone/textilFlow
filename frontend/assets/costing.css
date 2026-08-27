@@ -241,6 +241,7 @@ tr.requirement-row-shortage{background:#fff7f7}
 .cost-completeness-summary>strong{color:#a56813;font-size:15px}.cost-completeness.ready .cost-completeness-summary>strong{color:#178060}
 .cost-completeness-bar{height:3px;background:rgba(200,154,68,.13)}.cost-completeness-bar i{display:block;height:100%;background:#e0a441}.cost-completeness.ready .cost-completeness-bar i{background:#40a987}
 .cost-checklist{display:flex;gap:4px;overflow-x:auto;padding:6px 8px;border-top:1px solid rgba(203,166,96,.18)}
+.cost-completeness .proposal-alerts{justify-content:flex-start;padding:0 8px 8px}
 .cost-checklist button{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto;min-height:27px;padding:4px 7px;border:1px solid #ead8b7;border-radius:8px;background:#fff;color:#5e6f84;font-size:11px;font-weight:750;cursor:pointer}
 .cost-checklist button i{display:grid;place-items:center;width:15px;height:15px;border-radius:5px;background:#fff0d5;color:#ae6c15;font-size:10px;font-style:normal}.cost-checklist button.done{border-color:#d8e9e2;color:#4f7167}.cost-checklist button.done i{background:#e2f5ed;color:#25846a}
 .cost-input-table.industrial tr.cost-line-incomplete{background:#fff8ed!important;box-shadow:inset 3px 0 #e2a243}.cost-input-table.industrial tr.cost-line-incomplete td[data-line-total]{background:#fff2d8;color:#9a651a}

@@ -528,6 +528,7 @@ function completenessPanel(completeness = {}, locked = false) {
     </summary>
     <div class="cost-completeness-bar"><i style="width:${Math.max(0, Math.min(100, progress))}%"></i></div>
     <div class="cost-checklist">${checks.map(check => `<button type="button" class="${check.complete ? 'done' : 'missing'}" data-check-group="${esc(check.group || '')}" title="${esc(check.detail || '')}"><i>${check.complete ? '✓' : '!'}</i><span>${esc(check.label)}</span></button>`).join('')}</div>
+    <div class="proposal-alerts" data-proposal-alerts></div>
   </details>`;
 }
 
@@ -770,7 +771,6 @@ export async function renderProposalDetail(container, sheetId) {
         </details>
       </section>
       ${completenessPanel(completeness, locked)}
-      <div class="proposal-alerts" data-proposal-alerts></div>
       <section class="card cost-composition-card">
         <div class="card-header composition-head">
           <h2>Composição do custo</h2>
