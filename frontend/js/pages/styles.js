@@ -2,7 +2,7 @@ import { options } from '../data.js';
 import { renderEntityPage } from '../entity.js?v=20260826-3';
 import { badge, esc, number } from '../format.js?v=20260826-3';
 import { mergeCustomData } from '../forms.js?v=20260826-3';
-import { renderStyleDetail } from './style_detail.js?v=20260826-3';
+import { renderStyleDetail } from './style_detail.js?v=20260827-1';
 
 async function styleFields() {
   return [

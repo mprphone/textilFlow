@@ -20,6 +20,7 @@ const COST_GROUPS = [
 ];
 const GROUP_BY_KEY = Object.fromEntries(COST_GROUPS.map(group => [group.key, group]));
 const containerBindings = new WeakMap();
+const detailBackHandlers = new WeakMap();
 
 function activeRole() {
   return state.companies.find(company => Number(company.id) === Number(state.companyId))?.role || 'viewer';
@@ -827,7 +828,10 @@ function printProposal(sheet, editor) {
   win.document.close();
 }
 
-export async function renderProposalDetail(container, sheetId) {
+export async function renderProposalDetail(container, sheetId, onBack) {
+  const trackedBack = detailBackHandlers.get(container);
+  if (onBack) detailBackHandlers.set(container, { sheetId, onBack });
+  else if (!trackedBack || trackedBack.sheetId !== sheetId) detailBackHandlers.delete(container);
   containerBindings.get(container)?.abort();
   const [detail, customers] = await Promise.all([
     get(`/costing/sheets/${sheetId}`),
@@ -922,7 +926,7 @@ export async function renderProposalDetail(container, sheetId) {
   const editor = container.querySelector('[data-proposal-editor]');
   const detailStockRoot = container.querySelector('[data-detail-stock]');
   editor.dataset.shortageItems = String(finiteNumber(stockSummary.shortage_items));
-  container.querySelector('[data-back]').addEventListener('click', () => renderProposals(container));
+  container.querySelector('[data-back]').addEventListener('click', () => (detailBackHandlers.get(container)?.onBack || (() => renderProposals(container)))());
   container.querySelectorAll('[data-print]').forEach(button => button.addEventListener('click', () => printProposal(sheet, editor)));
   container.querySelector('[data-email]')?.addEventListener('click', () => {
     if (!valueOf(editor, '[name="customer_id"]')) { toast('Associe um cliente antes de enviar para o exterior.', 'error'); return; }

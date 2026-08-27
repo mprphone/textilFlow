@@ -4,7 +4,7 @@ import { badge, esc, money } from '../format.js?v=20260826-3';
 import { state } from '../state.js';
 import { toast } from '../ui.js?v=20260826-3';
 import { openSupplierDossier } from './supplier_dossier.js?v=20260826-3';
-import { render as renderItems } from './items.js?v=20260826-3';
+import { render as renderItems } from './items.js?v=20260827-1';
 
 const supplierFicheActions = {
   rowActions: row => `<button class="btn icon" type="button" data-icon="eye" data-supplier-ficha="${row.id}" aria-label="Abrir ficha completa" title="Abrir ficha completa"></button>`,

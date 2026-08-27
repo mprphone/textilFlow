@@ -1,4 +1,4 @@
-import { render as renderStylesPage } from './styles.js';
+import { render as renderStylesPage } from './styles.js?v=20260827-1';
 import { renderMaterialDetail } from './material_detail.js';
 import { renderEntityPage } from '../entity.js?v=20260826-3';
 import { badge, esc, money } from '../format.js?v=20260826-3';
