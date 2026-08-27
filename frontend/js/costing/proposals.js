@@ -519,16 +519,16 @@ function completenessPanel(completeness = {}, locked = false) {
   const blockers = completeness.blockers || checks.filter(check => !check.complete);
   const ready = completeness.can_accept === true;
   const progress = finiteNumber(completeness.progress_pct);
-  return `<section class="cost-completeness ${ready ? 'ready' : 'incomplete'}">
-    <div class="cost-completeness-summary">
+  return `<details class="cost-completeness ${ready ? 'ready' : 'incomplete'}">
+    <summary class="cost-completeness-summary">
       <span class="cost-completeness-icon">${ready ? '✓' : '!'}</span>
       <div><b>${ready ? 'Ficha completa para aceitar' : 'Ficha incompleta'}</b><small>${ready ? 'Todos os custos essenciais estão confirmados.' : `${blockers.length} pontos por confirmar antes do aceite.`}</small></div>
       <strong>${number(progress)}%</strong>
       ${locked || ready ? '' : '<button class="btn small" type="button" data-autofill-sheet>Atualizar da ficha técnica</button>'}
-    </div>
+    </summary>
     <div class="cost-completeness-bar"><i style="width:${Math.max(0, Math.min(100, progress))}%"></i></div>
     <div class="cost-checklist">${checks.map(check => `<button type="button" class="${check.complete ? 'done' : 'missing'}" data-check-group="${esc(check.group || '')}" title="${esc(check.detail || '')}"><i>${check.complete ? '✓' : '!'}</i><span>${esc(check.label)}</span></button>`).join('')}</div>
-  </section>`;
+  </details>`;
 }
 
 function stockPanel(requirements, summary, {editable = false, variance = null} = {}) {
@@ -873,6 +873,8 @@ export async function renderProposalDetail(container, sheetId) {
       refreshEditorTotals(editor);
     });
     container.querySelector('[data-autofill-sheet]')?.addEventListener('click', async event => {
+      event.preventDefault();
+      event.stopPropagation();
       const button = event.currentTarget;
       button.disabled = true;
       button.textContent = 'A atualizar…';

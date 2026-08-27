@@ -13,7 +13,7 @@ function say(text) {
 async function launchApp() {
   say('A abrir o sistema…');
   try {
-    const app = await import('./app.js?v=20260827-2');
+    const app = await import('./app.js?v=20260827-3');
     await app.bootApp();
     say('');
   } catch (error) {

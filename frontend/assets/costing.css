@@ -231,7 +231,10 @@ tr.requirement-row-shortage{background:#fff7f7}
 /* Ficha de custo assistida: completude visível e preço recomendado. */
 .cost-completeness{overflow:hidden;border:1px solid #f0cf91;border-radius:12px;background:#fffaf0;box-shadow:0 4px 14px rgba(109,78,26,.04)}
 .cost-completeness.ready{border-color:#b9dfd1;background:#f3fbf7}
-.cost-completeness-summary{display:grid;grid-template-columns:30px minmax(0,1fr) auto auto;align-items:center;gap:9px;padding:8px 11px}
+.cost-completeness-summary{display:grid;grid-template-columns:30px minmax(0,1fr) auto auto;align-items:center;gap:9px;padding:8px 34px 8px 11px;position:relative;cursor:pointer;list-style:none}
+.cost-completeness-summary::-webkit-details-marker{display:none}
+.cost-completeness-summary::after{content:"▸";position:absolute;top:50%;right:12px;transform:translateY(-50%);color:#9aa8bc;font-size:12px}
+.cost-completeness[open] .cost-completeness-summary::after{content:"▾"}
 .cost-completeness-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#fff0ce;color:#a56813;font-size:14px;font-weight:900}
 .cost-completeness.ready .cost-completeness-icon{background:#dff5eb;color:#178060}
 .cost-completeness-summary b,.cost-completeness-summary small{display:block}.cost-completeness-summary b{color:#31465f;font-size:12px}.cost-completeness-summary small{margin-top:2px;color:#748398;font-size:12px}
