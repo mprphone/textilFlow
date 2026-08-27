@@ -306,9 +306,9 @@ function editorLine(line = {}, locked = false, requirement = null) {
       ? esc(line.material_code || '')
       : `${f4Field('material_code', line.material_code || '', {placeholder: 'F4'})}<button type="button" class="btn icon small" data-new-material aria-label="Criar novo artigo" title="Criar novo artigo · adiciona à tabela de artigos">+</button>`}</td>
     <td><input data-line="description" value="${esc(line.description || '')}" placeholder="Descrição do custo" ${locked ? 'disabled' : ''}></td>
-    <td><input data-line="quantity" type="number" min="0" step="any" value="${finiteNumber(line.quantity, 1)}" ${locked ? 'disabled' : ''}></td>
+    <td class="cost-line-qty-cell"><input data-line="quantity" type="number" min="0" step="any" value="${finiteNumber(line.quantity, 1)}" ${locked ? 'disabled' : ''}>${locked ? '' : '<button type="button" class="btn icon small" data-waste-calc aria-label="Calcular consumo com quebra de acabamento" title="Calcular consumo com quebra de acabamento (%)">%</button>'}</td>
     <td><input data-line="unit" value="${esc(line.unit || 'un')}" ${locked ? 'disabled' : ''}></td>
-    <td><input data-line="unit_cost" type="number" min="0" step="any" value="${finiteNumber(line.unit_cost)}" ${locked ? 'disabled' : ''}></td>
+    <td class="cost-line-price-cell"><input data-line="unit_cost" type="number" min="0" step="any" value="${finiteNumber(line.unit_cost)}" ${locked ? 'disabled' : ''}>${locked ? '' : '<button type="button" class="btn icon small" data-amortize-calc aria-label="Amortizar custo fixo (ex.: quadros/moldes) pela quantidade da proposta" title="Amortizar custo fixo (ex.: quadros/moldes) pela quantidade da proposta">÷</button>'}</td>
     <td data-line-total>${preciseMoney(safeAmount(line))}</td>
     <td>${origin}</td>
     ${locked ? '<td></td>' : '<td><button class="btn icon danger" type="button" data-icon="delete" data-remove-line aria-label="Remover custo" title="Remover custo"></button></td>'}
@@ -352,6 +352,71 @@ function openNewMaterialModal(row, editor) {
   });
 }
 
+function openWasteCalcModal(row, editor) {
+  const qtyInput = row.querySelector('[data-line="quantity"]');
+  const currentQty = finiteNumber(qtyInput?.value);
+  const body = `<form data-waste-calc-form>
+    <label>Consumo base (antes da quebra)<input name="base" type="number" min="0" step="any" value="${currentQty || ''}" placeholder="ex.: 0,26"></label>
+    <label>Quebra de acabamento (%)<input name="waste" type="number" min="0" step="0.1" value="14"></label>
+    <p class="muted">Consumo final = base × (1 + quebra%): <b data-waste-result>0</b></p>
+    <footer><button type="button" class="btn" data-cancel>Cancelar</button><button type="submit" class="btn primary">Aplicar ao consumo</button></footer>
+  </form>`;
+  openModal('Quebra de acabamento', body, 'Mesma fórmula da ficha técnica: consumo base × (1 + quebra %).');
+  const form = document.querySelector('[data-waste-calc-form]');
+  const resultEl = form.querySelector('[data-waste-result]');
+  const update = () => {
+    const base = finiteNumber(form.base.value);
+    const waste = finiteNumber(form.waste.value);
+    resultEl.textContent = (base * (1 + waste / 100)).toFixed(4);
+  };
+  form.addEventListener('input', update);
+  update();
+  form.querySelector('[data-cancel]').addEventListener('click', () => closeModal());
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    const base = finiteNumber(form.base.value);
+    const waste = finiteNumber(form.waste.value);
+    if (qtyInput) qtyInput.value = base * (1 + waste / 100);
+    closeModal();
+    refreshEditorTotals(editor);
+    toast('Consumo atualizado com a quebra de acabamento.');
+  });
+}
+
+function openAmortizeCalcModal(row, editor) {
+  const priceInput = row.querySelector('[data-line="unit_cost"]');
+  const sheetQty = finiteNumber(editor.querySelector('[name="quantity"]')?.value, 1) || 1;
+  const body = `<form data-amortize-form>
+    <label>Nº de quadros / moldes<input name="units" type="number" min="0" step="1" value="1"></label>
+    <label>Preço por quadro (€)<input name="unit_price" type="number" min="0" step="0.01" value="0"></label>
+    <label>Quantidade da proposta<input name="qty" type="number" min="1" step="1" value="${sheetQty}"></label>
+    <p class="muted">Custo total ÷ quantidade: <b data-amortize-result>0,0000</b> € / peça</p>
+    <footer><button type="button" class="btn" data-cancel>Cancelar</button><button type="submit" class="btn primary">Aplicar ao preço unitário</button></footer>
+  </form>`;
+  openModal('Amortizar quadros / moldes', body, 'Divide o custo fixo de abertura de quadros pela quantidade da proposta — mesma lógica da folha de custo em Excel.');
+  const form = document.querySelector('[data-amortize-form]');
+  const resultEl = form.querySelector('[data-amortize-result]');
+  const update = () => {
+    const units = finiteNumber(form.units.value);
+    const unitPrice = finiteNumber(form.unit_price.value);
+    const qty = finiteNumber(form.qty.value) || 1;
+    resultEl.textContent = (units * unitPrice / qty).toFixed(4);
+  };
+  form.addEventListener('input', update);
+  update();
+  form.querySelector('[data-cancel]').addEventListener('click', () => closeModal());
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    const units = finiteNumber(form.units.value);
+    const unitPrice = finiteNumber(form.unit_price.value);
+    const qty = finiteNumber(form.qty.value) || 1;
+    if (priceInput) priceInput.value = units * unitPrice / qty;
+    closeModal();
+    refreshEditorTotals(editor);
+    toast('Preço unitário atualizado com a amortização.');
+  });
+}
+
 function bindMaterialLookup(editor) {
   const fireLookup = field => {
     openF4({ kind: 'artigo', catalog: null, onPick: material => {
@@ -370,9 +435,11 @@ function bindMaterialLookup(editor) {
   });
   editor.addEventListener('click', event => {
     const newMaterial = event.target.closest('[data-new-material]');
-    if (!newMaterial) return;
-    const row = newMaterial.closest('[data-cost-line]');
-    if (row) openNewMaterialModal(row, editor);
+    if (newMaterial) { const row = newMaterial.closest('[data-cost-line]'); if (row) openNewMaterialModal(row, editor); return; }
+    const wasteCalc = event.target.closest('[data-waste-calc]');
+    if (wasteCalc) { const row = wasteCalc.closest('[data-cost-line]'); if (row) openWasteCalcModal(row, editor); return; }
+    const amortizeCalc = event.target.closest('[data-amortize-calc]');
+    if (amortizeCalc) { const row = amortizeCalc.closest('[data-cost-line]'); if (row) openAmortizeCalcModal(row, editor); return; }
   });
 }
 

@@ -300,18 +300,25 @@ tr.requirement-row-shortage{background:#fff7f7}
 .proposal-board .cost-input-table.industrial td[data-line-total]{background:transparent;font-size:13px}
 .cost-input-table.industrial th:nth-child(1),.cost-input-table.industrial td:nth-child(1){width:100px}
 .cost-input-table.industrial th:nth-child(2),.cost-input-table.industrial td:nth-child(2){width:150px}
-.cost-input-table.industrial th:nth-child(3),.cost-input-table.industrial td:nth-child(3){width:260px}
-.cost-input-table.industrial th:nth-child(4),.cost-input-table.industrial td:nth-child(4){width:76px}
+.cost-input-table.industrial th:nth-child(3),.cost-input-table.industrial td:nth-child(3){width:250px}
+.cost-input-table.industrial th:nth-child(4),.cost-input-table.industrial td:nth-child(4){width:80px}
 .cost-input-table.industrial th:nth-child(5),.cost-input-table.industrial td:nth-child(5){width:50px}
-.cost-input-table.industrial th:nth-child(6),.cost-input-table.industrial td:nth-child(6){width:82px}
+.cost-input-table.industrial th:nth-child(6),.cost-input-table.industrial td:nth-child(6){width:86px}
 .cost-input-table.industrial th:nth-child(7),.cost-input-table.industrial td:nth-child(7){width:84px}
 .cost-input-table.industrial th:nth-child(8),.cost-input-table.industrial td:nth-child(8){width:100px}
 .cost-input-table.industrial th:nth-child(9),.cost-input-table.industrial td:nth-child(9){width:36px}
 .cost-line-code-cell{display:flex;align-items:center;gap:4px}
 .cost-line-code-cell .pri-f4wrap{flex:1;min-width:0}
 .cost-line-code-cell .pri-lookup-in{width:100%}
-.cost-line-code-cell [data-new-material]{flex:none;width:22px;height:22px;min-height:0;padding:0;border-radius:6px;font-size:14px;line-height:1;color:#4a5c72}
+.cost-line-code-cell [data-new-material]{flex:none;width:22px;height:22px;min-height:0;padding:0;border-radius:6px;font-size:13px;line-height:1;color:#4a5c72}
 .cost-line-code-cell [data-new-material]:hover{background:#eef1f6;color:#2f5fd8}
+.cost-line-qty-cell,.cost-line-price-cell{position:relative}
+.cost-line-qty-cell input,.cost-line-price-cell input{width:100%;padding-right:20px}
+.cost-line-qty-cell [data-waste-calc],.cost-line-price-cell [data-amortize-calc]{position:absolute;top:50%;right:1px;transform:translateY(-50%);width:17px;height:17px;min-height:0;padding:0;border:0;background:transparent;border-radius:5px;font-size:11px;line-height:1;color:#8a97ab}
+.cost-line-qty-cell [data-waste-calc]:hover,.cost-line-price-cell [data-amortize-calc]:hover{background:#e4e9f3;color:#2f5fd8}
+.modal-body [data-waste-calc-form] label,.modal-body [data-amortize-form] label{display:block;margin-bottom:10px;color:#4a5c72;font-size:12px;font-weight:750}
+.modal-body [data-waste-calc-form] input,.modal-body [data-amortize-form] input{width:100%;margin-top:4px;padding:8px 9px;border:1px solid #dce4ee;border-radius:8px;font-size:13px}
+.modal-body [data-waste-calc-form] footer,.modal-body [data-amortize-form] footer{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #eef1f6}
 
 .cost-input-table.industrial tr.cost-group-header{background:#f7f9fc!important;border:0!important}
 .cost-input-table.industrial tr.cost-group-header[data-group-header="fabric"]{background:#ecf9f3!important}
