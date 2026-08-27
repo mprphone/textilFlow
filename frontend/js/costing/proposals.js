@@ -220,32 +220,56 @@ export async function renderCostOverview(container) {
 }
 
 async function newProposal(container) {
-  const [styles, customers] = await Promise.all([
+  const [styles, customers, sheets] = await Promise.all([
     crudList('styles', state.companyId),
     crudList('customers', state.companyId),
+    get(`/costing/${state.companyId}/sheets`).catch(() => []),
   ]);
+  const lastSheetByStyle = new Map();
+  sheets.forEach(row => {
+    const existing = lastSheetByStyle.get(row.style_id);
+    if (!existing || Number(row.version) > Number(existing.version)) lastSheetByStyle.set(row.style_id, row);
+  });
   const defaultValidity = new Date();
   defaultValidity.setDate(defaultValidity.getDate() + 30);
   openModal('Ficha para artigo existente', `
     <form id="new-proposal-form" class="form-grid">
       <div class="form-section">Cliente e artigo</div>
       <div class="field full"><label>Artigo existente *<select name="style_id" required><option value="">Selecionar…</option>${styles.map(row => `<option value="${row.id}" data-customer-id="${row.customer_id || ''}">${esc(row.reference)} · ${esc(row.description)}</option>`).join('')}</select></label></div>
+      <div class="field full hidden" data-last-sheet-hint>
+        <label class="cost-check"><input name="copy_last_sheet" type="checkbox"> <span data-last-sheet-label></span></label>
+        <small class="muted">Reaproveita todas as linhas de custo já ligadas a artigos, preços e ajustes feitos da última vez — fica um novo rascunho para rever/atualizar.</small>
+      </div>
       <div class="field"><label>Cliente<select name="customer_id"><option value="">Ficha interna / sem cliente</option>${customers.map(row => `<option value="${row.id}">${esc(row.name)}</option>`).join('')}</select></label></div>
       <div class="field"><label>N.º da proposta<input name="quote_no" placeholder="Gerado automaticamente"></label></div>
-      <div class="form-section">Cálculo</div>
-      <div class="field"><label>Quantidade prevista *<input name="quantity" type="number" min="1" step="1" value="500" required></label></div>
-      <div class="field"><label>Preço de venda por peça<input name="selling_price" type="number" min="0" step="0.0001" value="0"></label></div>
-      <div class="field"><label>Válida até<input name="valid_until" type="date" value="${defaultValidity.toISOString().slice(0,10)}"></label></div>
-      <div class="field full"><label class="cost-check"><input name="import_technical_costs" type="checkbox" checked> Importar BOM, operações e preços atuais do artigo</label><small class="muted">A ligação ao stock é preservada para calcular disponibilidade e custo real.</small></div>
-      <div class="field full"><label>Notas<textarea name="notes" placeholder="Condições, transporte, prazos, observações…"></textarea></label></div>
+      <div class="form-section" data-fresh-section>Cálculo</div>
+      <div class="field" data-fresh-section><label>Quantidade prevista *<input name="quantity" type="number" min="1" step="1" value="500"></label></div>
+      <div class="field" data-fresh-section><label>Preço de venda por peça<input name="selling_price" type="number" min="0" step="0.0001" value="0"></label></div>
+      <div class="field" data-fresh-section><label>Válida até<input name="valid_until" type="date" value="${defaultValidity.toISOString().slice(0,10)}"></label></div>
+      <div class="field full" data-fresh-section><label class="cost-check"><input name="import_technical_costs" type="checkbox" checked> Importar BOM, operações e preços atuais do artigo</label><small class="muted">A ligação ao stock é preservada para calcular disponibilidade e custo real.</small></div>
+      <div class="field full" data-fresh-section><label>Notas<textarea name="notes" placeholder="Condições, transporte, prazos, observações…"></textarea></label></div>
       <div class="form-footer"><button type="button" class="btn" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Criar e calcular</button></div>
     </form>`, 'Não cria um artigo duplicado; usa a ficha técnica já existente.');
   document.querySelector('[data-close-modal]').addEventListener('click', closeModal);
   const proposalForm = document.getElementById('new-proposal-form');
-  proposalForm.style_id.addEventListener('change', () => {
+  const lastSheetHint = proposalForm.querySelector('[data-last-sheet-hint]');
+  const lastSheetLabel = proposalForm.querySelector('[data-last-sheet-label]');
+  const freshSections = proposalForm.querySelectorAll('[data-fresh-section]');
+  const toggleFreshSections = copyLast => freshSections.forEach(section => section.classList.toggle('hidden', copyLast));
+  const applyStyleSelection = () => {
+    const styleId = Number(proposalForm.style_id.value) || null;
     const customerId = proposalForm.style_id.selectedOptions[0]?.dataset.customerId;
     if (customerId && !proposalForm.customer_id.value) proposalForm.customer_id.value = customerId;
-  });
+    const last = styleId ? lastSheetByStyle.get(styleId) : null;
+    lastSheetHint.classList.toggle('hidden', !last);
+    proposalForm.copy_last_sheet.checked = Boolean(last);
+    if (last) {
+      lastSheetLabel.textContent = `Copiar a última ficha (V${last.version} · ${statusText(last.status)} · ${date(last.updated_at)}${last.customer_name && last.customer_name !== '—' ? ` · ${last.customer_name}` : ''})`;
+    }
+    toggleFreshSections(Boolean(last));
+  };
+  proposalForm.style_id.addEventListener('change', applyStyleSelection);
+  proposalForm.copy_last_sheet.addEventListener('change', () => toggleFreshSections(proposalForm.copy_last_sheet.checked));
   proposalForm.addEventListener('submit', async event => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -253,18 +277,26 @@ async function newProposal(container) {
     submit.disabled = true;
     submit.textContent = 'A criar e calcular…';
     try {
-      const result = await post('/costing/sheets', {
-        company_id:state.companyId,
-        style_id:Number(form.style_id.value),
-        customer_id:form.customer_id.value ? Number(form.customer_id.value) : null,
-        quote_no:form.quote_no.value || null,
-        quantity:Number(form.quantity.value),
-        selling_price:Number(form.selling_price.value || 0),
-        valid_until:form.valid_until.value || null,
-        notes:form.notes.value || null,
-        import_technical_costs:form.import_technical_costs.checked,
-      });
-      closeModal(); toast('Ficha criada com a estrutura e o stock do artigo.');
+      const styleId = Number(form.style_id.value);
+      const last = lastSheetByStyle.get(styleId);
+      let result;
+      if (last && form.copy_last_sheet.checked) {
+        result = await post(`/costing/sheets/${last.id}/duplicate`, {});
+        closeModal(); toast('Ficha criada a partir da última proposta apresentada para este artigo.');
+      } else {
+        result = await post('/costing/sheets', {
+          company_id:state.companyId,
+          style_id:styleId,
+          customer_id:form.customer_id.value ? Number(form.customer_id.value) : null,
+          quote_no:form.quote_no.value || null,
+          quantity:Number(form.quantity.value),
+          selling_price:Number(form.selling_price.value || 0),
+          valid_until:form.valid_until.value || null,
+          notes:form.notes.value || null,
+          import_technical_costs:form.import_technical_costs.checked,
+        });
+        closeModal(); toast('Ficha criada com a estrutura e o stock do artigo.');
+      }
       await renderProposalDetail(container, result.sheet.id);
     } catch (error) {
       submit.disabled = false;
