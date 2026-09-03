@@ -104,18 +104,18 @@ function dueLabel(row) {
 
 function orderPaint(row) {
   const palettes = [
-    ['#e8f1ff', '#70a2e8', '#173d70', '#2f6fc2'],
-    ['#e7f7ee', '#71c092', '#1c4c32', '#24915b'],
-    ['#f2ebff', '#a98be3', '#422a6d', '#7650bc'],
-    ['#fff0e6', '#ea9a66', '#63331b', '#cf6b2f'],
-    ['#e5f7f7', '#63bdbb', '#174a49', '#168b88'],
-    ['#fdebf2', '#e58eae', '#64263f', '#c04b76'],
-    ['#fff6d9', '#ddb84f', '#57430f', '#b68400'],
-    ['#eaeefe', '#8291da', '#2d376b', '#5265ba'],
-    ['#eef7dc', '#9dbd56', '#3c5118', '#71952a'],
-    ['#e8f6fd', '#6eb9db', '#17475d', '#2689b1'],
-    ['#f9e9fd', '#d086dd', '#5a2865', '#aa4fba'],
-    ['#fce9e6', '#df8378', '#642821', '#b94a3e'],
+    ['#bfdbfe', '#60a5fa', '#163b68', '#2563b8'],
+    ['#bbf7d0', '#4ade80', '#17472b', '#168447'],
+    ['#ddd6fe', '#a78bfa', '#3f2866', '#7048b6'],
+    ['#fed7aa', '#fb923c', '#5b3016', '#c45b20'],
+    ['#a5f3fc', '#22d3ee', '#164b52', '#087f91'],
+    ['#fbcfe8', '#f472b6', '#60233f', '#b63872'],
+    ['#fde68a', '#eab308', '#55400b', '#a87500'],
+    ['#c7d2fe', '#818cf8', '#293467', '#4b5db6'],
+    ['#d9f99d', '#84cc16', '#354d12', '#608d12'],
+    ['#bae6fd', '#38bdf8', '#17465d', '#167da6'],
+    ['#f5d0fe', '#d946ef', '#582461', '#a434b3'],
+    ['#fecdd3', '#fb7185', '#61252e', '#b43c4d'],
   ];
   const orderKey = item => String(item.order_id ?? item.production_order_id ?? item.code ?? item.id ?? '');
   const keys = [...new Set([...(board?.backlog || []), ...(board?.scheduled || [])].map(orderKey))]
@@ -368,7 +368,7 @@ function chipMarkup(row, day) {
   const left = row.days_left || 0;
   const ofPct = Number(sharesOf(row)[day] || 0);
   const load = lineLoad(row.line_key, day);
-  return `<button class="pmap-chip due-${dueTone(row)} ${row.id===selectedId?'selected':''} ${selectedId && row.id!==selectedId?'ghost':''} ${left?'wait':''} ${row.fabric_ready===false?'no-stock':''}" draggable="true" data-block="${row.id}" data-from="${day}" style="${orderPaint(row)}">
+  return `<button class="pmap-chip due-${dueTone(row)} ${row.id===selectedId?'selected':''} ${left?'wait':''} ${row.fabric_ready===false?'no-stock':''}" draggable="true" data-block="${row.id}" data-from="${day}" style="${orderPaint(row)}">
     <b>${esc(row.code)}</b>
     <span>${esc(row.client)}</span>
     <em>${esc(dueLabel(row))}</em>
