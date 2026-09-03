@@ -104,18 +104,18 @@ function dueLabel(row) {
 
 function orderPaint(row) {
   const palettes = [
-    ['#bfdbfe', '#60a5fa', '#163b68', '#2563b8'],
-    ['#bbf7d0', '#4ade80', '#17472b', '#168447'],
-    ['#ddd6fe', '#a78bfa', '#3f2866', '#7048b6'],
-    ['#fed7aa', '#fb923c', '#5b3016', '#c45b20'],
-    ['#a5f3fc', '#22d3ee', '#164b52', '#087f91'],
-    ['#fbcfe8', '#f472b6', '#60233f', '#b63872'],
-    ['#fde68a', '#eab308', '#55400b', '#a87500'],
-    ['#c7d2fe', '#818cf8', '#293467', '#4b5db6'],
-    ['#d9f99d', '#84cc16', '#354d12', '#608d12'],
-    ['#bae6fd', '#38bdf8', '#17465d', '#167da6'],
-    ['#f5d0fe', '#d946ef', '#582461', '#a434b3'],
-    ['#fecdd3', '#fb7185', '#61252e', '#b43c4d'],
+    ['#dceeff', '#91c7f2', '#214b70', '#4b96cf'],
+    ['#dcf7e8', '#8dd8ad', '#24523a', '#45a873'],
+    ['#eadfff', '#bca5e8', '#49366b', '#8d6bc5'],
+    ['#ffe4cf', '#efb27f', '#633b22', '#d98245'],
+    ['#d8f7f5', '#82d7d1', '#21514f', '#3aa6a0'],
+    ['#ffe0ec', '#eaa2be', '#673046', '#cd6f95'],
+    ['#fff3b8', '#e7ca68', '#5c4b17', '#bd9828'],
+    ['#dfe5ff', '#a6b2ed', '#35416d', '#7181cf'],
+    ['#e7f5c8', '#b8d77a', '#40551f', '#82a83d'],
+    ['#d8f1ff', '#8dcbe8', '#245269', '#4c9fc5'],
+    ['#f4dfff', '#d0a2e3', '#593266', '#aa70c1'],
+    ['#ffe0dc', '#eaa096', '#682f29', '#cc6f63'],
   ];
   const orderKey = item => String(item.order_id ?? item.production_order_id ?? item.code ?? item.id ?? '');
   const keys = [...new Set([...(board?.backlog || []), ...(board?.scheduled || [])].map(orderKey))]

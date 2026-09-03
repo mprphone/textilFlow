@@ -6,7 +6,7 @@ const message = document.getElementById('login-message');
 const loginScreen = document.getElementById('login-screen');
 const shell = document.getElementById('app-shell');
 const submit = form?.querySelector('button[type="submit"]');
-const APP_MODULE = './app.js?v=20260903-3';
+const APP_MODULE = './app.js?v=20260903-4';
 let signingIn = false;
 
 function resetLoginLayers() {
