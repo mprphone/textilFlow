@@ -1,47 +1,9 @@
 import { crudList, get, post } from '../api.js';
 import { esc, money, number } from '../format.js?v=20260826-3';
+import { colorSwatch, DEFAULT_SIZES, gradeTableMarkup, uid } from '../orders/grade_table.js?v=20260828-2';
 import { state } from '../state.js';
 import { toast } from '../ui.js?v=20260826-3';
 import { releaseRequirements } from './proposals.js?v=20260826-4';
-
-const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
-
-const COLOR_HEX = {
-  preto: '#1a1a1a', branco: '#f5f5f5', cinzento: '#8a8a8a', cinza: '#8a8a8a',
-  azul: '#2f5fa8', azulmarinho: '#1c2e4a', marinho: '#1c2e4a', navy: '#1c2e4a',
-  vermelho: '#b5352f', verde: '#3f7a4e', bege: '#d8c7a1', rosa: '#d98aa3',
-  amarelo: '#e0c23a', laranja: '#d97a34', roxo: '#7454a0', castanho: '#7a5030', camel: '#b58a55',
-};
-
-function colorSwatch(name) {
-  const key = (name || '').trim().toLocaleLowerCase('pt').normalize('NFD').replace(/[^a-z]/g, '');
-  if (!key) return '#d7dee8';
-  if (COLOR_HEX[key]) return COLOR_HEX[key];
-  let hash = 0;
-  for (const ch of key) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  return `hsl(${hash % 360}, 45%, 55%)`;
-}
-
-function uid() { return Math.random().toString(36).slice(2, 9); }
-
-function gradeTableMarkup(gradeState) {
-  const { rows, sizes } = gradeState;
-  if (!rows.length || !sizes.length) return '';
-  return `<thead><tr>
-      <th>Cor</th><th>Preço unitário</th>
-      ${sizes.map(size => `<th>${esc(size)}<button type="button" class="grade-remove-size btn icon danger" data-icon="delete" data-remove-size="${esc(size)}" aria-label="Remover tamanho ${esc(size)}" title="Remover tamanho"></button></th>`).join('')}
-      <th>Total</th><th></th>
-    </tr></thead>
-    <tbody>${rows.map(row => `
-      <tr data-grade-row="${row.id}">
-        <td class="grade-color-cell"><span class="grade-swatch" style="background:${colorSwatch(row.color)}"></span><input type="text" data-color-input data-row="${row.id}" value="${esc(row.color)}" placeholder="Cor"></td>
-        <td><div class="grade-price-cell"><input type="number" min="0" step="0.01" data-price-input data-row="${row.id}" value="${row.price || ''}" placeholder="0,00"><span>EUR</span></div></td>
-        ${sizes.map(size => `<td><input type="number" min="0" step="1" data-qty-input data-row="${row.id}" data-size="${esc(size)}" value="${row.qty[size] || ''}" placeholder="0"></td>`).join('')}
-        <td class="grade-row-total" data-row-total="${row.id}">0</td>
-        <td><button type="button" class="btn icon danger" data-icon="delete" data-remove-color="${row.id}" aria-label="Remover cor" title="Remover cor"></button></td>
-      </tr>`).join('')}</tbody>
-    <tfoot><tr><td>Total por tamanho</td><td></td>${sizes.map(() => '<td data-col-total>0</td>').join('')}<td data-grand-total>0</td><td></td></tr></tfoot>`;
-}
 
 export async function renderReleaseOrder(container, sheetId, afterRelease) {
   const detail = await get(`/costing/sheets/${sheetId}`);

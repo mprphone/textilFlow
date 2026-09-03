@@ -14,6 +14,7 @@ from ...schemas import ProductionEventRequest, StockMovementRequest
 from ...services.analytics import line_performance
 from ...services.commercial_docs import from_distribution, public_document
 from ...services.inventory import material_history, register_movement, save_material_notes, stock_board
+from ...services.mrp import week_material_plan
 from ...services.primavera import queue_delivery
 from ...services.corrections import compensate_event
 from ...services.production import register_output
@@ -568,8 +569,14 @@ def compensate_output_event(event_id: int, payload: dict, db: Session = Depends(
 
 @router.get("/{company_id}/stock-board")
 def get_stock_board(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    require_module_access(db, user, company_id, {"shipping", "production"})
+    require_module_access(db, user, company_id, {"shipping", "production", "warehouse"})
     return stock_board(db, company_id)
+
+
+@router.get("/{company_id}/mrp/week")
+def get_mrp_week(company_id: int, start: date | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    require_module_access(db, user, company_id, {"warehouse", "production", "shipping", "confection"})
+    return week_material_plan(db, company_id, start)
 
 
 @router.get("/{company_id}/materials/{item_key}/history")

@@ -403,16 +403,46 @@ async function renderCatalog(container) {
   bindStockPage(container);
 }
 
+async function renderMrp(container) {
+  const data = await get(`/production/${state.companyId}/mrp/week`);
+  const items = data.items || [];
+  const pri = data.primavera || {};
+  container.innerHTML = pageHeader(
+    'Necessidades da semana',
+    `Do mapa de confeção e da BOM, de ${esc(data.week_start || '')} a ${esc(data.week_end || '')}. ${data.plan_count || 0} planos · ${data.order_count || 0} OFs · ${data.shortage_count || 0} faltas.`,
+    '<a class="btn" href="#/confection-map">Mapa de confeção</a><a class="btn" href="#/stock-mp">Stock MP</a>',
+    'compact',
+  ) + `
+    <section class="listing-panel"><div class="table-wrap listing-table"><table class="data-table stock-table">
+      <thead><tr><th>Artigo</th><th>Descrição</th><th>Und</th><th class="num">Necessário</th><th class="num">Local</th><th class="num">Primavera</th><th class="num">Falta</th><th></th></tr></thead>
+      <tbody>${items.length ? items.map((row) => {
+        const qty = Number(row.shortage) || 0;
+        return `<tr class="${row.status === 'shortage' ? 'is-shortage' : ''}">
+          <td class="stock-code"><b>${esc(row.code || '—')}</b></td>
+          <td>${esc(row.description || '')}</td>
+          <td>${esc(row.unit || '')}</td>
+          <td class="num">${number(row.required)}</td>
+          <td class="num">${number(row.available_local)}</td>
+          <td class="num">${row.primavera_available == null ? '—' : number(row.primavera_available)}</td>
+          <td class="num"><b>${number(row.shortage)}</b></td>
+          <td class="listing-actions">${qty ? `<button class="btn small primary" data-requisitar data-material-id="${row.material_id || ''}" data-supplier-id="${row.supplier_id || ''}" data-code="${esc(row.code || '')}" data-name="${esc(row.description || '')}" data-qty="${qty}" data-unit="${esc(row.unit || '')}">Requisitar</button>` : ''}</td>
+        </tr>`;
+      }).join('') : emptyRow(8, 'Sem necessidades nesta semana', 'Programe OFs no mapa de confeção ou confirme encomendas com BOM.')}</tbody>
+    </table></div></section>
+    ${primaveraBlock(pri)}`;
+  bindStockPage(container);
+}
+
 function primaveraBlock(pri) {
   if (pri.ok) {
     const items = pri.items || [];
     return `<section class="card u-mt-4"><div class="card-header"><h2>Stock Primavera</h2><span>${number(pri.count)} linhas · ${esc(pri.path || '')}</span></div>
       ${items.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Artigo</th><th>Armazém</th><th>Stock</th><th>Reservado</th><th>Disponível</th></tr></thead>
-      <tbody>${items.map(row => `<tr><td><b>${esc(row.item)}</b></td><td>${esc(row.warehouse)}</td><td>${number(row.quantity)}</td><td>${number(row.reserved)}</td><td>${number(row.available)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">A Web API não devolveu linhas de stock.</p>'}
+      <tbody>${items.map((row) => `<tr><td><b>${esc(row.item)}</b></td><td>${esc(row.warehouse)}</td><td>${number(row.quantity)}</td><td>${number(row.reserved)}</td><td>${number(row.available)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">A Web API não devolveu linhas de stock.</p>'}
     </section>`;
   }
   return `<section class="card u-mt-4"><div class="card-header"><h2>Stock Primavera</h2><span>Não ligado</span></div>
-    <p class="muted">${esc(pri.error || 'Configure a Web API em ERP → Ligação Primavera.')} Enquanto não houver ligação, a listagem usa os artigos já sincronizados.</p>
+    <p class="muted">${esc(pri.error || 'Configure a Web API na ficha da empresa → ERP.')} Enquanto não houver ligação, a listagem usa o stock local.</p>
   </section>`;
 }
 
@@ -423,5 +453,6 @@ export async function render(container, view = 'mp') {
   if (view === 'fg') return renderFg(container);
   if (view === 'purchases') return renderPurchases(container);
   if (view === 'catalog') return renderCatalog(container);
+  if (view === 'mrp') return renderMrp(container);
   return renderMp(container);
 }

@@ -23,6 +23,8 @@ services:
       DATABASE_URL: postgresql+psycopg://textileflow:textileflow_demo@db:5432/textileflow
       APP_SECRET: ${APP_SECRET:-change-me-before-production}
       APP_ALLOW_WEAK_SECRET: ${APP_ALLOW_WEAK_SECRET:-1}
+      RUN_INPROCESS_WORKERS: "0"
+      LOG_FORMAT: ${LOG_FORMAT:-json}
     volumes:
       - ./backend/app:/app/app
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
@@ -36,6 +38,21 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://textileflow:textileflow_demo@db:5432/textileflow
+      APP_SECRET: ${APP_SECRET:-change-me-before-production}
+      APP_ALLOW_WEAK_SECRET: ${APP_ALLOW_WEAK_SECRET:-1}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    volumes:
+      - ./backend/app:/app/app
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      db:
+        condition: service_healthy
 
   web:
     image: nginx:alpine

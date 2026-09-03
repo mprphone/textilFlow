@@ -1,6 +1,6 @@
 CORE_MODULES = (
     "overview", "commercial", "design", "production", "corte", "confection",
-    "subcontracting", "shipping", "erp", "tables", "management",
+    "subcontracting", "shipping", "warehouse", "erp", "tables", "management",
 )
 PLANT_MODULES = (
     "dyeing", "printing", "weaving", "spinning",
@@ -56,6 +56,20 @@ def default_enabled_modules() -> list[str]:
     return list(CORE_MODULES)
 
 
+def _place_warehouse(selected: list[str]) -> list[str]:
+    wants = "warehouse" in selected or "shipping" in selected or "production" in selected
+    selected = [item for item in selected if item != "warehouse"]
+    if not wants:
+        return selected
+    if "shipping" in selected:
+        selected.insert(selected.index("shipping") + 1, "warehouse")
+    elif "erp" in selected:
+        selected.insert(selected.index("erp"), "warehouse")
+    else:
+        selected.append("warehouse")
+    return selected
+
+
 def _place_corte(selected: list[str]) -> list[str]:
     has_corte = "corte" in selected
     if "confection" in selected and not has_corte:
@@ -82,7 +96,7 @@ def enabled_modules(company) -> list[str]:
     selected = [item for item in selected if item in allowed]
     if "erp" in selected and "tables" not in selected:
         selected.insert(selected.index("erp") + 1, "tables")
-    return _place_corte(selected)
+    return _place_warehouse(_place_corte(selected))
 
 
 def set_enabled_modules(company, module_ids: list[str]) -> list[str]:
@@ -90,7 +104,7 @@ def set_enabled_modules(company, module_ids: list[str]) -> list[str]:
     selected = [item for item in module_ids if item in allowed]
     if "overview" not in selected:
         selected = ["overview", *selected]
-    selected = _place_corte(selected)
+    selected = _place_warehouse(_place_corte(selected))
     settings = dict(getattr(company, "settings", None) or {})
     settings["enabled_modules"] = selected
     company.settings = settings
@@ -133,7 +147,7 @@ def ensure_company_modules(db) -> None:
             selected.insert(insert_at, "erp")
         if "erp" in selected and "tables" not in selected:
             selected.insert(selected.index("erp") + 1, "tables")
-        selected = _place_corte(selected)
+        selected = _place_warehouse(_place_corte(selected))
         settings["enabled_modules"] = selected
         company.settings = settings
         if getattr(company, "id", None):

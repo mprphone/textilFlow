@@ -6,11 +6,11 @@ import { bindPasswordToggles } from '../forms.js?v=20260826-3';
 import { recordModal } from '../quick_create.js?v=20260826-3';
 import { setCompany, setSession, state } from '../state.js';
 import { closeModal, openModal, pageHeader, toast } from '../ui.js?v=20260826-3';
-import { CORE_MODULE_IDS, MODULE_ACCESS_OPTIONS, MODULES, PLANT_MODULE_IDS } from '../navigation.js?v=20260826-3';
+import { CORE_MODULE_IDS, MODULE_ACCESS_OPTIONS, MODULES, PLANT_MODULE_IDS } from '../navigation.js?v=20260828-2';
 import { render as renderArticleTypes } from './article_types.js?v=20260826-3';
 import { openCompanyFiche } from './company_fiche.js?v=20260826-3';
 
-const tabs=['Campos adaptativos','Modelos de ficha','Fluxos','Tipos de peças','Utilizadores','Auditoria','Empresas','Integrações'];
+const tabs=['Campos adaptativos','Modelos de ficha','Fluxos','Tipos de peças','Utilizadores','Auditoria','Empresas'];
 
 export async function render(container,active=0,showTabs=true){
   container.innerHTML=`${showTabs?`<div class="tabs">${tabs.map((label,index)=>`<button class="tab ${index===active?'active':''}" data-settings-tab="${index}">${label}</button>`).join('')}</div>`:''}<div data-settings-panel></div>`;
@@ -34,111 +34,7 @@ async function renderTab(panel,index){
   ],columns:[{key:'entity_type',label:'Entidade'},{key:'name',label:'Fluxo'},{key:'version',label:'Versão',render:r=>`V${r.version}`},{key:'stages',label:'Etapas',render:r=>(r.stages||[]).map(stage=>`<span class="tag">${esc(stage)}</span>`).join(' ')},{key:'active',label:'Estado',render:r=>badge(r.active?'ativo':'histórico')}]});
   if(index===4)return renderUsers(panel);
   if(index===5)return renderEntityPage(panel,{resource:'audit',readOnly:true,title:'Auditoria',subtitle:'Histórico de alterações, utilizador, entidade e payload.',singular:'evento',fields:[],columns:[{key:'created_at',label:'Data',render:r=>datetime(r.created_at)},{key:'user_id',label:'Utilizador'},{key:'entity',label:'Entidade',render:r=>badge(r.entity)},{key:'entity_id',label:'Registo'},{key:'action',label:'Ação',render:r=>badge(r.action)},{key:'payload',label:'Alteração',render:r=>`<code>${esc(JSON.stringify(r.payload||{}))}</code>`}]});
-  if(index===6)return renderCompanies(panel);
-  return renderIntegrations(panel);
-}
-
-async function renderIntegrations(panel){
-  const [data, catalog] = await Promise.all([
-    get(`/integrations/${state.companyId}/primavera/status`),
-    get(`/erp/${state.companyId}/documents/types`).catch(()=>({system:'primavera'})),
-  ]);
-  const erpSystem = catalog.system || 'primavera';
-  const cfg=data.config||{};
-  const canManage=state.companies.find(company=>company.id===state.companyId)?.role==='admin';
-  const stateClass=data.connected?'connected':data.configured?'ready':'';
-  const stateLabel=data.connected?'Ligado':data.configured?'Configurado, à espera da licença':'Por configurar';
-  const outbox=(data.outbox||[]).map(item=>`<tr><td>${esc(item.created_at||'').slice(0,16).replace('T',' ')}</td><td>${badge(item.kind)}</td><td>${badge(item.status)}</td><td>${esc(item.remote_id||item.error||'—')}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">Ainda não há documentos na fila. As expedições entram automaticamente.</td></tr>';
-  panel.innerHTML=pageHeader('Integrações ERP','Primavera é o motor fiscal e de stock. O TextileFlow envia guias e faturas quando a Web API estiver licenciada.')+`
-    <div class="integration-hero"><div class="integration-brand"><span>P</span><div><small>ERP PRINCIPAL</small><h2>PRIMAVERA v10</h2><p>${esc(data.message)}</p></div></div><span class="integration-state ${stateClass}"><i></i>${esc(stateLabel)}</span></div>
-    <section class="card u-mb-4"><div class="card-header"><h2>Sistema de faturação desta empresa</h2><span>Define o ecrã de Documentos</span></div>
-      <form id="erp-system-form" class="form-grid">
-        <div class="field"><label>Trabalham com<select name="system">
-          <option value="primavera" ${erpSystem==='primavera'?'selected':''}>Primavera (tipo FA + série)</option>
-          <option value="generic" ${erpSystem==='generic'?'selected':''}>Outro / genérico TextileFlow</option>
-        </select></label><small class="muted">O separador Documentos usa os códigos e a série desse sistema, para a fábrica não mudar de hábitos.</small></div>
-        ${canManage?'<div class="form-footer"><button class="btn primary" type="submit">Guardar sistema</button></div>':''}
-      </form>
-    </section>
-    <div class="integration-grid">
-      <section class="card"><div class="card-header"><h2>Ligação Web API</h2><span>${data.password_set?'Palavra-passe gravada cifrada':'Sem palavra-passe'}</span></div>
-        <form id="primavera-form" class="form-grid primavera-form">
-          <div class="field"><label>URL da Web API<input name="base_url" value="${esc(cfg.base_url||'')}" placeholder="http://SERVIDOR:2018" ${canManage?'':'readonly'}></label><small class="muted">Endereço do serviço Primavera Web API (porta 2018 na instalação típica).</small></div>
-          <div class="field"><label>URL do token (opcional)<input name="token_url" value="${esc(cfg.token_url||'')}" placeholder="vazio = URL/token" ${canManage?'':'readonly'}></label></div>
-          <div class="field"><label>Empresa no Primavera<input name="erp_company" value="${esc(cfg.erp_company||'')}" placeholder="Código da empresa ERP" ${canManage?'':'readonly'}></label></div>
-          <div class="field"><label>Instância<input name="instance" value="${esc(cfg.instance||'DEFAULT')}" ${canManage?'':'readonly'}></label></div>
-          <div class="field"><label>Linha<input name="line" value="${esc(cfg.line||'professional')}" placeholder="professional ou executive" ${canManage?'':'readonly'}></label></div>
-          <div class="field"><label>Utilizador técnico<input name="username" value="${esc(cfg.username||'')}" autocomplete="off" ${canManage?'':'readonly'}></label></div>
-          <div class="field"><label>Palavra-passe<input name="password" type="password" autocomplete="off" placeholder="${data.password_set?'Deixe em branco para manter':''}" ${canManage?'':'readonly'}></label></div>
-          <div class="field"><label>Tipo documento venda<input name="sales_doc_type" value="${esc(cfg.sales_doc_type||'FA')}" ${canManage?'':'readonly'}></label></div>
-          <div class="field"><label>Série faturas<input name="sales_series" value="${esc(cfg.sales_series||'A')}" ${canManage?'':'readonly'}></label></div>
-          <div class="field"><label>Tipo guia<input name="delivery_doc_type" value="${esc(cfg.delivery_doc_type||'GT')}" ${canManage?'':'readonly'}></label></div>
-          <div class="field"><label>Série guias<input name="delivery_series" value="${esc(cfg.delivery_series||'A')}" ${canManage?'':'readonly'}></label></div>
-          <div class="field"><label>Armazém<input name="warehouse" value="${esc(cfg.warehouse||'')}" ${canManage?'':'readonly'}></label></div>
-          <div class="field"><label>Timeout (s)<input name="timeout_seconds" type="number" value="${esc(cfg.timeout_seconds||20)}" ${canManage?'':'readonly'}></label></div>
-          <div class="field"><label>Web API activa<input name="enabled" type="checkbox" ${cfg.enabled?'checked':''} ${canManage?'':'disabled'}><span>Enviar documentos quando a licença existir</span></label></div>
-          <div class="field"><label>Validar SSL<input name="verify_ssl" type="checkbox" ${cfg.verify_ssl?'checked':''} ${canManage?'':'disabled'}><span>Desligue só em servidores internos com certificado próprio</span></label></div>
-          ${canManage?`<div class="form-footer"><button type="submit" class="btn primary">Guardar ligação</button><button type="button" class="btn" data-primavera-test>Testar ligação</button><button type="button" class="btn" data-primavera-flush>Enviar fila</button><button type="button" class="btn" data-primavera-sync>Puxar clientes, artigos e fornecedores</button></div>`:''}
-        </form>
-      </section>
-      <section class="card"><div class="card-header"><h2>O que a API vai tratar</h2><span>${data.pending||0} na fila</span></div>
-        <div class="sync-map">${(data.capabilities||[]).map(item=>`<div><i>↔</i><span><b>${esc(item.label)}</b><small>${esc(item.path)}</small></span><em>${item.ready?'Pronto':'À espera'}</em></div>`).join('')}</div>
-        <p class="integration-note">Donos: TextileFlow = OF, planeamento e expedição operacional. Primavera = stock, reservas, guias, faturas, contas correntes.</p>
-        <p class="integration-note">A fila envia sozinha a cada 2 minutos. Depois de 3 falhas o documento fica em alerta no dashboard e deixa de repetir até clicar em Enviar fila.</p>
-      </section>
-    </div>
-    <section class="card u-mt-3"><div class="card-header"><h2>Fila para o Primavera</h2><span>Expedições entram aqui mesmo sem licença</span></div>
-      <div class="table-wrap"><table class="data-table"><thead><tr><th>Quando</th><th>Documento</th><th>Estado</th><th>Resposta</th></tr></thead><tbody>${outbox}</tbody></table></div>
-    </section>`;
-  const form=panel.querySelector('#primavera-form');
-  form?.addEventListener('submit',async event=>{
-    event.preventDefault();
-    try{
-      await put(`/integrations/${state.companyId}/primavera/config`,readPrimaveraForm(form));
-      toast('Ligação Primavera guardada. A palavra-passe fica cifrada no servidor.');
-      await renderIntegrations(panel);
-    }catch(error){toast(error.message,'error');}
-  });
-  panel.querySelector('#erp-system-form')?.addEventListener('submit',async event=>{
-    event.preventDefault();
-    try{
-      await put(`/erp/${state.companyId}/erp-system`, {system: event.currentTarget.system.value});
-      toast('Sistema de faturação guardado. O ecrã de Documentos passa a usar esses códigos e séries.');
-      await renderIntegrations(panel);
-    }catch(error){toast(error.message,'error');}
-  });
-  panel.querySelector('[data-primavera-test]')?.addEventListener('click',async()=>{
-    try{
-      await put(`/integrations/${state.companyId}/primavera/config`,readPrimaveraForm(form));
-      const result=await post(`/integrations/${state.companyId}/primavera/test`);
-      toast(result.message, result.ok?'success':'error');
-      await renderIntegrations(panel);
-    }catch(error){toast(error.message,'error');}
-  });
-  panel.querySelector('[data-primavera-flush]')?.addEventListener('click',async()=>{
-    try{
-      const result=await post(`/integrations/${state.companyId}/primavera/flush`);
-      toast(`Fila: ${result.sent||0} enviados, ${result.failed||0} com erro.`);
-      await renderIntegrations(panel);
-    }catch(error){toast(error.message,'error');}
-  });
-  panel.querySelector('[data-primavera-sync]')?.addEventListener('click',async()=>{
-    try{
-      const result=await post(`/integrations/${state.companyId}/primavera/sync`,{});
-      const summary=(result.results||[]).map(row=>`${row.resource}: ${row.created||0}+ / ${row.updated||0}~`).join(' · ');
-      toast(summary || 'Sincronização concluída.');
-      await renderIntegrations(panel);
-    }catch(error){toast(error.message,'error');}
-  });
-}
-
-function readPrimaveraForm(form){
-  const data=Object.fromEntries(new FormData(form).entries());
-  data.enabled=form.elements.namedItem('enabled')?.checked===true;
-  data.verify_ssl=form.elements.namedItem('verify_ssl')?.checked===true;
-  data.timeout_seconds=Number(data.timeout_seconds||20);
-  if(!data.password)delete data.password;
-  return data;
+  return renderCompanies(panel);
 }
 
 async function renderUsers(panel){

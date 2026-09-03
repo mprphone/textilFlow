@@ -17,3 +17,11 @@
 @import url("./system/utilities.css?v=20260826-3") layer(utilities);
 @import url("./polish.css?v=20260826-3") layer(pages);
 @import url("./system/responsive.css?v=20260826-3") layer(overrides);
+
+/* Uma modal aberta nunca pode deixar apenas o fundo escuro a bloquear a aplicação. */
+#modal.modal[inert],#modal.modal.hidden,#modal.modal[hidden],#modal.modal[aria-hidden="true"]{display:none!important;pointer-events:none!important}
+#modal.modal:not(.hidden):not([hidden]):not([inert])[aria-hidden="false"]>.modal-card{
+  display:flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+}

@@ -19,7 +19,8 @@ const commands = [
   {group:'Ir para', icon:'▤', label:'Encomendas e ordens', detail:'Cliente, OF, lotes e atribuições', route:'orders', keywords:'ordem fabrico of lote'},
   {group:'Ir para', icon:'●', label:'Produção em direto na confeção', detail:'Operadores e linhas de costura', route:'live', keywords:'tempo real fabrica linha'},
   {group:'Ir para', icon:'✓', label:'Qualidade', detail:'Inspeções, defeitos e ações', route:'quality', keywords:'defeito rejeição controlo'},
-  {group:'Ir para', icon:'▦', label:'Stocks e compras', detail:'Materiais, lotes e fornecedores', route:'inventory', keywords:'armazem material compra'},
+  {group:'Ir para', icon:'▦', label:'Stocks e compras', detail:'Materiais, lotes e fornecedores', route:'stock-mp', keywords:'armazem material compra stock'},
+  {group:'Ir para', icon:'▥', label:'Necessidades da semana', detail:'MRP: mapa de confeção + BOM contra stock local e Primavera', route:'stock-mrp', keywords:'mrp falta tecido acessorio semana gantt'},
   {group:'Ir para', icon:'▥', label:'Análises', detail:'Pessoas, máquinas e custos', route:'reports', keywords:'relatorio indicador'},
   {group:'Ir para', icon:'◉', label:'Tinturaria', detail:'Cubas, lotes e trabalhos internos', route:'dyeing', keywords:'tinturaria tingimento cubas'},
   {group:'Ir para', icon:'✦', label:'Estamparia', detail:'Mesas, telas e trabalhos internos', route:'printing', keywords:'estamparia serigrafia'},
@@ -34,7 +35,7 @@ const commands = [
   {group:'Ação rápida', icon:'◇', label:'Criar artigo', detail:'Nova ficha técnica adaptativa', route:'styles', keywords:'novo produto modelo', action:true},
   {group:'Ação rápida', icon:'✂', label:'Enviar a subcontrato', detail:'Tinturaria, estamparia ou corte externos', route:'subcontracts', keywords:'cortador tecido tingimento estamparia', action:true},
   {group:'Ação rápida', icon:'!', label:'Registar problema de qualidade', detail:'Inspeção e defeito', route:'quality', keywords:'rejeitar defeito', action:true},
-  {group:'Ação rápida', icon:'▦', label:'Movimentar material', detail:'Consumo, receção ou transferência', route:'inventory', keywords:'stock lote receber', action:true},
+  {group:'Ação rápida', icon:'▦', label:'Movimentar material', detail:'Consumo, receção ou transferência', route:'stock-mp', keywords:'stock lote receber', action:true},
 ];
 let canNavigate = () => true;
 

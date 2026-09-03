@@ -52,7 +52,7 @@ export async function render(container, preferredActive=null){
     ...openClaims.slice(0,3).map(x=>({tab:'claims',tone:'danger',title:`Reclamação ${x.claim_no}`,detail:`${x.customer||x.order_no||'Cliente'} · ${number(x.quantity)} unidades`})),
     ...unreadRows.slice(0,3).map(x=>({tab:'history',tone:x.severity==='critical'?'danger':'info',title:x.title||'Aviso operacional',detail:x.detail||'Requer atenção'})),
   ].slice(0,7);
-  const contextActions={overview:['Abrir expedição','#/shipping'],stock:['Registar embalagem','#/embalagem'],rework:['Abrir qualidade','#/quality'],procurement:['Ver compras e stock','#/inventory'],claims:['Abrir expedições','#/shipping'],history:['Abrir torre de controlo','#/control-tower']};
+  const contextActions={overview:['Abrir expedição','#/shipping'],stock:['Registar embalagem','#/embalagem'],rework:['Abrir qualidade','#/quality'],procurement:['Ver compras e stock','#/stock-mp'],claims:['Abrir expedições','#/shipping'],history:['Abrir torre de controlo','#/control-tower']};
   const context=contextActions[active]||contextActions.overview;
   const parts=[
     pageHeader('Fluxo operacional integrado','Caixas e lotes, retrabalho, devoluções, compras sugeridas e leitura de códigos.','<a class="btn" href="#/tracking">OF e rastreabilidade</a><a class="btn primary" href="#/shipping">Expedição</a>'),
@@ -81,7 +81,7 @@ export async function render(container, preferredActive=null){
 }
 
 function bind(container,data){
-  const contextActions={overview:['Abrir expedição','#/shipping'],stock:['Registar embalagem','#/embalagem'],rework:['Abrir qualidade','#/quality'],procurement:['Ver compras e stock','#/inventory'],claims:['Abrir expedições','#/shipping'],history:['Abrir torre de controlo','#/control-tower']};
+  const contextActions={overview:['Abrir expedição','#/shipping'],stock:['Registar embalagem','#/embalagem'],rework:['Abrir qualidade','#/quality'],procurement:['Ver compras e stock','#/stock-mp'],claims:['Abrir expedições','#/shipping'],history:['Abrir torre de controlo','#/control-tower']};
   let active=container.querySelector('[data-ops-tab].active')?.dataset.opsTab||'overview';
   const applyFilters=()=>{const query=container.querySelector('[data-ops-search]')?.value.trim().toLowerCase()||'';const status=container.querySelector('[data-ops-status]')?.value||'all';const panel=container.querySelector(`[data-ops-panel="${active}"]`);panel?.querySelectorAll('[data-ops-row]').forEach(row=>{const matchesQuery=!query||row.dataset.search.includes(query);const matchesState=status==='all'||row.dataset.state===status;row.hidden=!(matchesQuery&&matchesState)});saveFilters({active,query,status})};
   const selectTab=id=>{active=id;container.querySelectorAll('[data-ops-tab]').forEach(button=>{const on=button.dataset.opsTab===id;button.classList.toggle('active',on);button.setAttribute('aria-selected',String(on));button.tabIndex=on?0:-1});container.querySelectorAll('[data-ops-panel]').forEach(panel=>{panel.hidden=panel.dataset.opsPanel!==id});const context=container.querySelector('[data-ops-context]');const action=contextActions[id]||contextActions.overview;if(context){context.textContent=action[0];context.href=action[1]}applyFilters()};

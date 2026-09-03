@@ -53,7 +53,28 @@ export const put = (path, data) => api(path, { method: 'PUT', body: JSON.stringi
 export const patch = (path, data) => api(path, { method: 'PATCH', body: JSON.stringify(data) });
 export const remove = path => api(path, { method: 'DELETE' });
 
-export function crudList(resource, companyId, query = '') { return get(`/crud/${resource}?company_id=${companyId}${query ? `&${query}` : ''}`); }
+function asList(data) {
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data.items)) return data.items;
+  return [];
+}
+
+function asPage(data) {
+  if (Array.isArray(data)) return { items: data, total: data.length, offset: 0, limit: data.length };
+  return {
+    items: data?.items || [],
+    total: Number(data?.total || 0),
+    offset: Number(data?.offset || 0),
+    limit: Number(data?.limit || 0),
+  };
+}
+
+export function crudList(resource, companyId, query = '') {
+  return get(`/crud/${resource}?company_id=${companyId}${query ? `&${query}` : ''}`).then(asList);
+}
+export function crudPage(resource, companyId, query = '') {
+  return get(`/crud/${resource}?company_id=${companyId}${query ? `&${query}` : ''}`).then(asPage);
+}
 export function crudCreate(resource, data) { return post(`/crud/${resource}`, data); }
 export function crudUpdate(resource, id, data) { return put(`/crud/${resource}/${id}`, data); }
 export function crudDelete(resource, id, companyId) { return remove(`/crud/${resource}/${id}?company_id=${companyId}`); }

@@ -1,4 +1,4 @@
-export const CORE_MODULE_IDS = ['overview','commercial','design','production','corte','confection','subcontracting','shipping','erp','tables','management'];
+export const CORE_MODULE_IDS = ['overview','commercial','design','production','corte','confection','subcontracting','shipping','warehouse','erp','tables','management'];
 export const PLANT_MODULE_IDS = ['dyeing','printing','weaving','spinning','laundry','embroidery','finishing'];
 export const DEFAULT_ENABLED_MODULES = [...CORE_MODULE_IDS];
 
@@ -48,7 +48,7 @@ export const MODULES = [
   {
     id:'production', label:'Produção', shortLabel:'Produção', icon:'▶', home:'control-tower',
     defaultRoles:['admin','manager','planner','supervisor','operator','quality'],
-    routes:[['control-tower','Torre de controlo','⌾'],['tracking','Controlo da produção','▤'],['operations-control','Fluxo integrado','⇥'],['quality','Qualidade / revista','✓'],['embalagem','Embalagem','▣'],['stock-fg','Produto acabado','▦']],
+    routes:[['control-tower','Torre de controlo','⌾'],['tracking','Controlo da produção','▤'],['operations-control','Fluxo integrado','⇥'],['quality','Qualidade / revista','✓'],['embalagem','Embalagem','▣']],
     quick:[['control-tower','Ver exceções'],['tracking','Ver OF ativas'],['operations-control','Ler código / tratar exceção'],['quality','Abrir revista']],
   },
   {
@@ -156,6 +156,18 @@ export const MODULES = [
     quick:[['shipping-prepare','Criar packing list'],['shipping-ready','Confirmar uma saída'],['shipping-incidents','Registar incidência']],
   },
   {
+    id:'warehouse', label:'Armazém', shortLabel:'Armazém', icon:'▦', home:'stock-mp',
+    defaultRoles:['admin','manager','warehouse','planner'],
+    routes:[
+      ['stock-mp','Matérias-primas','▦'],
+      ['stock-wip','Em fabrico','▣'],
+      ['stock-fg','Produto acabado','▤'],
+      ['purchases','Compras','€'],
+      ['stock-mrp','Necessidades da semana','▥'],
+    ],
+    quick:[['stock-mp','Ver matérias-primas'],['stock-mrp','Ver faltas da semana'],['purchases','Abrir compras']],
+  },
+  {
     id:'erp', label:'ERP', shortLabel:'ERP', icon:'↔', home:'erp-docs',
     defaultRoles:['admin','manager','commercial','warehouse','planner'],
     routes:[
@@ -163,7 +175,6 @@ export const MODULES = [
       ['erp-orders','Encomendas','▤'],
       ['erp-capture','Ler fatura (foto / PDF)','◉'],
       ['erp-map','Artigos aprendidos','▣'],
-      ['settings-primavera','Ligação Primavera','⚙'],
     ],
     quick:[['erp-capture','Fotografar fatura do fornecedor'],['erp-docs','Ver documentos']],
   },
@@ -184,7 +195,7 @@ export const MODULES = [
   {
     id:'management', label:'Gestão', shortLabel:'Gestão', icon:'⚙', home:'overheads',
     defaultRoles:['admin','manager'],
-    routes:[['overheads','Custos gerais','◈'],['settings-users','Utilizadores e acessos','♙'],['settings-companies','Empresas e módulos','▣'],['settings-primavera','Integração Primavera','↔'],['settings','Configuração avançada','⚙']],
+    routes:[['overheads','Custos gerais','◈'],['settings-users','Utilizadores e acessos','♙'],['settings-companies','Empresas e módulos','▣'],['settings','Configuração avançada','⚙']],
     quick:[['settings-companies','Definir módulos da empresa'],['settings-users','Gerir acessos']],
   },
 ];

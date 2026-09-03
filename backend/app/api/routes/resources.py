@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from ...db import get_db
 from ...models import ActualCostEntry, BOMItem, CapacityDay, CapacityEvent, Company, CostLine, CostSheet, Customer, CuttingJob, Employee, EmployeeSkill, ExternalCapacity, Machine, Material, ProductOperation, ProductionMaterialRequirement, ProductionOrder, ProductionRouteStep, PurchaseOrder, PurchaseOrderLine, QualityInspection, SalesOrder, SalesOrderLine, Sample, ServiceStage, SewingPlan, Shipment, Style, StyleRevision, SubcontractJob, SubcontractService, User
-from ...schemas import ProductionRouteStepIn
+from ...schemas import CrudPayload, ProductionRouteStepIn
 from ...services.primavera_sync import queue_master_record
 from ...services.audit import record_audit
 from ...services.costing import rebuild_product_cost, recalculate_sheet, refresh_style_costs
@@ -427,8 +427,9 @@ def list_records(
     if order_column is None:
         order_column = getattr(model, "id")
     ordering = order_column.asc() if direction.lower() == "asc" else order_column.desc()
+    total = query.count()
     rows = query.order_by(ordering).offset(offset).limit(limit).all()
-    return [model_to_dict(row) for row in rows]
+    return {"items": [model_to_dict(row) for row in rows], "total": total, "offset": offset, "limit": limit}
 
 
 @router.get("/{resource}/{item_id}")
@@ -442,13 +443,14 @@ def get_record(resource: str, item_id: int, company_id: int, db: Session = Depen
 
 
 @router.post("/{resource}", status_code=201)
-def create_record(resource: str, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    company_id = int(payload.get("company_id") or 0)
+def create_record(resource: str, payload: CrudPayload, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    data = payload.model_dump(exclude_unset=True)
+    company_id = int(data.get("company_id") or 0)
     if resource in IMMUTABLE_RESOURCES:
         raise HTTPException(405, "Este recurso só pode ser criado pelo respetivo fluxo operacional")
     require_resource_write(db, user, company_id, resource)
     model = resource_model(resource)
-    row = apply_payload(model(), payload, company_id=company_id)
+    row = apply_payload(model(), data, company_id=company_id)
     validate_cost_tenant_links(db, row, company_id)
     if isinstance(row, CostSheet) and row.status != "draft":
         raise HTTPException(405, "A aprovação de propostas só pode ser feita no fluxo de Costing")
@@ -467,7 +469,7 @@ def create_record(resource: str, payload: dict, db: Session = Depends(get_db), u
             from ...services.execution import sync_subcontract_receipt
             sync_subcontract_receipt(db, row, user_id=user.id)
         update_related_costs(db, row, created=True)
-        record_audit(db, company_id=company_id, user_id=user.id, entity=resource, entity_id=row.id, action="create", payload=payload)
+        record_audit(db, company_id=company_id, user_id=user.id, entity=resource, entity_id=row.id, action="create", payload=data)
         db.commit()
         db.refresh(row)
         _queue_primavera(db, company_id, resource, row)
@@ -479,36 +481,37 @@ def create_record(resource: str, payload: dict, db: Session = Depends(get_db), u
 
 
 @router.put("/{resource}/{item_id}")
-def update_record(resource: str, item_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def update_record(resource: str, item_id: int, payload: CrudPayload, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    data = payload.model_dump(exclude_unset=True)
     if resource in IMMUTABLE_RESOURCES:
         raise HTTPException(405, "O histórico operacional é imutável")
     model = resource_model(resource)
     row = db.get(model, item_id)
     if not row:
         raise HTTPException(404, "Registo não encontrado")
-    company_id = getattr(row, "company_id", int(payload.get("company_id") or 0))
+    company_id = getattr(row, "company_id", int(data.get("company_id") or 0))
     previous_subcontract_receipt = (
         float(row.accepted_quantity or 0), float(row.rejected_quantity or 0)
     ) if isinstance(row, SubcontractJob) else None
     require_resource_write(db, user, company_id, resource)
     protect_approved_cost(db, row)
-    protect_released_order(db, row, payload)
-    protect_released_sales_line(db, row, payload)
-    protect_quality_decision(row, payload)
-    protect_sales_order_flow(row, payload)
-    if isinstance(row, CostLine) and "cost_sheet_id" in payload and int(payload.get("cost_sheet_id") or 0) != row.cost_sheet_id:
+    protect_released_order(db, row, data)
+    protect_released_sales_line(db, row, data)
+    protect_quality_decision(row, data)
+    protect_sales_order_flow(row, data)
+    if isinstance(row, CostLine) and "cost_sheet_id" in data and int(data.get("cost_sheet_id") or 0) != row.cost_sheet_id:
         raise HTTPException(409, "Uma linha de custo nao pode ser movida para outra ficha")
-    if isinstance(row, CostSheet) and "style_id" in payload and int(payload.get("style_id") or 0) != row.style_id:
+    if isinstance(row, CostSheet) and "style_id" in data and int(data.get("style_id") or 0) != row.style_id:
         raise HTTPException(409, "Uma ficha de custo nao pode ser movida para outro artigo")
-    if isinstance(row, CostSheet) and payload.get("status", row.status) != "draft":
+    if isinstance(row, CostSheet) and data.get("status", row.status) != "draft":
         raise HTTPException(405, "A aprovação de propostas só pode ser feita no fluxo de Costing")
     if isinstance(row, Style):
         db.add(StyleRevision(
             company_id=company_id, style_id=row.id, version=row.technical_version,
-            snapshot=model_to_dict(row), reason=payload.pop("revision_reason", "Alteração da ficha"), user_id=user.id,
+            snapshot=model_to_dict(row), reason=data.pop("revision_reason", "Alteração da ficha"), user_id=user.id,
         ))
         row.technical_version += 1
-    apply_payload(row, payload, company_id=company_id)
+    apply_payload(row, data, company_id=company_id)
     validate_cost_tenant_links(db, row, company_id)
     protect_approved_cost(db, row)
     calculated_fields(db, row)
@@ -524,7 +527,7 @@ def update_record(resource: str, item_id: int, payload: dict, db: Session = Depe
             from ...services.execution import sync_subcontract_receipt
             sync_subcontract_receipt(db, row, *previous_subcontract_receipt, user_id=user.id)
         update_related_costs(db, row)
-        record_audit(db, company_id=company_id, user_id=user.id, entity=resource, entity_id=item_id, action="update", payload=payload)
+        record_audit(db, company_id=company_id, user_id=user.id, entity=resource, entity_id=item_id, action="update", payload=data)
         db.commit()
         db.refresh(row)
         _queue_primavera(db, company_id, resource, row)

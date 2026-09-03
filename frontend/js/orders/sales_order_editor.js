@@ -1,33 +1,14 @@
 import { crudDelete, crudList, get, post } from '../api.js';
 import { badge, date, esc, money, number } from '../format.js?v=20260826-3';
+import { colorSwatch, DEFAULT_SIZES, gradeTableMarkup, uid } from './grade_table.js?v=20260828-2';
 import { state } from '../state.js';
 import { closeModal, confirmDelete, empty, openModal, pageHeader, toast } from '../ui.js?v=20260826-3';
-
-const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 
 const STATUS_LABELS = {
   draft: 'Rascunho', confirmed: 'Confirmada', in_production: 'Em produção',
   ready: 'Pronta', partially_shipped: 'Expedida parcialmente', shipped: 'Expedida', cancelled: 'Cancelada',
 };
 const EDITABLE_STATUS_LABELS = { draft: STATUS_LABELS.draft, confirmed: STATUS_LABELS.confirmed };
-
-const COLOR_HEX = {
-  preto: '#1a1a1a', branco: '#f5f5f5', cinzento: '#8a8a8a', cinza: '#8a8a8a',
-  azul: '#2f5fa8', azulmarinho: '#1c2e4a', marinho: '#1c2e4a', navy: '#1c2e4a',
-  vermelho: '#b5352f', verde: '#3f7a4e', bege: '#d8c7a1', rosa: '#d98aa3',
-  amarelo: '#e0c23a', laranja: '#d97a34', roxo: '#7454a0', castanho: '#7a5030', camel: '#b58a55',
-};
-
-function colorSwatch(name) {
-  const key = (name || '').trim().toLocaleLowerCase('pt').normalize('NFD').replace(/[^a-z]/g, '');
-  if (!key) return '#d7dee8';
-  if (COLOR_HEX[key]) return COLOR_HEX[key];
-  let hash = 0;
-  for (const ch of key) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  return `hsl(${hash % 360}, 45%, 55%)`;
-}
-
-function uid() { return Math.random().toString(36).slice(2, 9); }
 
 function orderMoney(value, currency = 'EUR') {
   try {
@@ -40,25 +21,6 @@ function orderMoney(value, currency = 'EUR') {
 function gradeLabel(value, kind) {
   if (value && value !== '—') return value;
   return kind === 'size' ? 'Único' : 'Sem cor';
-}
-
-function gradeTableMarkup(gradeState, currency = 'EUR') {
-  const { rows, sizes } = gradeState;
-  if (!sizes.length) return '';
-  return `<thead><tr>
-      <th class="grade-color-heading">Cor</th><th class="grade-price-heading">Preço unitário<small>(por peça)</small></th>
-      ${sizes.map(size => `<th class="grade-size-heading"><span>${esc(gradeLabel(size, 'size'))}</span><button type="button" class="grade-remove-size" data-icon="delete" data-remove-size="${esc(size)}" aria-label="Remover tamanho ${esc(size)}" title="Remover tamanho ${esc(size)}"></button></th>`).join('')}
-      <th class="grade-total-heading">Total</th><th class="grade-action-heading"><span class="sr-only">Ações</span></th>
-    </tr></thead>
-    <tbody>${rows.length ? rows.map(row => `
-      <tr data-grade-row="${row.id}">
-        <td class="grade-color-cell"><span class="grade-swatch" style="background:${colorSwatch(row.color)}"></span><input type="text" data-color-input data-row="${row.id}" value="${esc(gradeLabel(row.color, 'color'))}" placeholder="Cor"></td>
-        <td><div class="grade-price-cell"><input type="number" min="0" step="0.01" data-price-input data-row="${row.id}" value="${row.price || ''}" placeholder="0,00"><span>${esc(currency)}</span></div></td>
-        ${sizes.map(size => `<td><input type="number" min="0" step="1" data-qty-input data-row="${row.id}" data-size="${esc(size)}" value="${row.qty[size] || ''}" placeholder="0"></td>`).join('')}
-        <td class="grade-row-total" data-row-total="${row.id}">0</td>
-        <td><button type="button" class="btn icon danger" data-icon="delete" data-remove-color="${row.id}" aria-label="Remover cor" title="Remover cor"></button></td>
-      </tr>`).join('') : `<tr class="grade-empty-row"><td colspan="${sizes.length + 4}"><span data-icon="palette" aria-hidden="true"></span><b>Adicione a primeira cor</b><small>Use o campo acima para construir a grelha deste artigo.</small></td></tr>`}</tbody>
-    <tfoot><tr><td colspan="2">Total por tamanho</td>${sizes.map(() => '<td data-col-total>0</td>').join('')}<td colspan="2" class="grade-grand-total"><small>Total do artigo</small><b data-grand-total>0</b></td></tr></tfoot>`;
 }
 
 function requirementsHtml(data) {
@@ -156,7 +118,11 @@ function updateOrderTotals(root, blocks) {
 function renderBlockGrid(root, block) {
   const scope = root.querySelector(`[data-article-block][data-block-id="${block.id}"]`);
   const table = scope.querySelector('[data-grade-table]');
-  table.innerHTML = gradeTableMarkup(block.gradeState, root.querySelector('[name="currency"]')?.value || 'EUR');
+  table.innerHTML = gradeTableMarkup(block.gradeState, root.querySelector('[name="currency"]')?.value || 'EUR', {
+    emptyRow: true,
+    labelSize: (size) => gradeLabel(size, 'size'),
+    labelColor: (color) => gradeLabel(color, 'color'),
+  });
 }
 
 function blockTotalQty(block) {

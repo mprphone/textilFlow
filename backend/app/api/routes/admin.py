@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from ...auth import hash_password
 from ...db import get_db
 from ...models import Company, User, UserCompany
+from ...schemas import UserCreate, UserWrite
 from ...services.company_profile import CompanyProfileError, apply_company_payload, public_company
 from ...services.modules import default_enabled_modules, set_enabled_modules
 from ..deps import current_user, require_module_access, require_role
@@ -107,24 +108,25 @@ def get_user(company_id: int, user_id: int, db: Session = Depends(get_db), user:
 
 
 @router.post("/{company_id}/users", status_code=201)
-def create_user(company_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def create_user(company_id: int, payload: UserCreate, db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_role(db, user, company_id, {"admin"})
     require_module_access(db, user, company_id, {"management"})
-    if db.query(User).filter_by(username=payload.get("username")).first():
+    data = payload.model_dump()
+    if db.query(User).filter_by(username=data.get("username")).first():
         raise HTTPException(409, "Nome de utilizador já existe")
-    password = str(payload.get("password") or "").strip()
+    password = str(data.get("password") or "").strip()
     if len(password) < 8:
         raise HTTPException(400, "A palavra-passe inicial precisa de pelo menos 8 caracteres")
     account = User(
-        username=payload["username"], full_name=payload["full_name"], email=payload.get("email"),
+        username=data["username"], full_name=data["full_name"], email=data.get("email"),
         password_hash=hash_password(password),
-        must_change_password=True, active=payload.get("active", True) is not False,
+        must_change_password=True, active=data.get("active", True) is not False,
     )
     db.add(account)
     db.flush()
-    company_ids = _normalized_company_ids(payload, company_id, _assignable_ids(db, user))
-    role = payload.get("role", "operator")
-    permissions = payload.get("permissions") or []
+    company_ids = _normalized_company_ids(data, company_id, _assignable_ids(db, user))
+    role = data.get("role") or "operator"
+    permissions = data.get("permissions") or []
     membership = _sync_memberships(db, account, company_ids, role, permissions, user)
     db.commit()
     db.refresh(account)
@@ -132,31 +134,32 @@ def create_user(company_id: int, payload: dict, db: Session = Depends(get_db), u
 
 
 @router.put("/{company_id}/users/{user_id}")
-def update_user_access(company_id: int, user_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def update_user_access(company_id: int, user_id: int, payload: UserWrite, db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_role(db, user, company_id, {"admin"})
     require_module_access(db, user, company_id, {"management"})
+    data = payload.model_dump(exclude_unset=True)
     account = db.get(User, user_id)
     membership = db.query(UserCompany).filter_by(company_id=company_id, user_id=user_id).first()
     if not account or not membership:
         raise HTTPException(404, "Utilizador não encontrado")
-    if "full_name" in payload and payload["full_name"]:
-        account.full_name = payload["full_name"]
-    if "email" in payload:
-        account.email = payload.get("email")
-    if "active" in payload:
-        if user_id == user.id and not bool(payload["active"]):
+    if "full_name" in data and data["full_name"]:
+        account.full_name = data["full_name"]
+    if "email" in data:
+        account.email = data.get("email")
+    if "active" in data:
+        if user_id == user.id and not bool(data["active"]):
             raise HTTPException(400, "Não pode inativar a própria conta")
-        account.active = bool(payload["active"])
-    password = str(payload.get("password") or "").strip()
+        account.active = bool(data["active"])
+    password = str(data.get("password") or "").strip()
     if password:
         if len(password) < 8:
             raise HTTPException(400, "A nova palavra-passe precisa de pelo menos 8 caracteres")
         account.password_hash = hash_password(password)
         account.must_change_password = True
-    role = payload.get("role", membership.role)
-    permissions = payload["permissions"] if "permissions" in payload else (membership.permissions or [])
-    if "company_ids" in payload:
-        company_ids = _normalized_company_ids(payload, company_id, _assignable_ids(db, user))
+    role = data.get("role", membership.role)
+    permissions = data["permissions"] if "permissions" in data else (membership.permissions or [])
+    if "company_ids" in data:
+        company_ids = _normalized_company_ids(data, company_id, _assignable_ids(db, user))
         if user_id == user.id and company_id not in company_ids:
             company_ids.append(company_id)
         membership = _sync_memberships(db, account, company_ids, role, permissions, user)

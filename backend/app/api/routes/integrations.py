@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ...db import get_db
 from ...models import Company, User
 from ...primavera import PrimaveraConnector
+from ...schemas import AssistantQuery, InvoiceQueueIn, PrimaveraConfigIn, SyncMastersIn
 from ...services.assistant import answer_factory_question
 from ...services.primavera import apply_config, fetch_stock, flush_outbox, PrimaveraError, queue_invoice, test_connection
 from ...services.primavera_sync import pull_masters
@@ -22,16 +23,16 @@ def _company(db: Session, company_id: int) -> Company:
 
 @router.get("/integrations/{company_id}/primavera/status")
 def primavera_status(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    require_module_access(db, user, company_id, {"management"})
+    require_module_access(db, user, company_id, {"management", "erp"})
     return PrimaveraConnector(_company(db, company_id)).status()
 
 
 @router.put("/integrations/{company_id}/primavera/config")
-def primavera_config(company_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def primavera_config(company_id: int, payload: PrimaveraConfigIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_role(db, user, company_id, {"admin"})
-    require_module_access(db, user, company_id, {"management"})
+    require_module_access(db, user, company_id, {"management", "erp"})
     company = _company(db, company_id)
-    status = apply_config(company, payload)
+    status = apply_config(company, payload.model_dump(exclude_unset=True))
     db.commit()
     return status
 
@@ -39,7 +40,7 @@ def primavera_config(company_id: int, payload: dict, db: Session = Depends(get_d
 @router.post("/integrations/{company_id}/primavera/test")
 def primavera_test(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_role(db, user, company_id, {"admin"})
-    require_module_access(db, user, company_id, {"management"})
+    require_module_access(db, user, company_id, {"management", "erp"})
     company = _company(db, company_id)
     result = test_connection(company)
     db.commit()
@@ -49,7 +50,7 @@ def primavera_test(company_id: int, db: Session = Depends(get_db), user: User = 
 @router.post("/integrations/{company_id}/primavera/flush")
 def primavera_flush(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_role(db, user, company_id, {"admin"})
-    require_module_access(db, user, company_id, {"management"})
+    require_module_access(db, user, company_id, {"management", "erp"})
     company = _company(db, company_id)
     result = flush_outbox(company, retry_alerts=True)
     db.commit()
@@ -57,15 +58,15 @@ def primavera_flush(company_id: int, db: Session = Depends(get_db), user: User =
 
 
 @router.post("/integrations/{company_id}/primavera/invoice")
-def primavera_invoice(company_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def primavera_invoice(company_id: int, payload: InvoiceQueueIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_role(db, user, company_id, {"admin", "manager"})
-    require_module_access(db, user, company_id, {"management"})
+    require_module_access(db, user, company_id, {"management", "erp"})
     company = _company(db, company_id)
     item = queue_invoice(
         company,
-        customer_code=str(payload.get("customer_code") or ""),
-        reference=str(payload.get("reference") or ""),
-        lines=payload.get("lines") or [],
+        customer_code=payload.customer_code,
+        reference=payload.reference,
+        lines=payload.lines or [],
     )
     db.commit()
     return item
@@ -73,7 +74,7 @@ def primavera_invoice(company_id: int, payload: dict, db: Session = Depends(get_
 
 @router.get("/integrations/{company_id}/primavera/stock")
 def primavera_stock(company_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    require_module_access(db, user, company_id, {"shipping", "erp", "management"})
+    require_module_access(db, user, company_id, {"shipping", "erp", "management", "warehouse"})
     company = _company(db, company_id)
     try:
         return fetch_stock(company)
@@ -82,12 +83,12 @@ def primavera_stock(company_id: int, db: Session = Depends(get_db), user: User =
 
 
 @router.post("/integrations/{company_id}/primavera/sync")
-def primavera_sync(company_id: int, payload: dict = Body(default={}), db: Session = Depends(get_db), user: User = Depends(current_user)):
+def primavera_sync(company_id: int, payload: SyncMastersIn | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_role(db, user, company_id, {"admin", "manager"})
-    require_module_access(db, user, company_id, {"erp", "management", "shipping", "commercial", "tables"})
+    require_module_access(db, user, company_id, {"erp", "management", "shipping", "commercial", "tables", "warehouse"})
     company = _company(db, company_id)
     try:
-        result = pull_masters(db, company, payload.get("resources"))
+        result = pull_masters(db, company, (payload.resources if payload else None))
         db.commit()
         return result
     except PrimaveraError as error:
@@ -96,9 +97,6 @@ def primavera_sync(company_id: int, payload: dict = Body(default={}), db: Sessio
 
 
 @router.post("/assistant/{company_id}/query")
-def assistant(company_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def assistant(company_id: int, payload: AssistantQuery, db: Session = Depends(get_db), user: User = Depends(current_user)):
     require_module_access(db, user, company_id, {"overview"})
-    question = str(payload.get("question") or "").strip()
-    if not question:
-        raise HTTPException(422, "Escreva uma pergunta")
-    return answer_factory_question(db, company_id, question)
+    return answer_factory_question(db, company_id, payload.question.strip())

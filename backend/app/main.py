@@ -10,10 +10,13 @@ from fastapi.staticfiles import StaticFiles
 from .api.router import api_router
 from .auth import require_app_secret
 from .db import Base, SessionLocal, engine
+from .logging_setup import RequestIdMiddleware, configure_logging, inprocess_workers_enabled
 from .services.primavera_worker import start_worker, stop_worker
 from .services.operations_worker import start_operations_worker, stop_operations_worker
 from .services.schema import ensure_schema
 from .services.seed import seed_database
+
+configure_logging()
 
 
 @asynccontextmanager
@@ -35,11 +38,13 @@ async def lifespan(app: FastAPI):
         logging.getLogger("textileflow").exception("Falha ao completar dados iniciais")
     finally:
         db.close()
-    start_worker()
-    start_operations_worker()
+    if inprocess_workers_enabled():
+        start_worker()
+        start_operations_worker()
     yield
-    stop_operations_worker()
-    stop_worker()
+    if inprocess_workers_enabled():
+        stop_operations_worker()
+        stop_worker()
 
 
 app = FastAPI(
@@ -53,6 +58,7 @@ _cors_raw = os.getenv(
     "http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000",
 )
 _cors = [origin.strip() for origin in _cors_raw.split(",") if origin.strip()]
+app.add_middleware(RequestIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"] if "*" in _cors else _cors,

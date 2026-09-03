@@ -18,12 +18,12 @@ const CARD = {cardClass: 'company-fiche-card'};
 
 const ctx = {panel: null, company: null, companyId: null, tab: 'geral', mode: 'view', accounts: [], erp: null};
 
-export async function openCompanyFiche(panel, company = null, onChanged = null) {
+export async function openCompanyFiche(panel, company = null, onChanged = null, options = {}) {
   ctx.panel = panel;
   ctx.onChanged = onChanged;
   ctx.company = company;
   ctx.companyId = company?.id || null;
-  ctx.tab = 'geral';
+  ctx.tab = options.tab || 'geral';
   ctx.mode = company ? 'view' : 'edit';
   ctx.accounts = [];
   ctx.erp = null;
@@ -131,10 +131,12 @@ async function erpHtml() {
   const ro = ctx.mode === 'view' || !isAdmin();
   const attr = ro ? 'readonly' : '';
   const dis = ro ? 'disabled' : '';
+  const outbox = (data.outbox || []).map((item) => `<tr><td>${esc((item.created_at || '').slice(0, 16).replace('T', ' '))}</td><td>${badge(item.kind)}</td><td>${badge(item.status)}</td><td>${esc(item.remote_id || item.error || '—')}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Ainda não há documentos na fila.</td></tr>';
   return `<section class="sf-card"><h3>Sistema de faturação</h3>
-      <p class="muted">O TextileFlow envia guias e faturas quando a Web API estiver licenciada.</p>
+      <p class="muted">O TextileFlow envia guias e faturas quando a Web API estiver licenciada. Esta é a única ficha da ligação ERP.</p>
       <div class="sf-kv">${kv('Estado', data.connected ? 'Ligado' : data.configured ? 'Configurado' : 'Por configurar')}
-        ${kv('Palavra-passe', data.password_set ? 'Definida (cifrada)' : 'Não definida')}</div>
+        ${kv('Palavra-passe', data.password_set ? 'Definida (cifrada)' : 'Não definida')}
+        ${kv('Na fila', String(data.pending || 0))}</div>
       ${!ro ? `<form id="erp-system-form" class="form-grid company-fiche">
         <div class="field"><label>Trabalham com<select name="system">
           <option value="primavera" ${catalog.system === 'primavera' ? 'selected' : ''}>Primavera</option>
@@ -146,18 +148,31 @@ async function erpHtml() {
     <section class="sf-card"><h3>Ligação Web API</h3>
       <form id="primavera-form" class="form-grid company-fiche">
         <div class="field"><label>URL da Web API<input name="base_url" value="${esc(cfg.base_url || '')}" ${attr}></label></div>
+        <div class="field"><label>URL do token<input name="token_url" value="${esc(cfg.token_url || '')}" ${attr}></label></div>
         <div class="field"><label>Empresa no Primavera<input name="erp_company" value="${esc(cfg.erp_company || '')}" ${attr}></label></div>
+        <div class="field"><label>Instância<input name="instance" value="${esc(cfg.instance || 'DEFAULT')}" ${attr}></label></div>
+        <div class="field"><label>Linha<input name="line" value="${esc(cfg.line || 'professional')}" ${attr}></label></div>
         <div class="field"><label>Utilizador técnico<input name="username" value="${esc(cfg.username || '')}" autocomplete="off" ${attr}></label></div>
         <div class="field"><label>Palavra-passe<input name="password" type="password" autocomplete="off" placeholder="${data.password_set ? 'Em branco = manter' : ''}" ${attr}></label></div>
         <div class="field"><label>Tipo documento venda<input name="sales_doc_type" value="${esc(cfg.sales_doc_type || 'FA')}" ${attr}></label></div>
         <div class="field"><label>Série faturas<input name="sales_series" value="${esc(cfg.sales_series || 'A')}" ${attr}></label></div>
+        <div class="field"><label>Tipo guia<input name="delivery_doc_type" value="${esc(cfg.delivery_doc_type || 'GT')}" ${attr}></label></div>
+        <div class="field"><label>Série guias<input name="delivery_series" value="${esc(cfg.delivery_series || 'A')}" ${attr}></label></div>
+        <div class="field"><label>Armazém<input name="warehouse" value="${esc(cfg.warehouse || '')}" ${attr}></label></div>
+        <div class="field"><label>Timeout (s)<input name="timeout_seconds" type="number" value="${esc(cfg.timeout_seconds || 20)}" ${attr}></label></div>
         <div class="field"><label>Validar SSL<input name="verify_ssl" type="checkbox" ${cfg.verify_ssl ? 'checked' : ''} ${dis}><span>Desligue só em servidores internos</span></label></div>
         <div class="field"><label>Web API activa<input name="enabled" type="checkbox" ${cfg.enabled ? 'checked' : ''} ${dis}><span>Enviar documentos</span></label></div>
         ${!ro ? `<div class="form-footer">
           <button type="submit" class="btn primary">Guardar ligação</button>
           <button type="button" class="btn" data-erp-test>Testar</button>
+          <button type="button" class="btn" data-erp-flush>Enviar fila</button>
+          <button type="button" class="btn" data-erp-sync>Puxar tabelas</button>
         </div>` : ''}
       </form>
+    </section>
+    <section class="sf-card"><h3>Fila Primavera</h3>
+      <p class="muted">A fila envia sozinha a cada 2 minutos. Depois de 3 falhas o documento fica em alerta até clicar em Enviar fila.</p>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>Quando</th><th>Documento</th><th>Estado</th><th>Resposta</th></tr></thead><tbody>${outbox}</tbody></table></div>
     </section>`;
 }
 
@@ -303,12 +318,28 @@ function bindErp() {
       await paint();
     } catch (error) { toast(error.message, 'error'); }
   });
+  body.querySelector('[data-erp-flush]')?.addEventListener('click', async () => {
+    try {
+      const result = await post(`/integrations/${ctx.companyId}/primavera/flush`);
+      toast(`Fila: ${result.sent || 0} enviados, ${result.failed || 0} com erro.`);
+      await paint();
+    } catch (error) { toast(error.message, 'error'); }
+  });
+  body.querySelector('[data-erp-sync]')?.addEventListener('click', async () => {
+    try {
+      const result = await post(`/integrations/${ctx.companyId}/primavera/sync`, {});
+      const summary = (result.results || []).map((row) => `${row.resource}: ${row.created || 0}+ / ${row.updated || 0}~`).join(' · ');
+      toast(summary || 'Sincronização concluída.');
+      await paint();
+    } catch (error) { toast(error.message, 'error'); }
+  });
 }
 
 function readPrimavera(form) {
   const data = Object.fromEntries(new FormData(form).entries());
   data.enabled = form.elements.namedItem('enabled')?.checked === true;
   data.verify_ssl = form.elements.namedItem('verify_ssl')?.checked === true;
+  data.timeout_seconds = Number(data.timeout_seconds || 20);
   if (!data.password) delete data.password;
   return data;
 }

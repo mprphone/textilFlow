@@ -10,9 +10,15 @@ let modalLocked = false;
 function syncModalVisibility() {
   const isOpen = modal.getAttribute('aria-hidden') === 'false' && !modal.classList.contains('hidden');
   modal.hidden = !isOpen;
-  if (isOpen) modal.style.removeProperty('display');
+  if (isOpen) {
+    modal.style.removeProperty('display');
+    modal.removeAttribute('inert');
+    modal.dataset.locked = String(modalLocked);
+  }
   else {
     modal.style.setProperty('display', 'none');
+    modal.setAttribute('inert', '');
+    delete modal.dataset.locked;
     document.body.classList.remove('modal-open');
   }
 }
@@ -51,7 +57,21 @@ export function openModal(title, body, subtitle = '', options = {}) {
   modal.classList.remove('hidden');
   syncModalVisibility();
   document.body.classList.add('modal-open');
-  requestAnimationFrame(() => modal.querySelector('input:not(:disabled),select:not(:disabled),textarea:not(:disabled),button:not(:disabled),a[href]')?.focus());
+  requestAnimationFrame(() => {
+    const card = modal.querySelector('.modal-card');
+    const rect = card?.getBoundingClientRect();
+    if (card && rect && (rect.width < 1 || rect.height < 1)) {
+      card.style.setProperty('display', 'flex', 'important');
+      card.style.setProperty('visibility', 'visible', 'important');
+      card.style.setProperty('opacity', '1', 'important');
+    } else if (!card || !rect) {
+      modalLocked = false;
+      closeModal(true);
+      document.dispatchEvent(new CustomEvent('tf:modal-render-error'));
+      return;
+    }
+    modal.querySelector('input:not(:disabled),select:not(:disabled),textarea:not(:disabled),button:not(:disabled),a[href]')?.focus();
+  });
 }
 
 export function closeModal(force = false) {
@@ -62,6 +82,7 @@ export function closeModal(force = false) {
   modal.classList.add('hidden');
   modal.setAttribute('aria-hidden', 'true');
   modal.hidden = true;
+  modal.setAttribute('inert', '');
   modal.style.setProperty('display', 'none');
   document.body.classList.remove('modal-open');
   modal.querySelector('.modal-card')?.classList.remove('supplier-ficha-card', 'company-fiche-card');
@@ -100,6 +121,9 @@ export function confirmDelete(label = 'este registo') { return window.confirm(`E
 
 document.getElementById('modal-close')?.addEventListener('click', closeModal);
 document.querySelector('.modal-card')?.addEventListener('click', event => event.stopPropagation());
+modal?.addEventListener('click', event => {
+  if (event.target === modal && !modalLocked) closeModal();
+});
 const emergencyClose = document.getElementById('modal-emergency-close');
 if (emergencyClose) {
   emergencyClose.hidden = true;
