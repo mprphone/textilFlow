@@ -179,6 +179,7 @@ class ProductionEvent(Base):
     assignment_id = Column(Integer, ForeignKey("work_assignments.id"), index=True)
     production_order_id = Column(Integer, ForeignKey("production_orders.id"), nullable=False, index=True)
     batch_id = Column(Integer, ForeignKey("production_batches.id"))
+    variant_id = Column(Integer, ForeignKey("style_variants.id"), index=True)
     operation_id = Column(Integer, ForeignKey("operations.id"))
     employee_id = Column(Integer, ForeignKey("employees.id"), index=True)
     machine_id = Column(Integer, ForeignKey("machines.id"), index=True)

@@ -83,6 +83,7 @@ COLUMN_MIGRATIONS = (
     ("production_events", "energy_cost", "ALTER TABLE production_events ADD COLUMN energy_cost FLOAT DEFAULT 0 NOT NULL"),
     ("production_events", "consumables_cost", "ALTER TABLE production_events ADD COLUMN consumables_cost FLOAT DEFAULT 0 NOT NULL"),
     ("production_events", "setup_cost", "ALTER TABLE production_events ADD COLUMN setup_cost FLOAT DEFAULT 0 NOT NULL"),
+    ("production_events", "variant_id", "ALTER TABLE production_events ADD COLUMN variant_id INTEGER REFERENCES style_variants(id)"),
     ("customer_return_lines", "shipment_allocation_id", "ALTER TABLE customer_return_lines ADD COLUMN shipment_allocation_id INTEGER REFERENCES shipment_allocations(id)"),
     ("customer_return_lines", "finished_goods_unit_id", "ALTER TABLE customer_return_lines ADD COLUMN finished_goods_unit_id INTEGER REFERENCES finished_goods_units(id)"),
     ("production_route_steps", "product_operation_id", "ALTER TABLE production_route_steps ADD COLUMN product_operation_id INTEGER REFERENCES product_operations(id)"),

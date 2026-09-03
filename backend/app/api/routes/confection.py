@@ -4,13 +4,16 @@ from sqlalchemy.orm import Session
 
 from ...db import get_db
 from ...models import User
-from ...schemas import CapacityCheckInput, DailyOutputInput, MapMoveInput, MapOrderInput, MapPlanInput, MapSimulateInput
+from ...schemas import (
+    CapacityCheckInput, DailyOutputBulkInput, DailyOutputInput, MapMoveInput, MapOrderInput, MapPlanInput,
+    MapSimulateInput,
+)
 from ...services.confection_capacity import capacity_check, confection_overview
 from ...services.confection_map import (
     add_backlog, apply_faccao, apply_suggestion, consultant, convert_accept, move_block, one_click,
     production_map, shift_one_day, simulate, toggle_extra, unschedule_block, urgent_insert,
 )
-from ...services.production import list_daily_output, record_daily_output
+from ...services.production import daily_output_options, list_daily_output, record_daily_output, record_daily_output_bulk
 from ..deps import current_user, require_module_access
 
 
@@ -156,6 +159,29 @@ def daily_output_list(
 ):
     require_module_access(db, user, company_id, {"confection", "production"})
     return list_daily_output(db, company_id, work_date or date.today())
+
+
+@router.get("/{company_id}/daily-output/options")
+def daily_output_choices(
+    company_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_module_access(db, user, company_id, {"confection", "production"})
+    return daily_output_options(db, company_id)
+
+
+@router.post("/{company_id}/daily-output/bulk")
+def daily_output_bulk_create(
+    company_id: int,
+    payload: DailyOutputBulkInput,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    require_module_access(db, user, company_id, {"confection", "production"})
+    result = record_daily_output_bulk(db, company_id, payload.model_dump())
+    db.commit()
+    return result
 
 
 @router.post("/{company_id}/daily-output")

@@ -67,3 +67,15 @@ class DailyOutputInput(BaseModel):
     hours: float = Field(default=8, gt=0)
     notes: str | None = None
 
+
+class DailyOutputSizeInput(BaseModel):
+    variant_id: int | None = None
+    quantity_good: float = Field(gt=0)
+
+
+class DailyOutputBulkInput(BaseModel):
+    work_date: date = Field(default_factory=date.today)
+    production_order_id: int
+    line_id: int
+    outputs: list[DailyOutputSizeInput] = Field(min_length=1)
+    notes: str | None = None

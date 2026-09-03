@@ -5,7 +5,7 @@ import { recordModal } from './quick_create.js?v=20260826-3';
 import { initExperience } from './experience.js?v=20260828-2';
 import { DEFAULT_ENABLED_MODULES, MODULES } from './navigation.js?v=20260828-2';
 
-const ASSET = '20260903-4';
+const ASSET = '20260903-5';
 const loaded = {};
 
 function load(path) {
@@ -299,5 +299,5 @@ export async function bootApp() {
 }
 
 if (!document.querySelector('script[src*="login.js"]')) {
-  import('./login.js?v=20260903-4');
+  import('./login.js?v=20260903-5');
 }

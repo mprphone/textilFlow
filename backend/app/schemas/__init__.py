@@ -7,6 +7,9 @@ from .costing import (
     ActualCostInput, ArticleTypeCostTemplateSave, CostLineInput, CostSheetCreate, CostSheetSave,
     GradeCell, ProposalReleaseRequest, WizardProposalCreate,
 )
-from .confection import CapacityCheckInput, DailyOutputInput, MapMoveInput, MapOrderInput, MapPlanInput, MapSimulateInput
+from .confection import (
+    CapacityCheckInput, DailyOutputBulkInput, DailyOutputInput, MapMoveInput, MapOrderInput, MapPlanInput,
+    MapSimulateInput,
+)
 
 __all__ = [name for name in globals() if not name.startswith("_")]
